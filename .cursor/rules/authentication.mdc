@@ -1,0 +1,13 @@
+---
+description: Argon2id passwords and opaque sessions
+globs: "apps/server/**,packages/crypto/**"
+alwaysApply: false
+---
+
+# Authentication
+
+Argon2id hashes. PostgreSQL sessions. No OAuth. TOTP required at first-run.
+Recovery codes are hashed and single-use. Password change revokes other
+sessions and keeps the current session. Sessions have idle and absolute
+expiry, a configurable cap, and Settings revoke. Recovery remaining is
+count-only; rotate requires TOTP and shows codes once.

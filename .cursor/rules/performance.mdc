@@ -1,0 +1,12 @@
+---
+description: Measure before optimizing
+alwaysApply: true
+---
+
+# Performance
+
+Likely bottlenecks: source fanout, duplicate work, LLM calls, dashboard history
+queries, concurrent scans. Measure with documented conditions. No random
+micro-optimizations. Prevent N+1 on event and signal pages. List and scan
+paths must use explicit page, evidence, source, and concurrency limits.
+Record RSS and peak RSS on every benchmark run.

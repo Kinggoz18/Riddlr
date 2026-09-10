@@ -1,0 +1,31 @@
+---
+description: Core architecture invariants for Riddlr
+alwaysApply: true
+---
+
+# Project architecture
+
+Riddlr is a local-first, read-only intelligence engine. The core is asset-class
+agnostic. Crypto is the only fully implemented market domain.
+
+## Data path
+
+Source → Evidence → Entity/Asset/Instrument → Event → domain context → Analysis →
+Validated signal → dashboard / notification policy.
+
+## Layout
+
+- `apps/web` Vite React SPA
+- `apps/server` Fastify API and BullMQ worker entrypoints
+- `packages/domain` generic contracts
+- `packages/domain-crypto` Crypto domain module
+- `packages/crypto` cryptography only (AES, Argon2id, TOTP)
+- PostgreSQL is source of truth; Valkey is not
+
+## Forbidden
+
+- Next.js, Prisma, trading, private keys, scraping Discord/X
+- Importing `@riddlr/domain-crypto` from generic engine packages
+- Fake signals, fake metrics, or executable coming-soon domains
+- Committing `initial-prompt.md`, `system-prompt.md`, secrets, or transcripts
+- Onboarding longer than four steps

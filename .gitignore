@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+docker/data/
+*.sqlite
+*.sqlite-journal
+
+# Planning prompts and private agent artifacts must never be committed
+initial-prompt.md
+system-prompt.md
+.cursor/*.local.md
+.cursor/scratch/
+agent-transcripts/
+
+# Generated local secrets
+.secrets/
+data/secrets/

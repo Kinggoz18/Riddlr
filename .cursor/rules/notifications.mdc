@@ -1,0 +1,12 @@
+---
+description: Notifications are not the intelligence core
+globs: "packages/notifications/**"
+alwaysApply: false
+---
+
+# Notifications
+
+The engine publishes a validated signal. The notification subsystem decides
+whether, where, and when to send. Telegram is a shipped channel. WhatsApp
+Cloud API uses official Graph templates and the 24-hour session window.
+No unofficial WhatsApp clients.

@@ -1,0 +1,23 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  typescript: 5.8.3
+  "@types/node": 22.18.0
+  zod: 3.25.76
+  vitest: 3.2.4
+  fastify: 5.6.0
+  drizzle-orm: 0.44.5
+  drizzle-kit: 0.31.4
+  postgres: 3.4.7
+  ioredis: 5.7.0
+  bullmq: 5.58.5
+  pino: 9.9.0
+  react: 19.1.1
+  react-dom: 19.1.1
+  "@types/react": 19.1.12
+  "@types/react-dom": 19.1.9
+  vite: 6.3.5
+  "@vitejs/plugin-react": 4.7.0
+  "@biomejs/biome": 2.2.4

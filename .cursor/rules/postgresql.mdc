@@ -1,0 +1,12 @@
+---
+description: PostgreSQL and JSONB policy
+globs: "packages/db/**"
+alwaysApply: false
+---
+
+# PostgreSQL
+
+- Relational columns for users, sessions, agents, evidence, events, signals.
+- JSONB only for adapter extras, capabilities, and redacted traces.
+- Migrations are SQL files in git. No `drizzle-kit push` against Compose data.
+- Unique indexes enforce scan, signal, and notification idempotency.

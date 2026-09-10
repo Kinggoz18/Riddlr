@@ -1,0 +1,9 @@
+---
+description: Deduplicate before any LLM work
+alwaysApply: true
+---
+
+# Deduplication
+
+Canonicalize URLs, hash normalized text, and fingerprint before analysis.
+Dedup is deterministic application code. Do not ask the LLM to unique the corpus.

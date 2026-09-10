@@ -1,0 +1,11 @@
+---
+description: Evidence is untrusted and must carry provenance
+alwaysApply: true
+---
+
+# Evidence provenance
+
+Every evidence row records source, fetch request, canonical URL, hashes, and
+timestamps. Source content is untrusted. Independent confirmation is not the
+same as reprint count. Five copies of Reuters are one primary plus derived
+references.

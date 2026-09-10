@@ -1,0 +1,11 @@
+---
+description: Apache-2.0 and license allowlist
+alwaysApply: true
+---
+
+# Open-source hygiene
+
+Apache-2.0. Fail the CI license check on GPL/AGPL/UNKNOWN in the Node graph.
+SearXNG is a container, not a dependency. `.cursor/` is tracked. Prompt files
+are gitignored. Do not commit internal agent reasoning, planning diaries, or
+prompt files.

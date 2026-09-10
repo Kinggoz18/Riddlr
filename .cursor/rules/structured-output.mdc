@@ -1,0 +1,9 @@
+---
+description: Schema validation is the trust boundary
+alwaysApply: true
+---
+
+# Structured output
+
+Never trust prompt compliance. Validate LLM JSON with Zod. Reject missing proof
+IDs, foreign IDs, and unknown fields that would change meaning. Fail closed.

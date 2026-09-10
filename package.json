@@ -1,0 +1,55 @@
+{
+  "name": "riddlr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first, asset-class-agnostic intelligence engine. Crypto is the currently supported market domain.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.20.0 <25",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @riddlr/server --filter @riddlr/web --parallel dev",
+    "build": "pnpm --filter @riddlr/domain build && pnpm --filter @riddlr/crypto build && pnpm --filter @riddlr/config build && pnpm --filter @riddlr/api-contract build && pnpm --filter @riddlr/observability build && pnpm --filter @riddlr/db build && pnpm --filter @riddlr/queue build && pnpm --filter @riddlr/source-adapters build && pnpm --filter @riddlr/llm build && pnpm --filter @riddlr/notifications build && pnpm --filter @riddlr/domain-crypto build && pnpm --filter @riddlr/ui build && pnpm --filter @riddlr/server build && pnpm --filter @riddlr/web build",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "pnpm test:browser",
+    "test:browser": "playwright test",
+    "test:a11y": "playwright test --grep @a11y",
+    "db:generate": "pnpm --filter @riddlr/db generate",
+    "db:migrate": "pnpm --filter @riddlr/db migrate",
+    "db:check": "pnpm --filter @riddlr/db check",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "compose:reset": "docker compose down -v --remove-orphans && docker compose up --build",
+    "licenses:check": "node scripts/check-licenses.mjs",
+    "compose:smoke": "node scripts/compose-smoke.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm licenses:check"
+  },
+  "dependencies": {
+    "tsx": "^4.20.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@playwright/test": "^1.55.0",
+    "@axe-core/playwright": "^4.10.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "esbuild",
+      "msgpackr-extract",
+      "cpu-features",
+      "ssh2",
+      "protobufjs"
+    ]
+  }
+}

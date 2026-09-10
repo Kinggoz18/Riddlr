@@ -1,0 +1,9 @@
+---
+description: Git hygiene
+alwaysApply: true
+---
+
+# Git
+
+No force-push to main. No secrets. Sign-off commits (DCO). Do not commit
+internal reasoning, prompts, or local runtime state.

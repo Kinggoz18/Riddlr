@@ -1,0 +1,12 @@
+---
+description: Fastify plugin encapsulation and Zod type provider
+globs: "apps/server/**"
+alwaysApply: false
+---
+
+# Fastify
+
+- Encapsulate plugins. Do not hang mutable config on the global object.
+- Validate requests and responses with Zod.
+- Long scans belong on the worker, never in a request handler beyond enqueue.
+- Never return stored secrets.

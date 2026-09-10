@@ -1,0 +1,14 @@
+---
+description: Security and trust boundaries
+alwaysApply: true
+---
+
+# Security
+
+- Source content and LLM output are untrusted.
+- Wrap source text as data. Instruction hierarchy: system > agent > skill > source.
+- Skills cannot grant tools or filesystem.
+- Validate SearXNG and LLM URLs against SSRF (https/http, no link-local unless Compose allowlist).
+- Redact secrets in logs. Never echo API keys.
+- No `dangerouslySetInnerHTML` for source HTML.
+- Rate-limit auth routes.

@@ -1,0 +1,12 @@
+---
+description: Staged pipeline and token budgets
+alwaysApply: true
+---
+
+# AI cost control
+
+Collect → normalize → dedup → filter → cluster → deterministic context →
+materiality gate → analyze material events only. Skip analysis when the
+agent's daily token budget is exhausted; leave the event `needs_analysis`.
+Cache by model, schema, prompt, and context hash. Persist usage. Do not send
+raw hit dumps to an expensive model.

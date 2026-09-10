@@ -1,0 +1,12 @@
+---
+description: Node.js 22 runtime conventions for the server
+globs: "apps/server/**"
+alwaysApply: false
+---
+
+# Node.js
+
+- Target Node 22. Do not use Bun as the CI runtime.
+- Graceful shutdown on SIGTERM: close Fastify, then queues, then DB.
+- Do not write secrets to the repo or logs.
+- API and worker are separate processes.

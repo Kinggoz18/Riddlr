@@ -1,0 +1,11 @@
+---
+description: Navy/mint intelligence console, not a casino
+globs: "apps/web/**,packages/ui/**"
+alwaysApply: false
+---
+
+# UI/UX
+
+Dark navy base, mint accent used sparingly. Proof-first signal layout. No chart
+spam. No fake data. Coming-soon domains are obvious and not clickable into
+broken pages. WCAG 2.2 AA on setup, login, and overview.

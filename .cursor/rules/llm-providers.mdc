@@ -1,0 +1,11 @@
+---
+description: LLM providers are HTTP adapters with intersection schemas
+globs: "packages/llm/**"
+alwaysApply: false
+---
+
+# LLM providers
+
+Only OpenAI-compatible and Anthropic-compatible HTTP. No vendor SDK in domain
+logic. Use a JSON Schema both vendors accept, then Zod-validate again.
+Numeric bounds belong in application code when Anthropic rejects schema keywords.

@@ -1,0 +1,13 @@
+---
+description: TypeScript strictness and branded IDs
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript
+
+- `strict` and `noUncheckedIndexedAccess` stay on.
+- No `any`. Narrow at boundaries with Zod.
+- Branded IDs and closed unions live in `@riddlr/domain`.
+- `verbatimModuleSyntax`: use `import type` for types.
+- ESM only. NodeNext module resolution.

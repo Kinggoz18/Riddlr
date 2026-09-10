@@ -1,0 +1,28 @@
+import { describe, expect, it } from "vitest";
+import {
+  clampPageSize,
+  clampPositiveInt,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  takeBounded,
+} from "./limits.js";
+
+describe("bounded resource limits", () => {
+  it("clamps page size to the documented 1–100 range", () => {
+    expect(clampPageSize(undefined)).toBe(DEFAULT_PAGE_SIZE);
+    expect(clampPageSize("12")).toBe(12);
+    expect(clampPageSize(0)).toBe(1);
+    expect(clampPageSize(10_000)).toBe(MAX_PAGE_SIZE);
+  });
+
+  it("does not keep more items than the explicit bound", () => {
+    const items = Array.from({ length: 10_000 }, (_, index) => index);
+    expect(takeBounded(items, 25)).toHaveLength(25);
+    expect(takeBounded(items, 25).at(-1)).toBe(24);
+  });
+
+  it("caps worker concurrency at the configured maximum", () => {
+    expect(clampPositiveInt(99, 2, 8)).toBe(8);
+    expect(clampPositiveInt("3", 2, 8)).toBe(3);
+  });
+});

@@ -1,0 +1,12 @@
+---
+description: Bound process memory in every routine workflow
+alwaysApply: true
+---
+
+# Bounded memory
+
+No routine workflow may accumulate an unbounded number of source items, events,
+API responses, prompts, or cached objects in process memory. Paginate, stream,
+batch, persist incrementally, or apply explicit resource limits. Queue and
+worker concurrency must be bounded and configurable. Performance tests record
+RSS and peak RSS.

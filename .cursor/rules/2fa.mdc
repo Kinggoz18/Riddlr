@@ -1,0 +1,9 @@
+---
+description: TOTP and recovery codes
+alwaysApply: true
+---
+
+# 2FA
+
+RFC 6238 TOTP, 6 digits, 30s. Confirm before enable. Recovery codes hashed.
+Do not skip 2FA in production onboarding. Secrets for TOTP are encrypted at rest.

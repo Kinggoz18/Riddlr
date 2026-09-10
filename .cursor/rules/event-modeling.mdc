@@ -1,0 +1,9 @@
+---
+description: Events are clusters; signals are validated outputs
+alwaysApply: true
+---
+
+# Event modeling
+
+An event is clustered evidence in a time window. A signal is a later validated
+output. Do not persist a signal without proof evidence IDs on that event.

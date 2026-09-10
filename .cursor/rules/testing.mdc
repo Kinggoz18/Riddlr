@@ -1,0 +1,11 @@
+---
+description: Test at public seams; no tautologies or fake metrics
+alwaysApply: true
+---
+
+# Testing
+
+Test behavior at public seams. No private-method tests. Expected values come
+from the spec, not by recomputing the implementation. Provider tests use
+recorded fixtures. Coming-soon domains must fail closed. Do not invent metrics
+to make dashboards look busy.

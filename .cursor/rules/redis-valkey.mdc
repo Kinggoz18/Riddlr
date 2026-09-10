@@ -1,0 +1,11 @@
+---
+description: Valkey is infrastructure not source of truth
+globs: "apps/server/**,packages/queue/**"
+alwaysApply: false
+---
+
+# Valkey / Redis
+
+- Prefix keys with `riddlr:`.
+- Never store evidence, sessions, or secrets in Valkey.
+- A Valkey outage pauses jobs; it must not corrupt PostgreSQL truth.

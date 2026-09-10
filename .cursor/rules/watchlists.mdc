@@ -1,0 +1,11 @@
+---
+description: Watchlists use canonical asset IDs
+globs: "packages/domain/src/watchlist.ts,apps/server/src/modules/**,apps/web/**"
+alwaysApply: false
+---
+
+# Watchlists
+
+Watchlist items are canonical IDs (`provider:id`), not bare tickers. Identity
+is resolved by the registered domain module. Cap items. Do not invent
+quantitative observations from a watchlist.

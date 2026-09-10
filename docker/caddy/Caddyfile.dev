@@ -1,0 +1,33 @@
+:8080 {
+  encode gzip
+  header {
+    X-Frame-Options DENY
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+  }
+
+  handle /api/* {
+    reverse_proxy api:3001
+  }
+
+  handle /healthz {
+    reverse_proxy api:3001
+  }
+
+  handle /readyz {
+    reverse_proxy api:3001
+  }
+
+  handle /mailpit* {
+    uri strip_prefix /mailpit
+    reverse_proxy mailpit:8025
+  }
+
+  handle /searxng* {
+    reverse_proxy searxng:8080
+  }
+
+  handle {
+    reverse_proxy web:80
+  }
+}

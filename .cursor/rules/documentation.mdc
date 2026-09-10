@@ -1,0 +1,24 @@
+---
+description: Operator and contributor docs, not planning diaries
+globs: "docs/**,README.md,CONTRIBUTING.md,CHANGELOG.md,SECURITY.md"
+alwaysApply: true
+---
+
+# Documentation
+
+Write for operators and contributors. Record how the product works and how to
+run it. Operator facts belong in `docs/`, README, CHANGELOG, CONTRIBUTING, and
+SECURITY.
+
+Do not put in tracked documentation:
+
+- Author or agent thought process
+- Planning diaries, phase recaps, or internal debate
+- Justifications of the form "we chose X because"
+- Test tactics except as commands in `docs/testing.md`
+
+ADRs state the decision and its operational consequence. They are not meeting
+notes.
+
+Mark Supported vs Coming soon accurately. Do not describe unimplemented
+domains as shipped.

@@ -1,0 +1,13 @@
+---
+description: Official APIs only; capability-gated adapters
+globs: "packages/source-adapters/**"
+alwaysApply: false
+---
+
+# Source adapters
+
+- Implement configure, validate, healthCheck, fetch, normalize.
+- Advertise capabilities. The UI must not offer archive lookback the source lacks.
+- No Discord or X scraping. Official APIs only.
+- Adapters produce generic evidence. They do not import domain-crypto.
+- One failing engine or source must not fail the whole scan.

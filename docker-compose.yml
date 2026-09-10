@@ -1,0 +1,138 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: riddlr
+      POSTGRES_PASSWORD: riddlr
+      POSTGRES_DB: riddlr
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U riddlr -d riddlr"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27.2
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    command: ["node", "apps/server/dist/cmd/api.js"]
+    environment:
+      RIDDLR_ENV: production
+      RIDDLR_HTTP_HOST: 0.0.0.0
+      RIDDLR_HTTP_PORT: "3001"
+      RIDDLR_PUBLIC_URL: http://localhost:8080
+      RIDDLR_DATABASE_URL: postgres://riddlr:riddlr@postgres:5432/riddlr
+      RIDDLR_REDIS_URL: redis://valkey:6379
+      RIDDLR_SEARXNG_URL: http://searxng:8080
+      RIDDLR_SMTP_URL: smtp://mailpit:1025
+      RIDDLR_EMAIL_FROM: Riddlr <noreply@localhost>
+      RIDDLR_SECRETS_DIR: /var/lib/riddlr
+      RIDDLR_LOG_LEVEL: info
+      RIDDLR_LOG_FORMAT: json
+      RIDDLR_LOCAL_COMPOSE: "true"
+      RIDDLR_GENERATE_DEV_SECRETS: "false"
+      RIDDLR_PAGE_SIZE: "50"
+      RIDDLR_MAX_SESSIONS: "8"
+      RIDDLR_SESSION_IDLE_MINUTES: "60"
+    volumes:
+      - riddlr_secrets:/var/lib/riddlr
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    command: ["node", "apps/server/dist/cmd/worker.js"]
+    environment:
+      RIDDLR_ENV: production
+      RIDDLR_DATABASE_URL: postgres://riddlr:riddlr@postgres:5432/riddlr
+      RIDDLR_REDIS_URL: redis://valkey:6379
+      RIDDLR_SEARXNG_URL: http://searxng:8080
+      RIDDLR_SMTP_URL: smtp://mailpit:1025
+      RIDDLR_EMAIL_FROM: Riddlr <noreply@localhost>
+      RIDDLR_SECRETS_DIR: /var/lib/riddlr
+      RIDDLR_LOG_LEVEL: info
+      RIDDLR_LOG_FORMAT: json
+      RIDDLR_LOCAL_COMPOSE: "true"
+      RIDDLR_GENERATE_DEV_SECRETS: "false"
+      RIDDLR_PROCESS_ROLE: worker
+      RIDDLR_WORKER_CONCURRENCY: "2"
+      RIDDLR_SCHEDULER_ENABLED: "true"
+      RIDDLR_SCHEDULER_AGENT_LIMIT: "16"
+      RIDDLR_SCAN_EVIDENCE_LIMIT: "50"
+      RIDDLR_ANALYSIS_EVIDENCE_LIMIT: "20"
+    volumes:
+      - riddlr_secrets:/var/lib/riddlr
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2.10-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  riddlr_secrets:

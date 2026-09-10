@@ -1,0 +1,12 @@
+---
+description: BullMQ jobs carry IDs and idempotency keys
+globs: "apps/server/src/jobs/**,packages/queue/**"
+alwaysApply: false
+---
+
+# BullMQ
+
+- Job payloads are IDs plus an idempotency key, not whole evidence blobs.
+- One active scan per agent. PostgreSQL uniqueness is the product guarantee.
+- Retries must be safe. Notifications use unique (signal, channel).
+- Worker concurrency is `RIDDLR_WORKER_CONCURRENCY` (1–8). Job history is capped.

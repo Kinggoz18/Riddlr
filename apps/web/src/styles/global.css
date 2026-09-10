@@ -1,0 +1,116 @@
+:root {
+  color-scheme: dark;
+  --bg: #07111c;
+  --elevated: #0c1a29;
+  --mint: #3ee0b2;
+  --text: #e7f3ee;
+  --muted: #8aa39a;
+  --danger: #ff8a7a;
+  --line: rgba(62, 224, 178, 0.16);
+  font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+a {
+  color: var(--mint);
+}
+input,
+select,
+textarea {
+  background: #06101a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+  min-height: 44px;
+}
+button,
+.ui-button,
+.nav a {
+  min-height: 44px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+.nav {
+  border-right: 1px solid var(--line);
+  padding: 24px 18px;
+  background: #06101a;
+}
+.nav a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  padding: 8px 0;
+}
+.nav a.active {
+  color: var(--mint);
+}
+.page {
+  padding: 28px;
+  display: grid;
+  gap: 16px;
+}
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.badge {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.badge.soon {
+  opacity: 0.7;
+}
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 8px;
+}
+.skip-link:focus {
+  left: 8px;
+  background: var(--mint);
+  color: #04110c;
+  padding: 8px 12px;
+  z-index: 10;
+}
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none;
+    animation: none;
+  }
+}
