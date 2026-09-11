@@ -3,8 +3,11 @@
 No social sign-on.
 
 - Email or username plus Argon2id password
-- First-run asks for the password twice, then a skippable Keychain / password
-  manager save before authenticator setup
+- First-run asks for the password twice, then a skippable save into the
+  device password manager (Apple Keychain, Google Password Manager, or the
+  browser manager on Windows). Sign-in asks that manager to fill the form
+  when the browser supports it; Safari and iOS use native autofill on the
+  username and password fields.
 - Opaque PostgreSQL sessions in an HttpOnly cookie
 - TOTP (RFC 6238) strongly advised during first-run and skippable; required at
   sign-in only after it is enabled
@@ -21,6 +24,7 @@ No social sign-on.
 - Security mail for new sessions, recovery use, recovery rotate, password
   change, and key rotation (failures do not block the auth path)
 - Rate limits on login, 2FA, and reset
-- Paginated audit log at `GET /api/v1/audit`
+- Paginated audit log at `GET /api/v1/audit`. Settings can clear it with
+  `DELETE /api/v1/audit`, which deletes every row then records `audit.cleared`.
 
 The first user is the administrator. Setup routes close after onboarding.

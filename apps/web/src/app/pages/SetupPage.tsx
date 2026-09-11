@@ -2,7 +2,7 @@ import { Button, Card, Field } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, type Domain } from "../api.js";
 import { AuthShell } from "../Brand.js";
-import { storeInPasswordManager } from "../password-store.js";
+import { passwordManagerLabel, storeInPasswordManager } from "../password-store.js";
 import { toastFail, useToast } from "../Toast.js";
 import { TotpEnroll } from "../TotpEnroll.js";
 
@@ -115,7 +115,7 @@ function SetupPage() {
             <Field label="Email">
               <input
                 id="email"
-                name="email"
+                name="username"
                 type="email"
                 autoComplete="username"
                 spellCheck={false}
@@ -174,10 +174,7 @@ function SetupPage() {
           </header>
           {passwordSavePending ? (
             <>
-              <p className="field-note">
-                Riddlr cannot recover this password. Save it in Keychain or another password
-                manager.
-              </p>
+              <p className="field-note">Riddlr cannot recover this password.</p>
               <p className="ui-actions">
                 <Button
                   busy={busy}
@@ -189,7 +186,7 @@ function SetupPage() {
                       } else {
                         try {
                           await navigator.clipboard.writeText(password);
-                          toast("Copied. Paste it into Keychain");
+                          toast("Copied. Paste it into your password manager");
                         } catch {
                           toast("Couldn’t save. Copy the password yourself", "danger");
                         }
@@ -200,7 +197,7 @@ function SetupPage() {
                     });
                   }}
                 >
-                  Save to Keychain
+                  {passwordManagerLabel()}
                 </Button>
               </p>
               <p className="skip-row">

@@ -272,9 +272,25 @@ describe("setup, auth, and domain persistence", () => {
     const agent = agentsResponse.json().agents[0];
     expect(agent.name).toBe("Riddlr Intelligence Agent");
     expect(agent.domains).toEqual(["crypto"]);
+    expect(agent.description).toMatch(/Crypto watcher/);
+    expect(agent.objectives).toEqual(
+      expect.arrayContaining(["general_crypto_intelligence", "risk_signals"]),
+    );
     expect(agent.watchlist.items.map((item: { canonicalId: string }) => item.canonicalId)).toEqual(
       expect.arrayContaining(["coingecko:bitcoin", "coingecko:ethereum", "coingecko:tether"]),
     );
+    expect(agent.skills.map((item: { slug: string }) => item.slug)).toEqual(
+      expect.arrayContaining([
+        "event-correlation",
+        "narrative-detection",
+        "catalyst-analysis",
+        "materiality-analysis",
+        "risk-assessment",
+        "whale-activity",
+        "candidate-discovery",
+      ]),
+    );
+    expect(agent.skills).toHaveLength(14);
     const sourceList = await app.inject({
       method: "GET",
       url: "/api/v1/sources",
@@ -657,6 +673,30 @@ describe("setup, auth, and domain persistence", () => {
       headers: { cookie },
     });
     expect(tooBig.statusCode).toBe(400);
+
+    const denied = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/audit",
+    });
+    expect(denied.statusCode).toBe(401);
+
+    const cleared = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/audit",
+      headers: { cookie },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toEqual({ ok: true });
+
+    const afterClear = await app.inject({
+      method: "GET",
+      url: "/api/v1/audit?limit=20",
+      headers: { cookie },
+    });
+    expect(afterClear.statusCode).toBe(200);
+    const remaining = afterClear.json().audit as Array<{ action: string }>;
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.action).toBe("audit.cleared");
 
     const signalsPage = await app.inject({
       method: "GET",

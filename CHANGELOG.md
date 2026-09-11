@@ -2,6 +2,23 @@
 
 All notable changes to Riddlr are documented in this file.
 
+## 0.6.0
+
+- Shipped Crypto skills are composed per event. The application computes
+  sourced facts and selects applicable skills; analysis does not load the full
+  catalog into one prompt.
+- Default agent attaches fourteen shipped skills, including candidate
+  discovery, catalyst, market regime, price reaction, materiality, and risk
+  assessment. The `whale-activity` slug is preserved and shown as large holder
+  activity.
+- Discovery persists independent-evidence clusters as candidates without an
+  LLM call. Reprints stay immaterial. Analysis still runs on material events
+  only. A candidate is not a recommendation to buy, sell, or trade.
+- A signal gate keeps weakly supported or interesting-but-immaterial results on
+  the dashboard. Notification policy still decides delivery.
+- Event and signal pages show which analysis dimensions ran and which were
+  skipped for missing data.
+
 ## 0.5.0
 
 - X source: official recent search (`/2/tweets/search/recent`), encrypted bearer

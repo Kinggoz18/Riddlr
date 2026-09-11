@@ -32,6 +32,7 @@ import {
 import {
   agents,
   aiUsageEvents,
+  analyses,
   assets,
   auditLogs,
   encryptedSecrets,
@@ -64,6 +65,7 @@ import {
   independenceGraph,
   MARKET_DOMAIN_REGISTRY,
   ONBOARDING_STEP_COUNT,
+  parsePageCursor,
   takeBounded,
   UnsupportedMarketDomainError,
 } from "@riddlr/domain";
@@ -95,6 +97,7 @@ import {
 } from "./modules/sessions.js";
 import {
   createDefaultCryptoAgent,
+  ensureShippedCryptoSkills,
   getSetupState,
   requireSetupStep,
   saveLlmProvider,
@@ -144,14 +147,6 @@ function requireUser(
     (error as Error & { statusCode?: number }).statusCode = 401;
     throw error;
   }
-}
-
-function parseCursor(before?: string): Date | undefined {
-  if (!before) {
-    return undefined;
-  }
-  const value = new Date(before);
-  return Number.isNaN(value.getTime()) ? undefined : value;
 }
 
 export async function buildApp(ctx: AppContext) {
@@ -847,7 +842,7 @@ export async function buildApp(ctx: AppContext) {
           id: "totp",
           title: "Turn on authenticator",
           body: "Sign-in should require a 6-digit code once a factor is verified.",
-          href: "/settings",
+          href: "/settings/security",
           done: totpEnabled,
         },
         {
@@ -868,7 +863,7 @@ export async function buildApp(ctx: AppContext) {
           id: "notify",
           title: "Send signals somewhere",
           body: "Telegram or WhatsApp delivers after risk, cooldown, and quiet hours.",
-          href: "/settings",
+          href: "/settings/notifications",
           done: telegramConfigured || whatsappConfigured,
         },
         {
@@ -885,7 +880,7 @@ export async function buildApp(ctx: AppContext) {
   app.get("/api/v1/signals", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const rows = before
       ? await ctx.db
           .select()
@@ -908,12 +903,18 @@ export async function buildApp(ctx: AppContext) {
       evidenceIds.length > 0
         ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, evidenceIds))
         : [];
-    return { signal, evidence };
+    const [analysis] = await ctx.db
+      .select({ skillTrace: analyses.skillTrace })
+      .from(analyses)
+      .where(eq(analyses.eventId, signal.eventId))
+      .orderBy(desc(analyses.createdAt))
+      .limit(1);
+    return { signal, evidence, skillTrace: analysis?.skillTrace };
   });
   app.get("/api/v1/events", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const rows = before
       ? await ctx.db
           .select()
@@ -1005,6 +1006,12 @@ export async function buildApp(ctx: AppContext) {
         )?.toId,
       })),
     );
+    const [analysis] = await ctx.db
+      .select({ skillTrace: analyses.skillTrace })
+      .from(analyses)
+      .where(eq(analyses.eventId, id))
+      .orderBy(desc(analyses.createdAt))
+      .limit(1);
     return {
       event: eventRows[0],
       evidence,
@@ -1012,12 +1019,13 @@ export async function buildApp(ctx: AppContext) {
       observations: observationRows,
       assets: eventAssetRows,
       independence,
+      skillTrace: analysis?.skillTrace,
     };
   });
   app.get("/api/v1/scans", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const scanRows = before
       ? await ctx.db
           .select()
@@ -1040,7 +1048,7 @@ export async function buildApp(ctx: AppContext) {
   app.get("/api/v1/ai-usage", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const usage = before
       ? await ctx.db
           .select()
@@ -1273,7 +1281,7 @@ export async function buildApp(ctx: AppContext) {
   app.get("/api/v1/audit", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const rows = before
       ? await ctx.db
           .select()
@@ -1283,6 +1291,18 @@ export async function buildApp(ctx: AppContext) {
           .limit(limit)
       : await ctx.db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
     return { audit: rows };
+  });
+  app.delete("/api/v1/audit", { preHandler: authed }, async (request) => {
+    const auth = await currentUser(ctx, request);
+    requireUser(auth);
+    await ctx.db.transaction(async (tx) => {
+      await tx.execute(sql`DELETE FROM audit_logs`);
+      await tx.insert(auditLogs).values({
+        actorUserId: auth.user.id,
+        action: "audit.cleared",
+      });
+    });
+    return { ok: true };
   });
   app.post("/api/v1/settings/encryption/rotate", { preHandler: authed }, async (request, reply) => {
     const auth = await currentUser(ctx, request);
@@ -1323,7 +1343,7 @@ export async function buildApp(ctx: AppContext) {
   app.get("/api/v1/notifications", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
-    const before = parseCursor(query.before);
+    const before = parsePageCursor(query.before);
     const deliveries = before
       ? await ctx.db
           .select()
@@ -1338,6 +1358,16 @@ export async function buildApp(ctx: AppContext) {
           .limit(limit);
     return { deliveries };
   });
+
+  const setup = await getSetupState(ctx);
+  if (setup.completed) {
+    const [defaultAgent] = await ctx.db
+      .select()
+      .from(agents)
+      .where(eq(agents.kind, "system_default"))
+      .limit(1);
+    await ensureShippedCryptoSkills(ctx, defaultAgent?.id);
+  }
 
   return app;
 }

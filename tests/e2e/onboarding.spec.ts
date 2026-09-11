@@ -81,11 +81,17 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await signIn(page);
   await page.getByRole("link", { name: "Agents" }).click();
   await expect(page.getByText("Domains: crypto").first()).toBeVisible();
+  await page.getByRole("link", { name: "Riddlr Intelligence Agent" }).click();
+  await expect(page.getByRole("heading", { name: "Objectives" })).toBeVisible();
+  await expect(page.getByText(/default Crypto watcher/i)).toBeVisible();
+  await expect(page.getByText("General crypto intelligence")).toBeVisible();
+  await page.getByRole("link", { name: "Agents", exact: true }).click();
   const watchlistAgent = page.getByRole("heading", { name: "Watchlist agent" });
   const watchlistLink = page.getByRole("link", { name: "Watchlist agent" });
   if ((await watchlistAgent.count()) === 0 && (await watchlistLink.count()) === 0) {
     await page.getByRole("link", { name: "Create agent" }).click();
     await page.getByLabel("Agent name").fill("Watchlist agent");
+    await page.getByLabel("Description").fill("Watches Bitcoin for material events.");
     await page.getByRole("button", { name: "Bitcoin" }).click();
     await page.getByRole("button", { name: "Create agent" }).click();
   }
@@ -112,13 +118,20 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByText(/No signals|Signals/)).toBeVisible();
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page.getByText("Connected").first()).toBeVisible();
+  await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();
+  await page.locator(".page-subnav").getByRole("link", { name: "Notifications" }).click();
+  await expect(page.getByRole("heading", { name: "Telegram" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "WhatsApp Cloud API" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
-  await expect(page.getByText("Current session")).toBeVisible();
+  await page.locator(".page-subnav").getByRole("link", { name: "Security" }).click();
   await expect(page.getByRole("heading", { name: "Recovery codes" })).toBeVisible();
   await expect(page.getByText(/remaining/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Encryption" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible();
+  await page.locator(".page-subnav").getByRole("link", { name: "Sessions" }).click();
+  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByText("Current session")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
-  await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Clear audit log" })).toBeVisible();
   await page.getByRole("link", { name: "Health" }).click();
   await expect(page.getByRole("heading", { name: "PostgreSQL" })).toBeVisible();
   await expect(page.getByText("Concurrency")).toBeVisible();

@@ -1,5 +1,6 @@
 export const MAX_SKILL_BYTES = 32_768;
-export const MAX_SKILLS_PER_AGENT = 8;
+export const MAX_SKILLS_PER_AGENT = 16;
+export const MAX_SELECTED_SKILLS_PER_ANALYSIS = 11;
 export const MAX_SKILL_PROMPT_CHARS = 4_000;
 export const SKILL_SLUG_RE = /^[a-z0-9][a-z0-9-]{2,62}$/;
 
@@ -18,6 +19,12 @@ export function assertSkillSlug(slug: string): string {
     throw new UnsafeSkillError("Skill slug must be lowercase letters, digits, and hyphens.");
   }
   return slug;
+}
+
+export function skillPurposeLine(markdown: string): string | undefined {
+  const match = /^Purpose:\s*(.+)$/m.exec(markdown);
+  const line = match?.[1]?.trim();
+  return line || undefined;
 }
 
 export function assertSafeSkillMarkdown(markdown: string): string {

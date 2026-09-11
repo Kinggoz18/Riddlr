@@ -1,4 +1,5 @@
 import {
+  DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
   type DomainModule,
   type ExtractedAsset,
@@ -75,6 +76,45 @@ export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
 
 const TOKEN_RE = /\b(bitcoin|ethereum|solana|btc|eth|sol|usdt|usdc|meme coin|stablecoin)\b/gi;
 const CRYPTO_ASSET_CLASSES = ["cryptocurrency", "meme_coin", "stablecoin"] as const;
+
+export const DEFAULT_CRYPTO_OBJECTIVES = [
+  "general_crypto_intelligence",
+  "emerging_narratives",
+  "major_events",
+  "significant_market_changes",
+  "risk_signals",
+  "cross_source_corroboration",
+  "potential_opportunities",
+  "hidden_gems",
+  "unusual_market_behaviour",
+  "anomalies",
+  "asset_specific_changes",
+  "general_market_trends",
+] as const;
+
+const LEGACY_CRYPTO_OBJECTIVES = [
+  "general_crypto_intelligence",
+  "emerging_narratives",
+  "major_events",
+  "significant_market_changes",
+  "risk_signals",
+  "cross_source_corroboration",
+];
+
+export function mergeShippedCryptoObjectives(current: string[]): string[] {
+  const set = new Set(current);
+  if (DEFAULT_CRYPTO_OBJECTIVES.every((id) => set.has(id))) {
+    return current;
+  }
+  const uncustomized =
+    current.length === 0 ||
+    (current.length === LEGACY_CRYPTO_OBJECTIVES.length &&
+      LEGACY_CRYPTO_OBJECTIVES.every((id) => set.has(id)));
+  if (uncustomized) {
+    return [...DEFAULT_CRYPTO_OBJECTIVES];
+  }
+  return current;
+}
 
 export const cryptoDomainModule: DomainModule = {
   id: "crypto",
@@ -199,14 +239,8 @@ export const cryptoDomainModule: DomainModule = {
   defaultAgentProfile() {
     return {
       name: DEFAULT_AGENT_NAME,
-      objectives: [
-        "general_crypto_intelligence",
-        "emerging_narratives",
-        "major_events",
-        "significant_market_changes",
-        "risk_signals",
-        "cross_source_corroboration",
-      ],
+      description: DEFAULT_AGENT_DESCRIPTION,
+      objectives: [...DEFAULT_CRYPTO_OBJECTIVES],
       assetClasses: ["cryptocurrency", "meme_coin", "stablecoin"],
     };
   },

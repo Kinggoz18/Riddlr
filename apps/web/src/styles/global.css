@@ -91,8 +91,7 @@ a:focus-visible,
   outline-offset: 2px;
 }
 .ui-button,
-.nav a,
-.nav-toggle {
+.nav a {
   min-height: 44px;
 }
 .ui-button {
@@ -343,7 +342,6 @@ a:focus-visible,
 }
 .nav-toggle {
   display: none;
-  width: 100%;
 }
 .page {
   padding: 28px 28px 48px;
@@ -375,6 +373,7 @@ a:focus-visible,
 .ui-dialog-backdrop {
   position: fixed;
   inset: 0;
+  z-index: 20;
   background: rgba(0, 0, 0, 0.55);
   display: grid;
   place-items: center;

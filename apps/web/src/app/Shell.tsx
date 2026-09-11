@@ -1,11 +1,16 @@
 import { Button } from "@riddlr/ui";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "./api.js";
 import { BrandMark, PageNavLink } from "./Brand.js";
 
 export function Shell(props: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -22,7 +27,18 @@ export function Shell(props: { children: ReactNode }) {
             aria-controls="primary-nav"
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? "Close" : "Menu"}
+            {open ? (
+              <span className="nav-toggle-close" aria-hidden="true">
+                <span />
+                <span />
+              </span>
+            ) : (
+              <span className="nav-toggle-icon" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
           </Button>
         </div>
         <nav

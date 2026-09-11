@@ -1,8 +1,9 @@
 import { Button, Field } from "@riddlr/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "../api.js";
 import { AuthShell } from "../Brand.js";
+import { loadFromPasswordManager } from "../password-store.js";
 import { toastFail, useToast } from "../Toast.js";
 
 function LoginPage() {
@@ -12,6 +13,20 @@ function LoginPage() {
   const [token, setToken] = useState("");
   const [stage, setStage] = useState<"password" | "totp">("password");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void loadFromPasswordManager().then((cred) => {
+      if (!active || !cred) {
+        return;
+      }
+      setEmail(cred.id);
+      setPassword(cred.password);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -46,7 +61,8 @@ function LoginPage() {
           <Field label="Email or username">
             <input
               id="email-or-username"
-              name="email"
+              name="username"
+              type="email"
               autoComplete="username"
               spellCheck={false}
               value={email}

@@ -5,7 +5,15 @@ import { api } from "../api.js";
 import { PageSubnav } from "../PageSubnav.js";
 import { toastFail, useToast } from "../Toast.js";
 
-type Skill = { id: string; slug: string; origin: string; version?: string; markdownBody?: string };
+type Skill = {
+  id: string;
+  slug: string;
+  origin: string;
+  version?: string;
+  markdownBody?: string;
+  displayName?: string;
+  description?: string;
+};
 
 function SkillsSubnav() {
   return (
@@ -40,18 +48,14 @@ function SkillsList() {
       <PageHeader
         title="Skills"
         description="Markdown policy attached to agents. Skills cannot grant tools, filesystem, or secrets."
-        actions={
-          <NavLink to="/skills/new" className="ui-button ui-button-primary">
-            Create skill
-          </NavLink>
-        }
+        actions={<SkillsSubnav />}
       />
-      <SkillsSubnav />
       <section className="record-list">
         {catalog.map((skill) => (
           <Card key={skill.id} className="record-row">
-            <NavLink to={`/skills/${skill.id}`}>{skill.slug}</NavLink>
+            <NavLink to={`/skills/${skill.id}`}>{skill.displayName ?? skill.slug}</NavLink>
             <StatusBadge label={skill.origin === "shipped" ? "Shipped" : "User"} />
+            {skill.description ? <p className="record-copy">{skill.description}</p> : null}
           </Card>
         ))}
       </section>
@@ -63,14 +67,15 @@ function SkillCreate() {
   const toast = useToast();
   const navigate = useNavigate();
   const [skillSlug, setSkillSlug] = useState("");
+  const [skillDescription, setSkillDescription] = useState("");
   const [skillMarkdown, setSkillMarkdown] = useState("");
   return (
     <>
       <PageHeader
         title="Create skill"
         description="User skills are stored in PostgreSQL. Shipped slugs cannot be overwritten."
+        actions={<SkillsSubnav />}
       />
-      <SkillsSubnav />
       <Card>
         <form
           className="skill-compose"
@@ -79,7 +84,11 @@ function SkillCreate() {
             try {
               const result = await api<{ skill: Skill }>("/api/v1/skills", {
                 method: "POST",
-                body: JSON.stringify({ slug: skillSlug, markdownBody: skillMarkdown }),
+                body: JSON.stringify({
+                  slug: skillSlug,
+                  description: skillDescription,
+                  markdownBody: skillMarkdown,
+                }),
               });
               toast("Skill saved");
               navigate(result.skill?.id ? `/skills/${result.skill.id}` : "/skills");
@@ -94,6 +103,19 @@ function SkillCreate() {
                 id="skill-slug"
                 value={skillSlug}
                 onChange={(e) => setSkillSlug(e.target.value)}
+                required
+              />
+            </Field>
+            <Field
+              label="Description"
+              hint="Shown on the skill list and agent view. Not sent to the model."
+            >
+              <textarea
+                id="skill-description"
+                rows={3}
+                maxLength={280}
+                value={skillDescription}
+                onChange={(e) => setSkillDescription(e.target.value)}
                 required
               />
             </Field>
@@ -148,18 +170,26 @@ function SkillDetail() {
   return (
     <>
       <PageHeader
-        title={skill.slug}
-        description="Markdown policy. Shipped skills cannot be edited or deleted."
+        title={skill.displayName ?? skill.slug}
+        description={
+          skill.description ||
+          "Markdown policy attached to agents. Skills cannot grant tools or secrets. Shipped skills cannot be overwritten."
+        }
         actions={
-          skill.origin === "user" ? (
-            <NavLink to={`/skills/${skill.id}/edit`} className="ui-button ui-button-primary">
-              Edit skill
-            </NavLink>
-          ) : null
+          <>
+            <SkillsSubnav />
+            {skill.origin === "user" ? (
+              <NavLink to={`/skills/${skill.id}/edit`} className="ui-button ui-button-primary">
+                Edit skill
+              </NavLink>
+            ) : null}
+          </>
         }
       />
-      <SkillsSubnav />
-      <StatusBadge label={skill.origin === "shipped" ? "Shipped" : "User"} />
+      <p className="record-meta">
+        <StatusBadge label={skill.origin === "shipped" ? "Shipped" : "User"} />
+        <span>{skill.slug}</span>
+      </p>
       <pre className="skill-body">{skill.markdownBody}</pre>
       {skill.origin === "user" ? (
         <p>
@@ -188,6 +218,7 @@ function SkillEdit() {
   const navigate = useNavigate();
   const toast = useToast();
   const [skill, setSkill] = useState<Skill>();
+  const [description, setSkillDescription] = useState("");
   const [markdown, setSkillMarkdown] = useState("");
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -197,6 +228,7 @@ function SkillEdit() {
     void api<{ skill: Skill }>(`/api/v1/skills/${id}`)
       .then((body) => {
         setSkill(body.skill);
+        setSkillDescription(body.skill.description ?? "");
         setSkillMarkdown(body.skill.markdownBody ?? "");
       })
       .catch(() => setMissing(true));
@@ -213,10 +245,10 @@ function SkillEdit() {
   return (
     <>
       <PageHeader
-        title={`Edit ${skill.slug}`}
-        description="Update the markdown body only. The slug stays."
+        title={`Edit ${skill.displayName ?? skill.slug}`}
+        description="Update the operator description and markdown. The slug stays."
+        actions={<SkillsSubnav />}
       />
-      <SkillsSubnav />
       <Card>
         <form
           className="skill-compose"
@@ -225,7 +257,7 @@ function SkillEdit() {
             try {
               await api(`/api/v1/skills/${skill.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ markdownBody: markdown }),
+                body: JSON.stringify({ description, markdownBody: markdown }),
               });
               toast("Skill saved");
               navigate(`/skills/${skill.id}`);
@@ -235,6 +267,19 @@ function SkillEdit() {
           }}
         >
           <div className="skill-compose-fields">
+            <Field
+              label="Description"
+              hint="Shown on the skill list and agent view. Not sent to the model."
+            >
+              <textarea
+                id="skill-description"
+                rows={3}
+                maxLength={280}
+                value={description}
+                onChange={(e) => setSkillDescription(e.target.value)}
+                required
+              />
+            </Field>
             <Field label="Skill markdown">
               <textarea
                 id="skill-markdown"

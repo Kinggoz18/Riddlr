@@ -3,6 +3,7 @@ import {
   coinmarketcapSourceSchema,
   cryptocomSourceSchema,
   discordSourceSchema,
+  pageQuerySchema,
   sourcePatchSchema,
   xSourceSchema,
 } from "@riddlr/api-contract";
@@ -15,6 +16,7 @@ import {
   scanSourceRuns,
   sources,
 } from "@riddlr/db";
+import { clampPageSize, parsePageCursor } from "@riddlr/domain";
 import {
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
@@ -24,7 +26,7 @@ import {
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
 } from "@riddlr/source-adapters";
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import {
@@ -324,16 +326,26 @@ export function registerSourceRoutes(
 
   app.get("/api/v1/sources/:id/evidence", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const query = pageQuerySchema.parse(request.query);
+    const limit = clampPageSize(query.limit, 50);
+    const before = parsePageCursor(query.before);
     const [row] = await ctx.db.select().from(sources).where(eq(sources.id, id)).limit(1);
     if (!row) {
       return reply.code(404).send({ error: { code: "not_found", message: "Source not found" } });
     }
-    const items = await ctx.db
-      .select()
-      .from(evidenceItems)
-      .where(eq(evidenceItems.sourceId, id))
-      .orderBy(desc(evidenceItems.fetchedAt))
-      .limit(20);
+    const items = before
+      ? await ctx.db
+          .select()
+          .from(evidenceItems)
+          .where(and(eq(evidenceItems.sourceId, id), lt(evidenceItems.fetchedAt, before)))
+          .orderBy(desc(evidenceItems.fetchedAt))
+          .limit(limit)
+      : await ctx.db
+          .select()
+          .from(evidenceItems)
+          .where(eq(evidenceItems.sourceId, id))
+          .orderBy(desc(evidenceItems.fetchedAt))
+          .limit(limit);
     return {
       evidence: items.map((item) => ({
         id: item.id,
@@ -355,7 +367,7 @@ export function registerSourceRoutes(
       .from(scanSourceRuns)
       .where(eq(scanSourceRuns.sourceId, id))
       .orderBy(desc(scanSourceRuns.id))
-      .limit(20);
+      .limit(50);
     return {
       errors: errors
         .filter((item) => item.errorClass)

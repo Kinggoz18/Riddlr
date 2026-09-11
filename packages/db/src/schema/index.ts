@@ -133,6 +133,7 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   kind: text("kind").notNull(),
   enabled: boolean("enabled").notNull().default(true),
+  description: text("description").notNull().default(""),
   objectives: jsonb("objectives").$type<string[]>().notNull().default([]),
   schedule: text("schedule").notNull().default("1h"),
   customIntervalMs: integer("custom_interval_ms"),
@@ -168,6 +169,7 @@ export const skills = pgTable(
     slug: text("slug").notNull(),
     version: text("version").notNull(),
     origin: text("origin").notNull(),
+    description: text("description").notNull().default(""),
     markdownBody: text("markdown_body").notNull(),
   },
   (table) => [uniqueIndex("skills_slug_idx").on(table.slug)],
@@ -385,6 +387,9 @@ export const events = pgTable("events", {
   derivedCount: integer("derived_count").notNull().default(0),
   clusterFingerprint: text("cluster_fingerprint"),
   materialityReason: text("materiality_reason"),
+  epistemicStatus: text("epistemic_status"),
+  candidateKind: text("candidate_kind"),
+  discoveryReason: text("discovery_reason"),
 });
 
 export const eventEvidence = pgTable(
@@ -571,6 +576,7 @@ export const analyses = pgTable("analyses", {
   completionTokens: integer("completion_tokens"),
   latencyMs: integer("latency_ms"),
   rawOutput: jsonb("raw_output"),
+  skillTrace: jsonb("skill_trace").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -594,6 +600,8 @@ export const signals = pgTable(
     contradictoryEvidence: text("contradictory_evidence"),
     invalidationConditions: text("invalidation_conditions"),
     schemaVersion: text("schema_version").notNull().default("1"),
+    notifyEligible: boolean("notify_eligible").notNull().default(true),
+    epistemicStatus: text("epistemic_status").notNull().default("signal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

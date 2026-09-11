@@ -1,6 +1,16 @@
-import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
+import { Button, Card, Dialog, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
+import { Route, Routes } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
+import {
+  auditActionLabel,
+  auditResourceLabel,
+  dateTime,
+  editClockHour,
+  formatClockHour,
+  parseClockHour,
+} from "../format.js";
+import { PageSubnav } from "../PageSubnav.js";
 import { toastFail, useToast } from "../Toast.js";
 import { TotpEnroll } from "../TotpEnroll.js";
 
@@ -20,6 +30,20 @@ type AuditRow = {
   resource: string | null;
   createdAt: string;
 };
+
+function SettingsSubnav() {
+  return (
+    <PageSubnav
+      label="Settings"
+      items={[
+        { to: "/settings", label: "Model", end: true },
+        { to: "/settings/security", label: "Security" },
+        { to: "/settings/notifications", label: "Notifications" },
+        { to: "/settings/sessions", label: "Sessions" },
+      ]}
+    />
+  );
+}
 
 function SettingsPage() {
   const [data, setData] = useState<{
@@ -61,11 +85,15 @@ function SettingsPage() {
   const [llmModel, setLlmModel] = useState("gpt-4.1-mini");
   const [llmKey, setLlmKey] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [appSecret, setAppSecret] = useState("");
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [whatsappTo, setWhatsappTo] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [templateLanguage, setTemplateLanguage] = useState("en_US");
   const [verifyToken, setVerifyToken] = useState("");
+  const [telegramToken, setTelegramToken] = useState("");
+  const [telegramChat, setTelegramChat] = useState("");
+  const [confirmClearAudit, setConfirmClearAudit] = useState(false);
 
   async function refresh() {
     const [settings, sessionBody, recovery, auditBody] = await Promise.all([
@@ -84,12 +112,12 @@ function SettingsPage() {
       setCooldownMinutes(String(settings.notificationPolicy.cooldownMinutes));
       setQuietStart(
         settings.notificationPolicy.quietHours
-          ? String(settings.notificationPolicy.quietHours.startHour)
+          ? formatClockHour(String(settings.notificationPolicy.quietHours.startHour))
           : "",
       );
       setQuietEnd(
         settings.notificationPolicy.quietHours
-          ? String(settings.notificationPolicy.quietHours.endHour)
+          ? formatClockHour(String(settings.notificationPolicy.quietHours.endHour))
           : "",
       );
     }
@@ -112,14 +140,9 @@ function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="Model, notification policy, sessions, and encryption. Secrets are stored encrypted and never shown again."
+        description="Model, security, notifications, and sessions. Secrets are stored encrypted and never shown again."
       />
-      <nav className="page-subnav" aria-label="Settings">
-        <a href="#settings-model">Model</a>
-        <a href="#settings-security">Security</a>
-        <a href="#settings-notifications">Notifications</a>
-        <a href="#settings-sessions">Sessions</a>
-      </nav>
+      <SettingsSubnav />
       <section className="config-strip" aria-label="Configuration status">
         <span>
           Model
@@ -143,511 +166,712 @@ function SettingsPage() {
         </span>
       </section>
 
-      <Card id="settings-model">
-        <h2>Model</h2>
-        <p className="field-note">
-          {data?.llmConfigured
-            ? "A provider is connected. Saving a new key replaces it."
-            : "Required for analysis. Scans still collect evidence without a model."}
-        </p>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            try {
-              await api("/api/v1/settings/llm", {
-                method: "POST",
-                body: JSON.stringify({
-                  provider: llmProvider,
-                  baseUrl: llmBaseUrl,
-                  model: llmModel,
-                  apiKey: llmKey,
-                }),
-              });
-              setLlmKey("");
-              await refresh();
-              toast("Model saved");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t save model"), "danger");
-            }
-          }}
-        >
-          <Field label="Provider">
-            <select
-              id="settings-provider"
-              value={llmProvider}
-              onChange={(e) => setLlmProvider(e.target.value)}
-            >
-              <option value="openai_compatible">OpenAI-compatible</option>
-              <option value="anthropic_compatible">Anthropic-compatible</option>
-            </select>
-          </Field>
-          <Field label="Base URL">
-            <input
-              id="settings-base-url"
-              type="url"
-              value={llmBaseUrl}
-              onChange={(e) => setLlmBaseUrl(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Model">
-            <input
-              id="settings-model"
-              value={llmModel}
-              onChange={(e) => setLlmModel(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="API key" hint="Stored encrypted. Never shown again.">
-            <input
-              id="settings-api-key"
-              type="password"
-              autoComplete="off"
-              value={llmKey}
-              onChange={(e) => setLlmKey(e.target.value)}
-              required
-            />
-          </Field>
-          <Button type="submit">Save provider</Button>
-        </form>
-      </Card>
-
-      <Card id="settings-security">
-        <h2>Authenticator</h2>
-        {data?.totpEnabled ? (
-          <StatusBadge label="Enabled" />
-        ) : otpauth && secret ? (
-          <TotpEnroll
-            otpauth={otpauth}
-            secret={secret}
-            token={totp}
-            onToken={setTotp}
-            busy={enrollBusy}
-            onVerify={async () => {
-              setEnrollBusy(true);
-              try {
-                const body = await api<{ recoveryCodes: string[] }>(
-                  "/api/v1/settings/totp/verify",
-                  {
-                    method: "POST",
-                    body: JSON.stringify({ token: totp }),
-                  },
-                );
-                setRecoveryCodes(body.recoveryCodes);
-                setSavedCodes(false);
-                setTotp("");
-                setOtpauth(undefined);
-                setSecret(undefined);
-                await refresh();
-                toast("Authenticator on");
-              } catch (err) {
-                toast(toastFail(err, "Couldn’t verify code"), "danger");
-              } finally {
-                setEnrollBusy(false);
-              }
-            }}
-          />
-        ) : (
-          <p className="ui-actions">
-            <Button
-              onClick={async () => {
-                try {
-                  const result = await api<{ otpauth: string; secret: string }>(
-                    "/api/v1/settings/totp/start",
-                    { method: "POST" },
-                  );
-                  setOtpauth(result.otpauth);
-                  setSecret(result.secret);
-                } catch (err) {
-                  toast(toastFail(err, "Couldn’t start setup"), "danger");
-                }
-              }}
-            >
-              Set up authenticator
-            </Button>
-          </p>
-        )}
-      </Card>
-
-      <Card id="settings-notifications">
-        <h2>Notification policy</h2>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            try {
-              await api("/api/v1/settings/notifications", {
-                method: "POST",
-                body: JSON.stringify({
-                  minRisk,
-                  cooldownMinutes: Number(cooldownMinutes),
-                  quietHours:
-                    quietStart !== "" && quietEnd !== ""
-                      ? { startHour: Number(quietStart), endHour: Number(quietEnd) }
-                      : undefined,
-                }),
-              });
-              await refresh();
-              toast("Saved");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t save"), "danger");
-            }
-          }}
-        >
-          <Field label="Minimum risk">
-            <select id="minimum-risk" value={minRisk} onChange={(e) => setMinRisk(e.target.value)}>
-              <option value="low">low</option>
-              <option value="moderate">moderate</option>
-              <option value="high">high</option>
-              <option value="critical">critical</option>
-            </select>
-          </Field>
-          <Field label="Cooldown minutes">
-            <input
-              id="cooldown-minutes"
-              type="number"
-              min={0}
-              max={1440}
-              value={cooldownMinutes}
-              onChange={(e) => setCooldownMinutes(e.target.value)}
-            />
-          </Field>
-          <Field label="Quiet hours start" hint="Optional 0–23. Leave blank for no quiet hours.">
-            <input
-              id="quiet-hours-start"
-              type="number"
-              min={0}
-              max={23}
-              value={quietStart}
-              onChange={(e) => setQuietStart(e.target.value)}
-            />
-          </Field>
-          <Field label="Quiet hours end">
-            <input
-              id="quiet-hours-end"
-              type="number"
-              min={0}
-              max={23}
-              value={quietEnd}
-              onChange={(e) => setQuietEnd(e.target.value)}
-            />
-          </Field>
-          <Button type="submit">Save notification policy</Button>
-        </form>
-      </Card>
-
-      <Card>
-        <h2>WhatsApp Cloud API</h2>
-        <code>/api/v1/webhooks/whatsapp</code>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            try {
-              await api("/api/v1/settings/whatsapp", {
-                method: "POST",
-                body: JSON.stringify({
-                  accessToken,
-                  phoneNumberId,
-                  to: whatsappTo,
-                  templateName,
-                  templateLanguage,
-                  verifyToken,
-                }),
-              });
-              setAccessToken("");
-              setVerifyToken("");
-              await refresh();
-              toast("WhatsApp saved");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t save WhatsApp"), "danger");
-            }
-          }}
-        >
-          <Field label="Access token">
-            <input
-              id="access-token"
-              type="password"
-              autoComplete="off"
-              value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Phone number id">
-            <input
-              id="phone-number-id"
-              value={phoneNumberId}
-              onChange={(e) => setPhoneNumberId(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Destination number">
-            <input
-              id="destination-number"
-              value={whatsappTo}
-              onChange={(e) => setWhatsappTo(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Template name">
-            <input
-              id="template-name"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Template language">
-            <input
-              id="template-language"
-              value={templateLanguage}
-              onChange={(e) => setTemplateLanguage(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Webhook verify token">
-            <input
-              id="webhook-verify-token"
-              type="password"
-              autoComplete="off"
-              value={verifyToken}
-              onChange={(e) => setVerifyToken(e.target.value)}
-              required
-            />
-          </Field>
-          <Button type="submit">Save WhatsApp settings</Button>
-        </form>
-      </Card>
-
-      <Card id="settings-sessions">
-        <h2>Sessions</h2>
-        {sessions.length === 0 ? (
-          <EmptyState title="No sessions" body="Sign in to create a session." />
-        ) : (
-          sessions.map((row) => (
-            <p key={row.id}>
-              {row.current ? "Current session" : "Other session"} · last seen{" "}
-              {new Date(row.lastSeenAt).toLocaleString()}
-              {row.ip ? ` · ${row.ip}` : ""}
-              {row.current ? null : (
-                <>
-                  {" "}
-                  <Button
-                    onClick={async () => {
+      <Routes>
+        <Route
+          index
+          element={
+            <Card id="settings-model">
+              <h2>Model</h2>
+              <p className="field-note">
+                {data?.llmConfigured
+                  ? "A provider is connected. Saving a new key replaces it."
+                  : "Required for analysis. Scans still collect evidence without a model."}
+              </p>
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  try {
+                    await api("/api/v1/settings/llm", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        provider: llmProvider,
+                        baseUrl: llmBaseUrl,
+                        model: llmModel,
+                        apiKey: llmKey,
+                      }),
+                    });
+                    setLlmKey("");
+                    await refresh();
+                    toast("Model saved");
+                  } catch (err) {
+                    toast(toastFail(err, "Couldn’t save model"), "danger");
+                  }
+                }}
+              >
+                <Field label="Provider">
+                  <select
+                    id="settings-provider"
+                    value={llmProvider}
+                    onChange={(e) => setLlmProvider(e.target.value)}
+                  >
+                    <option value="openai_compatible">OpenAI-compatible</option>
+                    <option value="anthropic_compatible">Anthropic-compatible</option>
+                  </select>
+                </Field>
+                <Field label="Base URL">
+                  <input
+                    id="settings-base-url"
+                    type="url"
+                    value={llmBaseUrl}
+                    onChange={(e) => setLlmBaseUrl(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="Model">
+                  <input
+                    id="settings-model"
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="API key" hint="Stored encrypted. Never shown again.">
+                  <input
+                    id="settings-api-key"
+                    type="password"
+                    autoComplete="new-password"
+                    value={llmKey}
+                    onChange={(e) => setLlmKey(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Button type="submit">Save provider</Button>
+              </form>
+            </Card>
+          }
+        />
+        <Route
+          path="security"
+          element={
+            <>
+              <Card id="settings-security">
+                <h2>Authenticator</h2>
+                {data?.totpEnabled ? (
+                  <StatusBadge label="Enabled" />
+                ) : otpauth && secret ? (
+                  <TotpEnroll
+                    otpauth={otpauth}
+                    secret={secret}
+                    token={totp}
+                    onToken={setTotp}
+                    busy={enrollBusy}
+                    onVerify={async () => {
+                      setEnrollBusy(true);
                       try {
-                        await api(`/api/v1/sessions/${row.id}/revoke`, { method: "POST" });
+                        const body = await api<{ recoveryCodes: string[] }>(
+                          "/api/v1/settings/totp/verify",
+                          {
+                            method: "POST",
+                            body: JSON.stringify({ token: totp }),
+                          },
+                        );
+                        setRecoveryCodes(body.recoveryCodes);
+                        setSavedCodes(false);
+                        setTotp("");
+                        setOtpauth(undefined);
+                        setSecret(undefined);
                         await refresh();
-                        toast("Session ended");
+                        toast("Authenticator on");
                       } catch (err) {
-                        toast(toastFail(err, "Couldn’t end session"), "danger");
+                        toast(toastFail(err, "Couldn’t verify code"), "danger");
+                      } finally {
+                        setEnrollBusy(false);
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="ui-actions">
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const result = await api<{ otpauth: string; secret: string }>(
+                            "/api/v1/settings/totp/start",
+                            { method: "POST" },
+                          );
+                          setOtpauth(result.otpauth);
+                          setSecret(result.secret);
+                        } catch (err) {
+                          toast(toastFail(err, "Couldn’t start setup"), "danger");
+                        }
+                      }}
+                    >
+                      Set up authenticator
+                    </Button>
+                  </p>
+                )}
+              </Card>
+
+              <Card>
+                <h2>Recovery codes</h2>
+                <p>{remaining ?? 0} remaining</p>
+                {recoveryCodes.length > 0 && !savedCodes ? (
+                  <>
+                    <p>Save these codes now. They are shown once.</p>
+                    <ul className="recovery-codes">
+                      {recoveryCodes.map((code) => (
+                        <li key={code}>
+                          <code>{code}</code>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button onClick={() => setSavedCodes(true)}>I have saved these codes</Button>
+                  </>
+                ) : data?.totpEnabled ? (
+                  <form
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      try {
+                        const body = await api<{ recoveryCodes: string[] }>(
+                          "/api/v1/auth/recovery/rotate",
+                          {
+                            method: "POST",
+                            body: JSON.stringify({ token: totp }),
+                          },
+                        );
+                        setRecoveryCodes(body.recoveryCodes);
+                        setSavedCodes(false);
+                        setTotp("");
+                        await refresh();
+                        toast("New recovery codes");
+                      } catch (err) {
+                        toast(toastFail(err, "Couldn’t regenerate codes"), "danger");
                       }
                     }}
                   >
-                    Revoke
+                    <Field label="Authenticator code to regenerate recovery codes">
+                      <input
+                        id="authenticator-code-to-regenerate-recovery-codes"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        value={totp}
+                        onChange={(e) => setTotp(e.target.value)}
+                        required
+                      />
+                    </Field>
+                    <Button type="submit">Regenerate recovery codes</Button>
+                  </form>
+                ) : (
+                  <p className="field-note">Enable authenticator to generate recovery codes.</p>
+                )}
+              </Card>
+
+              <Card>
+                <h2>Encryption</h2>
+                <p>
+                  Re-encrypt stored credentials with the current master key and increment the key
+                  version.
+                </p>
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/settings/encryption/rotate", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          currentPassword: rotatePassword,
+                          token: rotateTotp || undefined,
+                        }),
+                      });
+                      setRotatePassword("");
+                      setRotateTotp("");
+                      await refresh();
+                      toast("Key rotated");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t rotate key"), "danger");
+                    }
+                  }}
+                >
+                  <Field label="Password for key rotation">
+                    <input
+                      id="password-for-key-rotation"
+                      type="password"
+                      value={rotatePassword}
+                      onChange={(e) => setRotatePassword(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label="Authenticator code for key rotation"
+                    hint={
+                      data?.totpEnabled ? undefined : "Not required until authenticator is enabled."
+                    }
+                  >
+                    <input
+                      id="authenticator-code-for-key-rotation"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={rotateTotp}
+                      onChange={(e) => setRotateTotp(e.target.value)}
+                      required={Boolean(data?.totpEnabled)}
+                    />
+                  </Field>
+                  <Button type="submit">Rotate encryption keys</Button>
+                </form>
+              </Card>
+
+              <Card>
+                <h2>Change password</h2>
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/auth/password", {
+                        method: "POST",
+                        body: JSON.stringify({ currentPassword, newPassword }),
+                      });
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      await refresh();
+                      toast("Password updated");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t update password"), "danger");
+                    }
+                  }}
+                >
+                  <Field label="Current password">
+                    <input
+                      id="current-password"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="New password">
+                    <input
+                      id="new-password"
+                      type="password"
+                      minLength={12}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Button type="submit">Update password</Button>
+                </form>
+              </Card>
+            </>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <>
+              <Card id="settings-notifications">
+                <h2>Notification policy</h2>
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/settings/notifications", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          minRisk,
+                          cooldownMinutes: Number(cooldownMinutes),
+                          quietHours: (() => {
+                            const startHour = parseClockHour(quietStart);
+                            const endHour = parseClockHour(quietEnd);
+                            return startHour !== undefined && endHour !== undefined
+                              ? { startHour, endHour }
+                              : undefined;
+                          })(),
+                        }),
+                      });
+                      await refresh();
+                      toast("Saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save"), "danger");
+                    }
+                  }}
+                >
+                  <Field label="Minimum risk">
+                    <select
+                      id="minimum-risk"
+                      value={minRisk}
+                      onChange={(e) => setMinRisk(e.target.value)}
+                    >
+                      <option value="low">low</option>
+                      <option value="moderate">moderate</option>
+                      <option value="high">high</option>
+                      <option value="critical">critical</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Cooldown minutes"
+                    hint="Minimum wait before another delivery to the same destination."
+                  >
+                    <input
+                      id="cooldown-minutes"
+                      type="number"
+                      min={0}
+                      max={1440}
+                      value={cooldownMinutes}
+                      onChange={(e) => setCooldownMinutes(e.target.value)}
+                    />
+                  </Field>
+                  <div className="quiet-hours">
+                    <Field
+                      label="Quiet hours start"
+                      hint="24-hour clock, for example 22:00. Leave both empty to always allow delivery."
+                    >
+                      <input
+                        id="quiet-hours-start"
+                        inputMode="numeric"
+                        placeholder="22:00"
+                        autoComplete="off"
+                        value={quietStart}
+                        onChange={(e) => setQuietStart(editClockHour(e.target.value))}
+                        onBlur={() => setQuietStart(formatClockHour(quietStart))}
+                      />
+                    </Field>
+                    <Field
+                      label="Quiet hours end"
+                      hint="24-hour clock, for example 07:00. 22:00–07:00 is overnight."
+                    >
+                      <input
+                        id="quiet-hours-end"
+                        inputMode="numeric"
+                        placeholder="07:00"
+                        autoComplete="off"
+                        value={quietEnd}
+                        onChange={(e) => setQuietEnd(editClockHour(e.target.value))}
+                        onBlur={() => setQuietEnd(formatClockHour(quietEnd))}
+                      />
+                    </Field>
+                  </div>
+                  <Button type="submit">Save notification policy</Button>
+                </form>
+              </Card>
+
+              <Card>
+                <h2>Telegram</h2>
+                <p className="field-note">
+                  A bot token from BotFather and the chat ID that should receive signals. This is a
+                  notification channel, not a source. Stored encrypted and never shown again.
+                </p>
+                {data?.telegramConfigured ? <StatusBadge label="Connected" /> : null}
+                <form
+                  autoComplete="off"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/settings/telegram", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          botToken: telegramToken,
+                          chatId: telegramChat,
+                        }),
+                      });
+                      setTelegramToken("");
+                      await refresh();
+                      toast("Telegram saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save Telegram"), "danger");
+                    }
+                  }}
+                >
+                  <Field
+                    label="Bot token"
+                    hint="From @BotFather. Stored encrypted. Never shown again."
+                  >
+                    <input
+                      id="telegram-bot-token"
+                      name="telegram-bot-token"
+                      type="password"
+                      autoComplete="new-password"
+                      value={telegramToken}
+                      onChange={(e) => setTelegramToken(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Chat ID" hint="The destination chat, group, or channel numeric ID.">
+                    <input
+                      id="telegram-chat-id"
+                      name="telegram-chat-id"
+                      autoComplete="off"
+                      value={telegramChat}
+                      onChange={(e) => setTelegramChat(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <p className="ui-actions">
+                    <Button type="submit">Save Telegram</Button>
+                    {data?.telegramConfigured ? (
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          try {
+                            await api("/api/v1/settings/telegram", { method: "DELETE" });
+                            setTelegramToken("");
+                            setTelegramChat("");
+                            await refresh();
+                            toast("Telegram removed");
+                          } catch (err) {
+                            toast(toastFail(err, "Couldn’t remove Telegram"), "danger");
+                          }
+                        }}
+                      >
+                        Remove Telegram
+                      </Button>
+                    ) : null}
+                  </p>
+                </form>
+              </Card>
+
+              <Card>
+                <h2>WhatsApp Cloud API</h2>
+                <code>/api/v1/webhooks/whatsapp</code>
+                <form
+                  autoComplete="off"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/settings/whatsapp", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          accessToken,
+                          appSecret,
+                          phoneNumberId,
+                          to: whatsappTo,
+                          templateName,
+                          templateLanguage,
+                          verifyToken,
+                        }),
+                      });
+                      setAccessToken("");
+                      setAppSecret("");
+                      setVerifyToken("");
+                      await refresh();
+                      toast("WhatsApp saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save WhatsApp"), "danger");
+                    }
+                  }}
+                >
+                  <Field
+                    label="Access token"
+                    hint="Meta Cloud API token. Stored encrypted. Never shown again."
+                  >
+                    <input
+                      id="whatsapp-access-token"
+                      name="whatsapp-access-token"
+                      type="password"
+                      autoComplete="new-password"
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label="App secret"
+                    hint="Used to verify webhook HMAC. Stored encrypted. Never shown again."
+                  >
+                    <input
+                      id="whatsapp-app-secret"
+                      name="whatsapp-app-secret"
+                      type="password"
+                      autoComplete="new-password"
+                      value={appSecret}
+                      onChange={(e) => setAppSecret(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label="Phone number ID"
+                    hint="Numeric Cloud API phone-number ID, not a login email."
+                  >
+                    <input
+                      id="whatsapp-phone-number-id"
+                      name="whatsapp-phone-number-id"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={phoneNumberId}
+                      onChange={(e) => setPhoneNumberId(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Destination number" hint="E.164, for example +15551234567.">
+                    <input
+                      id="whatsapp-destination-number"
+                      name="whatsapp-destination-number"
+                      autoComplete="off"
+                      value={whatsappTo}
+                      onChange={(e) => setWhatsappTo(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Template name">
+                    <input
+                      id="whatsapp-template-name"
+                      name="whatsapp-template-name"
+                      autoComplete="off"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Template language">
+                    <input
+                      id="whatsapp-template-language"
+                      name="whatsapp-template-language"
+                      autoComplete="off"
+                      value={templateLanguage}
+                      onChange={(e) => setTemplateLanguage(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Webhook verify token">
+                    <input
+                      id="whatsapp-webhook-verify-token"
+                      name="whatsapp-webhook-verify-token"
+                      type="password"
+                      autoComplete="new-password"
+                      value={verifyToken}
+                      onChange={(e) => setVerifyToken(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Button type="submit">Save WhatsApp settings</Button>
+                </form>
+              </Card>
+            </>
+          }
+        />
+        <Route
+          path="sessions"
+          element={
+            <>
+              <Card id="settings-sessions">
+                <h2>Sessions</h2>
+                {sessions.length === 0 ? (
+                  <EmptyState title="No sessions" body="Sign in to create a session." />
+                ) : (
+                  sessions.map((row) => (
+                    <p key={row.id}>
+                      {row.current ? "Current session" : "Other session"} · last seen{" "}
+                      {new Date(row.lastSeenAt).toLocaleString()}
+                      {row.ip ? ` · ${row.ip}` : ""}
+                      {row.current ? null : (
+                        <>
+                          {" "}
+                          <Button
+                            onClick={async () => {
+                              try {
+                                await api(`/api/v1/sessions/${row.id}/revoke`, { method: "POST" });
+                                await refresh();
+                                toast("Session ended");
+                              } catch (err) {
+                                toast(toastFail(err, "Couldn’t end session"), "danger");
+                              }
+                            }}
+                          >
+                            Revoke
+                          </Button>
+                        </>
+                      )}
+                    </p>
+                  ))
+                )}
+                <Button
+                  onClick={async () => {
+                    try {
+                      await api("/api/v1/sessions/revoke-others", { method: "POST" });
+                      await refresh();
+                      toast("Signed out elsewhere");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t sign out other sessions"), "danger");
+                    }
+                  }}
+                >
+                  Sign out other sessions
+                </Button>
+              </Card>
+
+              <Card>
+                <h2>Audit log</h2>
+                <p className="field-note">
+                  Security actions are listed newest first. Clearing deletes the history and records
+                  that the log was wiped.
+                </p>
+                {audit.length === 0 ? (
+                  <EmptyState
+                    title="No audit events yet"
+                    body="Security actions appear here after they run."
+                  />
+                ) : (
+                  <ul className="data-list">
+                    {audit.map((row) => (
+                      <li key={row.id}>
+                        <span>
+                          {auditActionLabel(row.action)}
+                          {auditResourceLabel(row.resource) ? (
+                            <small>{auditResourceLabel(row.resource)}</small>
+                          ) : null}
+                        </span>
+                        <time dateTime={row.createdAt}>
+                          {dateTime.format(new Date(row.createdAt))}
+                        </time>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="ui-actions">
+                  {auditHasMore && audit.length < CLIENT_LIST_CAP ? (
+                    <Button
+                      variant="ghost"
+                      onClick={async () => {
+                        const last = audit.at(-1);
+                        if (!last) {
+                          return;
+                        }
+                        try {
+                          const body = await api<{ audit: AuditRow[] }>(
+                            `/api/v1/audit?limit=20&before=${encodeURIComponent(last.createdAt)}`,
+                          );
+                          setAudit((current) => takeBoundedClient(current, body.audit));
+                          setAuditHasMore(body.audit.length === 20);
+                        } catch (err) {
+                          toast(toastFail(err, "Couldn’t load audit log"), "danger");
+                        }
+                      }}
+                    >
+                      Load older
+                    </Button>
+                  ) : null}
+                  <Button variant="danger" onClick={() => setConfirmClearAudit(true)}>
+                    Clear audit log
                   </Button>
-                </>
-              )}
-            </p>
-          ))
-        )}
-        <Button
-          onClick={async () => {
-            try {
-              await api("/api/v1/sessions/revoke-others", { method: "POST" });
-              await refresh();
-              toast("Signed out elsewhere");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t sign out other sessions"), "danger");
-            }
-          }}
-        >
-          Sign out other sessions
-        </Button>
-      </Card>
-
-      <Card>
-        <h2>Recovery codes</h2>
-        <p>{remaining ?? 0} remaining</p>
-        {recoveryCodes.length > 0 && !savedCodes ? (
-          <>
-            <p>Save these codes now. They are shown once.</p>
-            <ul className="recovery-codes">
-              {recoveryCodes.map((code) => (
-                <li key={code}>
-                  <code>{code}</code>
-                </li>
-              ))}
-            </ul>
-            <Button onClick={() => setSavedCodes(true)}>I have saved these codes</Button>
-          </>
-        ) : data?.totpEnabled ? (
-          <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              try {
-                const body = await api<{ recoveryCodes: string[] }>(
-                  "/api/v1/auth/recovery/rotate",
-                  {
-                    method: "POST",
-                    body: JSON.stringify({ token: totp }),
-                  },
-                );
-                setRecoveryCodes(body.recoveryCodes);
-                setSavedCodes(false);
-                setTotp("");
-                await refresh();
-                toast("New recovery codes");
-              } catch (err) {
-                toast(toastFail(err, "Couldn’t regenerate codes"), "danger");
-              }
-            }}
-          >
-            <Field label="Authenticator code to regenerate recovery codes">
-              <input
-                id="authenticator-code-to-regenerate-recovery-codes"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={totp}
-                onChange={(e) => setTotp(e.target.value)}
-                required
-              />
-            </Field>
-            <Button type="submit">Regenerate recovery codes</Button>
-          </form>
-        ) : (
-          <p className="field-note">Enable authenticator to generate recovery codes.</p>
-        )}
-      </Card>
-
-      <Card>
-        <h2>Audit log</h2>
-        {audit.length === 0 ? (
-          <EmptyState
-            title="No audit events yet"
-            body="Security actions appear here after they run."
-          />
-        ) : (
-          audit.map((row) => (
-            <p key={row.id}>
-              {new Date(row.createdAt).toLocaleString()} · {row.action}
-              {row.resource ? ` · ${row.resource}` : ""}
-            </p>
-          ))
-        )}
-        {auditHasMore && audit.length < CLIENT_LIST_CAP ? (
-          <Button
-            onClick={async () => {
-              const last = audit.at(-1);
-              if (!last) {
-                return;
-              }
-              try {
-                const body = await api<{ audit: AuditRow[] }>(
-                  `/api/v1/audit?limit=20&before=${encodeURIComponent(last.createdAt)}`,
-                );
-                setAudit((current) => takeBoundedClient(current, body.audit));
-                setAuditHasMore(body.audit.length === 20);
-              } catch (err) {
-                toast(toastFail(err, "Couldn’t load audit log"), "danger");
-              }
-            }}
-          >
-            Load older
-          </Button>
-        ) : null}
-      </Card>
-
-      <Card>
-        <h2>Encryption</h2>
-        <p>
-          Re-encrypt stored credentials with the current master key and increment the key version.
-        </p>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            try {
-              await api("/api/v1/settings/encryption/rotate", {
-                method: "POST",
-                body: JSON.stringify({
-                  currentPassword: rotatePassword,
-                  token: rotateTotp || undefined,
-                }),
-              });
-              setRotatePassword("");
-              setRotateTotp("");
-              await refresh();
-              toast("Key rotated");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t rotate key"), "danger");
-            }
-          }}
-        >
-          <Field label="Password for key rotation">
-            <input
-              id="password-for-key-rotation"
-              type="password"
-              value={rotatePassword}
-              onChange={(e) => setRotatePassword(e.target.value)}
-              required
-            />
-          </Field>
-          <Field
-            label="Authenticator code for key rotation"
-            hint={data?.totpEnabled ? undefined : "Not required until authenticator is enabled."}
-          >
-            <input
-              id="authenticator-code-for-key-rotation"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={rotateTotp}
-              onChange={(e) => setRotateTotp(e.target.value)}
-              required={Boolean(data?.totpEnabled)}
-            />
-          </Field>
-          <Button type="submit">Rotate encryption keys</Button>
-        </form>
-      </Card>
-
-      <Card>
-        <h2>Change password</h2>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            try {
-              await api("/api/v1/auth/password", {
-                method: "POST",
-                body: JSON.stringify({ currentPassword, newPassword }),
-              });
-              setCurrentPassword("");
-              setNewPassword("");
-              await refresh();
-              toast("Password updated");
-            } catch (err) {
-              toast(toastFail(err, "Couldn’t update password"), "danger");
-            }
-          }}
-        >
-          <Field label="Current password">
-            <input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="New password">
-            <input
-              id="new-password"
-              type="password"
-              minLength={12}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-          </Field>
-          <Button type="submit">Update password</Button>
-        </form>
-      </Card>
+                </p>
+                {confirmClearAudit ? (
+                  <Dialog
+                    title="Clear audit log"
+                    confirmLabel="Clear log"
+                    confirmVariant="danger"
+                    onClose={() => setConfirmClearAudit(false)}
+                    onConfirm={() => {
+                      void (async () => {
+                        setConfirmClearAudit(false);
+                        try {
+                          await api("/api/v1/audit", { method: "DELETE" });
+                          await refresh();
+                          toast("Audit log cleared");
+                        } catch (err) {
+                          toast(toastFail(err, "Couldn’t clear audit log"), "danger");
+                        }
+                      })();
+                    }}
+                  >
+                    <p>
+                      This deletes every audit event. A single new row records that the log was
+                      cleared.
+                    </p>
+                  </Dialog>
+                ) : null}
+              </Card>
+            </>
+          }
+        />
+      </Routes>
     </>
   );
 }

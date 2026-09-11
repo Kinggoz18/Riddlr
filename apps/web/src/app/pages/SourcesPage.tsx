@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { AssetPicker } from "../AssetPicker.js";
 import { api } from "../api.js";
+import { ExternalLink } from "../Brand.js";
 import { ChipInput, ChipList } from "../ChipInput.js";
 import { ASSET_CATALOG, adapterLabel, assetLabel, channelLabel, handleLabel } from "../format.js";
 import { PageSubnav } from "../PageSubnav.js";
@@ -89,13 +90,8 @@ function SourcesList() {
       <PageHeader
         title="Sources"
         description="Connectors that produce untrusted evidence. Only one market-data source is enabled at a time."
-        actions={
-          <NavLink to="/sources/new" className="ui-button ui-button-primary">
-            Add source
-          </NavLink>
-        }
+        actions={<SourcesSubnav />}
       />
-      <SourcesSubnav />
       {rows.length === 0 ? (
         <EmptyState title="No sources" body="SearXNG is created during setup." />
       ) : (
@@ -148,8 +144,8 @@ function SourcePicker() {
       <PageHeader
         title="Add source"
         description="Discord can be added more than once. Market-data sources replace each other: only one is active."
+        actions={<SourcesSubnav />}
       />
-      <SourcesSubnav />
       <section className="adapter-grid">
         {ADAPTERS.map((adapter) => {
           const existing = rows.find((row) => row.adapterId === adapter.id);
@@ -201,10 +197,10 @@ function DiscordForm() {
       <PageHeader
         title="Add Discord source"
         description="Requires MESSAGE_CONTENT, VIEW_CHANNEL and READ_MESSAGE_HISTORY. Add another Discord source for a second server."
+        actions={<SourcesSubnav />}
       />
-      <SourcesSubnav />
       <Card>
-        {inviteUrl ? <a href={inviteUrl}>Open invite template</a> : null}
+        {inviteUrl ? <ExternalLink href={inviteUrl}>Open invite template</ExternalLink> : null}
         {botPermissions ? <code>Permissions: {botPermissions}</code> : null}
         {notes ? <p className="field-note">{notes}</p> : null}
         <form
@@ -328,8 +324,8 @@ function XForm() {
       <PageHeader
         title="Add X source"
         description="Recent search only. Availability depends on your X API plan."
+        actions={<SourcesSubnav />}
       />
-      <SourcesSubnav />
       <Card>
         <p className="field-note">Recent search only</p>
         {notes ? <p className="field-note">{notes}</p> : null}
@@ -455,8 +451,7 @@ function MarketForm(props: {
   }, [props.adapter]);
   return (
     <>
-      <PageHeader title={props.title} description={props.note} />
-      <SourcesSubnav />
+      <PageHeader title={props.title} description={props.note} actions={<SourcesSubnav />} />
       <Card>
         {notes ? <p className="field-note">{notes}</p> : null}
         <form
@@ -599,14 +594,16 @@ function SourceDetail() {
         title={row.name}
         description="Untrusted evidence connector. Market-data sources are exclusive."
         actions={
-          removable ? (
-            <NavLink to={`/sources/${row.id}/edit`} className="ui-button ui-button-primary">
-              Edit source
-            </NavLink>
-          ) : null
+          <>
+            <SourcesSubnav />
+            {removable ? (
+              <NavLink to={`/sources/${row.id}/edit`} className="ui-button ui-button-primary">
+                Edit source
+              </NavLink>
+            ) : null}
+          </>
         }
       />
-      <SourcesSubnav />
       <p className="record-meta">
         <StatusBadge label={row.enabled ? "Enabled" : "Paused"} />
         <span>{adapterLabel(row.adapterId)}</span>
@@ -717,8 +714,8 @@ function SourceEdit() {
       <PageHeader
         title={`Edit ${row.name}`}
         description="Rename or pause. Enabling a market source pauses the others."
+        actions={<SourcesSubnav />}
       />
-      <SourcesSubnav />
       <Card>
         <form
           onSubmit={async (event) => {

@@ -81,6 +81,9 @@ export async function deliverSignalNotifications(
   if (!signal) {
     return;
   }
+  if (signal.notifyEligible === false) {
+    return;
+  }
   const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
   const stored = settingsRows[0]?.notificationPolicy;
   const policy = {

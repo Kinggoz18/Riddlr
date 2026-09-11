@@ -101,6 +101,7 @@ export const notificationPolicySchema = z.object({
 
 export const agentUpdateSchema = z.object({
   name: z.string().min(3).max(80).optional(),
+  description: z.string().max(280).optional(),
   schedule: z.enum(AGENT_SCHEDULES).optional(),
   customIntervalMs: z
     .number()
@@ -120,11 +121,13 @@ export const agentUpdateSchema = z.object({
 
 export const skillCreateSchema = z.object({
   slug: z.string().min(3).max(64),
+  description: z.string().max(280).optional(),
   markdownBody: z.string().min(8).max(32_768),
 });
 
 export const skillUpdateSchema = z.object({
-  markdownBody: z.string().min(8).max(32_768),
+  description: z.string().max(280).optional(),
+  markdownBody: z.string().min(8).max(32_768).optional(),
 });
 
 export const watchlistReplaceSchema = z.object({
@@ -217,6 +220,7 @@ export const sourcePatchSchema = z.object({
 
 export const agentCreateSchema = z.object({
   name: z.string().min(3).max(80),
+  description: z.string().max(280).optional(),
   marketDomainIds: z.array(z.enum(MARKET_DOMAIN_IDS)).min(1),
   schedule: z.enum(AGENT_SCHEDULES).default("1h"),
   customIntervalMs: z

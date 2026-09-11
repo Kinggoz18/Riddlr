@@ -1,6 +1,6 @@
 ---
 description: Skills are markdown policy, not tools
-globs: "skills/**,packages/domain/src/skills.ts,apps/server/src/modules/agent-api.ts,packages/llm/**"
+globs: "skills/**,packages/domain/src/skills.ts,packages/domain/src/skill-catalog.ts,apps/server/src/modules/agent-api.ts,packages/llm/**"
 alwaysApply: false
 ---
 
@@ -8,4 +8,5 @@ alwaysApply: false
 
 Skills are markdown policy. They cannot grant tools, filesystem, secrets, or
 override system policy. Shipped slugs are immutable. Prompt inclusion is
-bounded. Validate on write; do not trust model compliance.
+bounded. Select applicable skills from facts; do not load every attached
+skill into one prompt. Validate on write; do not trust model compliance.

@@ -36,7 +36,7 @@ public internet deployment.
 - Optional X recent-search source (official API, plan-gated)
 - One active market-data source at a time: CoinGecko, CoinMarketCap, or Crypto.com Exchange public tickers
 - Read-only portfolios of public addresses and declared holdings
-- The default **Riddlr Intelligence Agent**, bound to Crypto
+- The default **Riddlr Intelligence Agent**, the first-run Crypto watcher
 - Additional Crypto agents, markdown skills, and canonical-ID watchlists
 - Overview, Signals, Events, Agents, Sources, Watchlists, Notifications, Portfolios, Scan History, AI Usage, and System Health
 

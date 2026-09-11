@@ -34,3 +34,11 @@ export function clampPositiveInt(
 export function takeBounded<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
 }
+
+export function parsePageCursor(before?: string): Date | undefined {
+  if (!before) {
+    return undefined;
+  }
+  const value = new Date(before);
+  return Number.isNaN(value.getTime()) ? undefined : value;
+}

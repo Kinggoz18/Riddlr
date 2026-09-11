@@ -4,6 +4,7 @@ import {
   clampPositiveInt,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  parsePageCursor,
   takeBounded,
 } from "./limits.js";
 
@@ -24,5 +25,13 @@ describe("bounded resource limits", () => {
   it("caps worker concurrency at the configured maximum", () => {
     expect(clampPositiveInt(99, 2, 8)).toBe(8);
     expect(clampPositiveInt("3", 2, 8)).toBe(3);
+  });
+
+  it("parses a page cursor or rejects invalid dates", () => {
+    expect(parsePageCursor("2026-09-11T07:00:00.000Z")?.toISOString()).toBe(
+      "2026-09-11T07:00:00.000Z",
+    );
+    expect(parsePageCursor("not-a-date")).toBeUndefined();
+    expect(parsePageCursor()).toBeUndefined();
   });
 });

@@ -7,8 +7,9 @@ is ephemeral infrastructure. The LLM is a read-only analyst.
 
 ```
 Source → Evidence → Entity / Asset / Instrument → Event
-  → Market context (domain provider) → Analysis → Validated signal
-  → Dashboard / notification policy
+  → Discovery (candidate) → Market context (domain provider)
+  → skill routing → Analysis (material events)
+  → Validated signal → signal gate → Dashboard / notification policy
 ```
 
 ## Process split
@@ -29,8 +30,10 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0015](adr/0015-discord-official-rest.md),
 [ADR 0016](adr/0016-x-recent-search.md),
 [ADR 0017](adr/0017-event-clustering.md),
-[ADR 0018](adr/0018-whatsapp-cloud-api.md), and
-[ADR 0019](adr/0019-read-only-portfolios.md).
+[ADR 0018](adr/0018-whatsapp-cloud-api.md),
+[ADR 0019](adr/0019-read-only-portfolios.md),
+[ADR 0020](adr/0020-skill-composition.md), and
+[ADR 0021](adr/0021-discovery-candidates.md).
 
 ## Trust boundaries
 

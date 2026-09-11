@@ -79,7 +79,7 @@ export function Gate() {
         <Route path="/scans" element={<ScansPage />} />
         <Route path="/usage" element={<UsagePage />} />
         <Route path="/health" element={<HealthPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/*" element={<SettingsPage />} />
       </Routes>
     </Shell>
   );

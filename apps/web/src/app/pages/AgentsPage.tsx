@@ -4,34 +4,39 @@ import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom
 import { AssetPicker } from "../AssetPicker.js";
 import { api } from "../api.js";
 import { ChipList } from "../ChipInput.js";
-import { assetLabel } from "../format.js";
+import { assetLabel, OBJECTIVE_OPTIONS, objectiveLabel, scheduleLabel } from "../format.js";
 import { PageSubnav } from "../PageSubnav.js";
 import { toastFail, useToast } from "../Toast.js";
 
-const OBJECTIVE_OPTIONS = [
-  ["general_crypto_intelligence", "General crypto intelligence"],
-  ["emerging_narratives", "Emerging narratives"],
-  ["major_events", "Major events"],
-  ["significant_market_changes", "Significant market changes"],
-  ["risk_signals", "Risk signals"],
-  ["cross_source_corroboration", "Cross-source corroboration"],
-] as const;
-
 const SCHEDULES = ["30m", "1h", "2h", "4h", "6h", "12h", "daily"] as const;
 
-export type Skill = { id: string; slug: string; origin: string; markdownBody?: string };
+export type Skill = {
+  id: string;
+  slug: string;
+  origin: string;
+  markdownBody?: string;
+  displayName?: string;
+  description?: string;
+};
 export type Source = { id: string; name: string; adapterId?: string };
 export type Agent = {
   id: string;
   name: string;
   kind: string;
   enabled: boolean;
+  description?: string;
   schedule: string;
   tokenBudget: number;
   default: boolean;
   objectives?: string[];
   domains: string[];
-  skills: Array<{ id: string; slug: string; origin: string }>;
+  skills: Array<{
+    id: string;
+    slug: string;
+    origin: string;
+    displayName?: string;
+    description?: string;
+  }>;
   sourceIds?: string[];
   sources?: Source[];
   watchlist: {
@@ -81,13 +86,8 @@ function AgentsList() {
       <PageHeader
         title="Agents"
         description="Watchers with a schedule, token budget, markdown skills, and a watchlist. Skills are policy text. They cannot grant tools or filesystem access."
-        actions={
-          <NavLink to="/agents/new" className="ui-button ui-button-primary">
-            Create agent
-          </NavLink>
-        }
+        actions={<AgentSubnav />}
       />
-      <AgentSubnav />
       {agents.length === 0 ? (
         <EmptyState
           title="No agents"
@@ -105,9 +105,10 @@ function AgentsList() {
               <NavLink to={`/agents/${agent.id}`}>{agent.name}</NavLink>
               <StatusBadge label={agent.enabled ? "Enabled" : "Paused"} />
               {agent.default ? <StatusBadge label="Default" /> : null}
+              {agent.description ? <p className="record-copy">{agent.description}</p> : null}
               <p className="record-meta">
                 <span>Domains: {agent.domains.join(", ") || "none"}</span>
-                <span>{agent.schedule}</span>
+                <span>{scheduleLabel(agent.schedule)}</span>
                 <span>
                   {(agent.watchlist?.items ?? [])
                     .map((item) => assetLabel(item.canonicalId))
@@ -148,6 +149,7 @@ function AgentForm(props: {
   const navigate = useNavigate();
   const toast = useToast();
   const [name, setName] = useState(props.agent?.name ?? "");
+  const [description, setDescription] = useState(props.agent?.description ?? "");
   const [schedule, setSchedule] = useState(props.agent?.schedule ?? "1h");
   const [tokenBudget, setTokenBudget] = useState(String(props.agent?.tokenBudget ?? 8000));
   const [canonicalIds, setCanonicalIds] = useState(
@@ -175,8 +177,8 @@ function AgentForm(props: {
       <PageHeader
         title={props.title}
         description="A watcher is read-only. Watchlist items are named assets, stored as canonical IDs."
+        actions={<AgentSubnav />}
       />
-      <AgentSubnav />
       <Card>
         <form
           onSubmit={async (event) => {
@@ -184,6 +186,7 @@ function AgentForm(props: {
             try {
               const payload = {
                 name,
+                description,
                 marketDomainIds: ["crypto"],
                 schedule,
                 tokenBudget: Number(tokenBudget),
@@ -224,6 +227,19 @@ function AgentForm(props: {
               />
             </Field>
           )}
+          <Field
+            label="Description"
+            hint="Shown to you on the agent list and view. Not sent to the model."
+          >
+            <textarea
+              id="agent-description"
+              rows={3}
+              maxLength={280}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
+          </Field>
           {props.agent ? (
             <label className="check-row" htmlFor="agent-enabled">
               <input
@@ -312,8 +328,13 @@ function AgentForm(props: {
                     setSelectedSkills((current) => toggle(current, skill.id, e.target.checked))
                   }
                 />
-                {skill.slug}
-                {skill.origin === "shipped" ? " (shipped)" : ""}
+                <span className="check-copy">
+                  <span>
+                    {skill.displayName ?? skill.slug}
+                    {skill.origin === "shipped" ? " (shipped)" : ""}
+                  </span>
+                  {skill.description ? <small>{skill.description}</small> : null}
+                </span>
               </label>
             ))}
           </fieldset>
@@ -382,52 +403,104 @@ function AgentDetail() {
   if (!agent) {
     return <p>Loading agent…</p>;
   }
+
+  const agentId = agent.id;
+
+  async function runScan() {
+    const result = await api<{ duplicate?: boolean }>(`/api/v1/agents/${agentId}/scan`, {
+      method: "POST",
+    });
+    toast(result.duplicate ? "Scan already running" : "Scan queued");
+  }
+
   return (
     <>
       <PageHeader
         title={agent.name}
-        description="Read-only watcher. Edit schedule, sources, skills, and watchlist on a dedicated screen."
+        description={
+          agent.description ||
+          "Read-only watcher. Edit schedule, sources, skills, and watchlist on a dedicated screen."
+        }
         actions={
-          <NavLink to={`/agents/${agent.id}/edit`} className="ui-button ui-button-primary">
-            Edit agent
-          </NavLink>
+          <>
+            <AgentSubnav />
+            <Button onClick={() => void runScan()}>Run scan</Button>
+            <NavLink to={`/agents/${agent.id}/edit`} className="ui-button ui-button-primary">
+              Edit agent
+            </NavLink>
+          </>
         }
       />
-      <AgentSubnav />
       <p className="record-meta">
         {agent.default ? <StatusBadge label="Default" /> : null}
         <StatusBadge label={agent.enabled ? "Enabled" : "Paused"} />
-        <span>Domains: {agent.domains.join(", ")}</span>
-        <span>{agent.schedule}</span>
-        <span>Budget {agent.tokenBudget}</span>
       </p>
-      <Card>
-        <h2>Watchlist</h2>
-        <ChipList
-          values={(agent.watchlist?.items ?? []).map((item) => item.canonicalId)}
-          format={assetLabel}
-          empty="No assets on this watcher"
-        />
-      </Card>
-      <Card>
-        <h2>Sources</h2>
-        <p>{agent.sources?.map((item) => item.name).join(", ") || "none"}</p>
-      </Card>
-      <Card>
-        <h2>Skills</h2>
-        <p>{agent.skills.map((item) => item.slug).join(", ") || "none"}</p>
-      </Card>
+      <dl className="agent-facts">
+        <div>
+          <dt>Domain</dt>
+          <dd>{agent.domains.join(", ") || "none"}</dd>
+        </div>
+        <div>
+          <dt>Schedule</dt>
+          <dd>{scheduleLabel(agent.schedule)}</dd>
+        </div>
+        <div>
+          <dt>Daily token budget</dt>
+          <dd>{agent.tokenBudget.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Watchlist</dt>
+          <dd>{agent.watchlist?.items.length ?? 0} assets</dd>
+        </div>
+      </dl>
+      <section className="agent-board">
+        <Card>
+          <h2>Objectives</h2>
+          <ChipList
+            values={agent.objectives ?? []}
+            format={objectiveLabel}
+            empty="No objectives selected"
+          />
+        </Card>
+        <Card>
+          <h2>Watchlist</h2>
+          <ChipList
+            values={(agent.watchlist?.items ?? []).map((item) => item.canonicalId)}
+            format={assetLabel}
+            empty="No assets on this watcher"
+          />
+        </Card>
+        <Card>
+          <h2>Sources</h2>
+          {agent.sources && agent.sources.length > 0 ? (
+            <ul className="attached-list">
+              {agent.sources.map((source) => (
+                <li key={source.id}>
+                  <NavLink to={`/sources/${source.id}`}>{source.name}</NavLink>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="quiet-state">No sources attached</p>
+          )}
+        </Card>
+        <Card className="agent-board-wide">
+          <h2>Skills</h2>
+          {agent.skills.length > 0 ? (
+            <ul className="attached-list">
+              {agent.skills.map((skill) => (
+                <li key={skill.id}>
+                  <NavLink to={`/skills/${skill.id}`}>{skill.displayName ?? skill.slug}</NavLink>
+                  {skill.description ? <small>{skill.description}</small> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="quiet-state">No skills attached</p>
+          )}
+        </Card>
+      </section>
       <p className="agent-toolbar">
-        <Button
-          onClick={async () => {
-            const result = await api<{ duplicate?: boolean }>(`/api/v1/agents/${agent.id}/scan`, {
-              method: "POST",
-            });
-            toast(result.duplicate ? "Scan already running" : "Scan queued");
-          }}
-        >
-          Run scan
-        </Button>
         <Button
           variant="ghost"
           onClick={async () => {

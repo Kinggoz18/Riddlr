@@ -1,1 +1,6 @@
-export { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "./module.js";
+export {
+  cryptoDomainModule,
+  DEFAULT_CRYPTO_OBJECTIVES,
+  DEFAULT_CRYPTO_WATCHLIST,
+  mergeShippedCryptoObjectives,
+} from "./module.js";

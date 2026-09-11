@@ -97,13 +97,8 @@ function PortfolioList() {
       <PageHeader
         title="Portfolios"
         description="Read-only public addresses and declared holdings. On-chain scanning is not implemented."
-        actions={
-          <NavLink to="/portfolios/new" className="ui-button ui-button-primary">
-            Create portfolio
-          </NavLink>
-        }
+        actions={<PortfoliosSubnav />}
       />
-      <PortfoliosSubnav />
       <p className="safety-note">
         Public addresses only. Never enter a seed phrase or private key.
       </p>
@@ -168,8 +163,8 @@ function PortfolioCreate() {
       <PageHeader
         title="Create portfolio"
         description="A named book. Holdings are operator-declared."
+        actions={<PortfoliosSubnav />}
       />
-      <PortfoliosSubnav />
       <Card>
         <form
           onSubmit={async (event) => {
@@ -255,12 +250,14 @@ function PortfolioDetail() {
         title={name}
         description="Declared holdings with live marks when a market-data source is enabled."
         actions={
-          <NavLink to={`/portfolios/${id}/edit`} className="ui-button ui-button-primary">
-            Edit portfolio
-          </NavLink>
+          <>
+            <PortfoliosSubnav />
+            <NavLink to={`/portfolios/${id}/edit`} className="ui-button ui-button-primary">
+              Edit portfolio
+            </NavLink>
+          </>
         }
       />
-      <PortfoliosSubnav />
       <p className="safety-note">
         Public addresses only. Never enter a seed phrase or private key.
       </p>
@@ -401,8 +398,8 @@ function PortfolioEdit() {
       <PageHeader
         title={`Edit ${name}`}
         description="Add or remove declared holdings and public addresses."
+        actions={<PortfoliosSubnav />}
       />
-      <PortfoliosSubnav />
       <p className="safety-note">
         Public addresses only. Never enter a seed phrase or private key.
       </p>

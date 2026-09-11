@@ -2,7 +2,13 @@ import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api.js";
-import { eventStatusLabel, independenceCopy } from "../format.js";
+import { ExternalLink } from "../Brand.js";
+import {
+  candidateKindLabel,
+  epistemicStatusLabel,
+  eventStatusLabel,
+  independenceCopy,
+} from "../format.js";
 
 function EventDetailPage() {
   const { id } = useParams();
@@ -13,12 +19,21 @@ function EventDetailPage() {
       independentCount: number;
       derivedCount: number;
       materialityReason?: string | null;
+      epistemicStatus?: string | null;
+      candidateKind?: string | null;
+      discoveryReason?: string | null;
     };
     evidence: Array<{ id: string; title?: string; canonicalUrl?: string }>;
     roles: Array<{ evidenceId: string; role: string }>;
     observations?: Array<{ kind: string; value: unknown; sourceId: string }>;
     assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
     independence?: { nodes: Array<{ evidenceId: string; hostname: string; role: string }> };
+    skillTrace?: {
+      selected?: Array<{ slug: string; displayName: string; reason: string }>;
+      skipped?: Array<{ slug: string; displayName: string; reason: string; notice?: string }>;
+      llmCalls?: number;
+      estimatedPromptTokens?: number;
+    };
   }>();
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -39,15 +54,30 @@ function EventDetailPage() {
     <>
       <PageHeader
         title={data.event.title}
-        description="Evidence clustered for one possible happening. Independent count is distinct hosts, not how many times a story was copied."
+        description="Evidence clustered for one possible happening. Independent count is distinct hosts, not how many times a story was copied. A candidate is not a recommendation to buy, sell, or trade."
       />
       <p className="record-meta">
         <StatusBadge label={eventStatusLabel(data.event.status)} />
         <span>{independenceCopy(data.event.independentCount, data.event.derivedCount)}</span>
+        {data.event.candidateKind ? (
+          <span>{candidateKindLabel(data.event.candidateKind)}</span>
+        ) : null}
+        {data.event.epistemicStatus ? (
+          <span>{epistemicStatusLabel(data.event.epistemicStatus)}</span>
+        ) : null}
         {data.event.materialityReason ? (
           <span>Materiality: {data.event.materialityReason.replaceAll("_", " ")}</span>
         ) : null}
       </p>
+      {data.event.status === "candidate" ? (
+        <p className="field-note">
+          This cluster is a discovery candidate. It may warrant further investigation. It is not a
+          recommendation to buy, sell, or trade. Analysis runs when the cluster is material.
+        </p>
+      ) : null}
+      {data.event.discoveryReason ? (
+        <p className="field-note">{data.event.discoveryReason}</p>
+      ) : null}
       {data.assets && data.assets.length > 0 ? (
         <Card>
           <h2>Assets</h2>
@@ -71,6 +101,36 @@ function EventDetailPage() {
           </ul>
         </Card>
       ) : null}
+      {data.skillTrace ? (
+        <Card>
+          <h2>Analysis dimensions</h2>
+          <ul className="analysis-dimensions">
+            {(data.skillTrace.selected ?? []).map((item) => (
+              <li key={item.slug} className="analysis-dimension-on">
+                <span>{item.displayName}</span>
+                <small>Applied</small>
+              </li>
+            ))}
+            {(data.skillTrace.skipped ?? []).map((item) => (
+              <li key={item.slug} className="analysis-dimension-off">
+                <span>{item.displayName}</span>
+                <small>{item.notice ?? item.reason.replaceAll("_", " ")}</small>
+              </li>
+            ))}
+          </ul>
+          {typeof data.skillTrace.llmCalls === "number" ? (
+            <p className="record-meta">
+              <span>
+                {data.skillTrace.llmCalls} LLM call
+                {data.skillTrace.llmCalls === 1 ? "" : "s"}
+              </span>
+              {data.skillTrace.estimatedPromptTokens ? (
+                <span>~{data.skillTrace.estimatedPromptTokens} prompt tokens</span>
+              ) : null}
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
       <Card>
         <h2>Evidence</h2>
         <ul className="data-list">
@@ -78,7 +138,7 @@ function EventDetailPage() {
             <li key={item.id}>
               <span>
                 {item.canonicalUrl ? (
-                  <a href={item.canonicalUrl}>{item.title ?? item.id}</a>
+                  <ExternalLink href={item.canonicalUrl}>{item.title ?? item.id}</ExternalLink>
                 ) : (
                   (item.title ?? item.id)
                 )}

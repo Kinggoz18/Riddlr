@@ -1,5 +1,6 @@
 import {
   notificationPolicySchema,
+  pageQuerySchema,
   portfolioCreateSchema,
   portfolioHoldingSchema,
   portfolioWalletSchema,
@@ -23,14 +24,16 @@ import {
 import {
   assertCanonicalAssetId,
   assertPublicWalletAddress,
+  clampPageSize,
   InvalidWalletAddressError,
   MAX_PORTFOLIO_HOLDINGS,
   MAX_PORTFOLIO_WALLETS,
   MAX_PORTFOLIOS,
   PrivateMaterialError,
+  parsePageCursor,
   takeBounded,
 } from "@riddlr/domain";
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import { loadEnabledMarketQuotes } from "./market-sources.js";
@@ -309,6 +312,9 @@ export function registerPortfolioRoutes(
 
   app.get("/api/v1/portfolios/:id/snapshots", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const query = pageQuerySchema.parse(request.query);
+    const limit = clampPageSize(query.limit, 50);
+    const before = parsePageCursor(query.before);
     const [portfolio] = await ctx.db
       .select()
       .from(portfolios)
@@ -317,12 +323,21 @@ export function registerPortfolioRoutes(
     if (!portfolio) {
       return reply.code(404).send({ error: { code: "not_found", message: "Portfolio not found" } });
     }
-    const snapshots = await ctx.db
-      .select()
-      .from(portfolioSnapshots)
-      .where(eq(portfolioSnapshots.portfolioId, id))
-      .orderBy(desc(portfolioSnapshots.recordedAt))
-      .limit(50);
+    const snapshots = before
+      ? await ctx.db
+          .select()
+          .from(portfolioSnapshots)
+          .where(
+            and(eq(portfolioSnapshots.portfolioId, id), lt(portfolioSnapshots.recordedAt, before)),
+          )
+          .orderBy(desc(portfolioSnapshots.recordedAt))
+          .limit(limit)
+      : await ctx.db
+          .select()
+          .from(portfolioSnapshots)
+          .where(eq(portfolioSnapshots.portfolioId, id))
+          .orderBy(desc(portfolioSnapshots.recordedAt))
+          .limit(limit);
     return { snapshots };
   });
 }

@@ -34,7 +34,15 @@ describe("evidence provenance", () => {
     expect(independenceCounts(["primary", "derived", "derived", "supporting"])).toEqual({
       independentSourceCount: 2,
       derivedReprintCount: 2,
+      contradictingCount: 0,
     });
+    expect(
+      classifyReprint({
+        sameCanonicalUrl: false,
+        sameContentHash: false,
+        opposingClaims: true,
+      }),
+    ).toBe("contradicting");
   });
 
   it("fingerprints normalized evidence stably", () => {

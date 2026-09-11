@@ -41,22 +41,31 @@ function OverviewPage() {
         description="Current Crypto desk: latest validated signal, recent evidence clusters, and source health."
       />
       {remainingSteps.length ? (
-        <Card>
-          <h2>Finish the desk</h2>
+        <details className="desk-checklist" open>
+          <summary>
+            <span>
+              <h2>Finish the desk</h2>
+              <span className="desk-count">{remainingSteps.length} remaining</span>
+            </span>
+          </summary>
           <p className="field-note">
             First-run is done. These remaining items are what make a full intelligence loop.
           </p>
           <ol className="next-steps">
-            {remainingSteps.map((item) => (
+            {remainingSteps.map((item, index) => (
               <li key={item.id}>
-                <NavLink to={item.href}>
-                  <strong>{item.title}</strong>
-                  <small>{item.body}</small>
-                </NavLink>
+                <a href={item.href} target="_blank" rel="noreferrer">
+                  <span className="step-index">{index + 1}</span>
+                  <span className="next-step-copy">
+                    <strong>{item.title}</strong>
+                    <small>{item.body}</small>
+                  </span>
+                  <span aria-hidden="true">↗</span>
+                </a>
               </li>
             ))}
           </ol>
-        </Card>
+        </details>
       ) : null}
       {data.llmConfigured === false ? (
         <p className="notice notice-info">

@@ -1,4 +1,14 @@
 export {
+  buildEventFacts,
+  type EventFacts,
+  estimatePromptTokens,
+  factsToApplicability,
+  formatAnalysisFacts,
+  type MarketReaction,
+  observationsFromMarketPayload,
+  textOpposes,
+} from "./analysis-facts.js";
+export {
   absorbMarketDataClusters,
   CLUSTER_SIMILARITY_THRESHOLD,
   CLUSTER_WINDOW_MS,
@@ -17,6 +27,18 @@ export {
   sourceHostname,
   uniqueIndependentHosts,
 } from "./cluster.js";
+export {
+  CANDIDATE_KINDS,
+  type CandidateKind,
+  type DiscoveryDecision,
+  discoverCandidate,
+  EPISTEMIC_STATUSES,
+  type EpistemicStatus,
+  type EventPipelineStatus,
+  epistemicFromFacts,
+  formatDiscoveryNotes,
+  nextEventStatus,
+} from "./discovery.js";
 export {
   type DomainContext,
   type DomainModule,
@@ -52,6 +74,7 @@ export {
   MAX_PORTFOLIO_WALLETS,
   MAX_PORTFOLIOS,
   MAX_WORKER_CONCURRENCY,
+  parsePageCursor,
   takeBounded,
 } from "./limits.js";
 export {
@@ -89,6 +112,7 @@ export {
   AGENT_SCHEDULES,
   type AgentKind,
   type AgentSchedule,
+  DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
   nextSetupStep,
   ONBOARDING_STEP_COUNT,
@@ -111,12 +135,36 @@ export {
   wrapUntrustedSource,
 } from "./signal.js";
 export {
+  decideSignalGate,
+  SIGNAL_DISPOSITIONS,
+  type SignalDisposition,
+  type SignalGateDecision,
+} from "./signal-gate.js";
+export {
+  SHIPPED_CRYPTO_SKILL_SLUGS,
+  SHIPPED_CRYPTO_SKILLS,
+  SKILL_CATEGORIES,
+  SKILL_DATA_KINDS,
+  type SkillApplicabilityFacts,
+  type SkillCapability,
+  type SkillCategory,
+  type SkillDataKind,
+  type SkillDecision,
+  type SkillSelection,
+  selectApplicableSkills,
+  shippedSkillCapability,
+  skillOperatorCopy,
+  skippedSkillNotice,
+} from "./skill-catalog.js";
+export {
   assertSafeSkillMarkdown,
   assertSkillSlug,
+  MAX_SELECTED_SKILLS_PER_ANALYSIS,
   MAX_SKILL_BYTES,
   MAX_SKILL_PROMPT_CHARS,
   MAX_SKILLS_PER_AGENT,
   SKILL_SLUG_RE,
+  skillPurposeLine,
   UnsafeSkillError,
 } from "./skills.js";
 export {

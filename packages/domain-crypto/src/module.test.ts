@@ -1,6 +1,6 @@
 import { normalizeEvidence } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
-import { cryptoDomainModule } from "./module.js";
+import { cryptoDomainModule, mergeShippedCryptoObjectives } from "./module.js";
 
 describe("crypto domain module", () => {
   it("canonicalizes BTC to a coingecko id, not a ticker-only identity", () => {
@@ -93,7 +93,33 @@ describe("crypto domain module", () => {
   it("ships a real default crypto agent profile", () => {
     const profile = cryptoDomainModule.defaultAgentProfile();
     expect(profile.name).toBe("Riddlr Intelligence Agent");
+    expect(profile.description.length).toBeGreaterThan(20);
+    expect(profile.description).toMatch(/candidate is not a trade/i);
     expect(profile.assetClasses).toContain("stablecoin");
+    expect(profile.objectives).toEqual(
+      expect.arrayContaining([
+        "potential_opportunities",
+        "hidden_gems",
+        "unusual_market_behaviour",
+        "anomalies",
+        "asset_specific_changes",
+        "general_market_trends",
+      ]),
+    );
     expect(cryptoDomainModule.id).toBe("crypto");
+  });
+
+  it("upgrades the original default objectives without overwriting a custom set", () => {
+    expect(
+      mergeShippedCryptoObjectives([
+        "general_crypto_intelligence",
+        "emerging_narratives",
+        "major_events",
+        "significant_market_changes",
+        "risk_signals",
+        "cross_source_corroboration",
+      ]),
+    ).toContain("hidden_gems");
+    expect(mergeShippedCryptoObjectives(["risk_signals"])).toEqual(["risk_signals"]);
   });
 });

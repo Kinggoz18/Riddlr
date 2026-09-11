@@ -40,6 +40,14 @@ export function AuthShell(props: { title: string; children: ReactNode }) {
   );
 }
 
+export function ExternalLink(props: { href: string; children: ReactNode; className?: string }) {
+  return (
+    <a href={props.href} className={props.className} target="_blank" rel="noreferrer">
+      {props.children}
+    </a>
+  );
+}
+
 export function PageNavLink(props: { to: string; children: ReactNode; end?: boolean }) {
   return (
     <NavLink

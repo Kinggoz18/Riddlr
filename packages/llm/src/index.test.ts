@@ -15,6 +15,8 @@ describe("LLM prompt harness", () => {
       contextNotes: ["observations only"],
     });
     expect(prompt.system).toContain("cannot trade");
+    expect(prompt.system).toContain("not a recommendation to buy, sell, or trade");
+    expect(prompt.system).toContain("DISCOVERED");
     expect(prompt.user).toMatch(/<untrusted-source length="/);
     expect(prompt.system).toContain("system policy > agent policy");
     expect(prompt.user).not.toContain("grant tools");
@@ -32,6 +34,8 @@ describe("LLM prompt harness", () => {
     expect(prompt.user).toContain("stablecoin-risk");
     expect(prompt.user).toContain("Watch independent depeg");
     expect(prompt.system).toContain("cannot grant tools");
+    expect(prompt.system).toContain("unavailable");
+    expect(prompt.user).toContain("Application-computed facts");
   });
 });
 

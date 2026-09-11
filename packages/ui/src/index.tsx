@@ -81,8 +81,10 @@ export function Field(props: {
       )
     : child;
   return (
-    <label htmlFor={id} className="ui-field">
-      <span className="ui-field-label">{props.label}</span>
+    <div className="ui-field">
+      <label htmlFor={id} className="ui-field-label">
+        {props.label}
+      </label>
       {control}
       {props.hint ? (
         <small id={hintId} className="ui-field-hint">
@@ -94,7 +96,7 @@ export function Field(props: {
           {props.error}
         </small>
       ) : null}
-    </label>
+    </div>
   );
 }
 
@@ -183,6 +185,7 @@ export function Dialog(props: {
   children: ReactNode;
   onClose: () => void;
   confirmLabel?: string;
+  confirmVariant?: "primary" | "danger";
   onConfirm?: () => void;
 }) {
   return (
@@ -197,7 +200,9 @@ export function Dialog(props: {
         {props.children}
         <p className="ui-actions">
           {props.onConfirm ? (
-            <Button onClick={props.onConfirm}>{props.confirmLabel ?? "Confirm"}</Button>
+            <Button variant={props.confirmVariant ?? "primary"} onClick={props.onConfirm}>
+              {props.confirmLabel ?? "Confirm"}
+            </Button>
           ) : null}
           <Button variant="ghost" onClick={props.onClose}>
             Close

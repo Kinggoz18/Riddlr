@@ -37,17 +37,25 @@ _Avoid_: result, hit, post (except as source-native language)
 A clustered set of evidence about something that may be happening.
 _Avoid_: signal (signals are validated outputs), incident
 
+**Candidate**:
+A discovered cluster that may warrant further investigation. Discovery does not require immediate confidence.
+_Avoid_: recommendation to buy or sell, signal
+
+**Discovered / Observed / Confirmed / Inferred / Signal**:
+Epistemic statuses. Discovered is first independent notice. Observed is a sourced fact. Confirmed is independent-host agreement. Inferred is interpretation. Signal is a validated output with proof.
+_Avoid_: collapsing these into one confidence score
+
 **Observation**:
 A deterministic quantitative fact with a source and timestamp. The LLM must not invent these.
 _Avoid_: metric, AI-estimated number
 
 **Analysis**:
 A schema-validated LLM interpretation of assembled context for a material event.
-_Avoid_: completion, chat
+_Avoid_: completion, chat, treating a candidate as already analyzed
 
 **Signal**:
 A validated intelligence output with proof, action, and risk. Invalid without evidence IDs.
-_Avoid_: alert (notifications deliver signals), recommendation to trade
+_Avoid_: alert (notifications deliver signals), recommendation to trade, treating a candidate as a signal
 
 **Agent**:
 A configured watcher with domains, sources, skills, schedule, and policies. Read-only.

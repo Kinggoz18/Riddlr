@@ -42,6 +42,7 @@ export type DomainModule = {
   }): DomainContext;
   defaultAgentProfile(): {
     name: string;
+    description: string;
     objectives: string[];
     assetClasses: AssetClass[];
   };

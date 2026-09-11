@@ -11,7 +11,7 @@ pnpm licenses:check
 Unit tests cover domain registry, fingerprints, clustering, encryption, schema validation,
 materiality, schedules, prompt wrapping, provider adapters, Discord REST
 fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
-and coming-soon rejection. Architecture tests keep generic packages from importing
+skill routing, signal gating, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -23,7 +23,7 @@ watchlist identity, token-budget skip, Discord token encryption and official RES
 polling, X bearer encryption and recent search, session rotation after 2FA,
 recovery codes, password reset hashing, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
-master key, WhatsApp HMAC webhooks, and paginated audit/lists.
+master key, WhatsApp HMAC webhooks, paginated audit/lists, and audit clear.
 
 Browser tests need Compose with free Docker disk, Chromium
 (`pnpm exec playwright install chromium`), and an instance that has not

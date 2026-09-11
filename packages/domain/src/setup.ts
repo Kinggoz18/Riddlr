@@ -19,6 +19,9 @@ export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export const DEFAULT_AGENT_NAME = "Riddlr Intelligence Agent";
 
+export const DEFAULT_AGENT_DESCRIPTION =
+  "The default Crypto watcher. It scans attached sources on a schedule, discovers candidates from evidence, and analyzes material clusters. A candidate is not a trade. It cannot trade.";
+
 export const SCAN_STATUSES = ["queued", "running", "partial", "succeeded", "failed"] as const;
 export type ScanStatus = (typeof SCAN_STATUSES)[number];
 

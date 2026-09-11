@@ -2,7 +2,13 @@ import { Button, Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
-import { dateTime, eventStatusLabel, independenceCopy } from "../format.js";
+import {
+  candidateKindLabel,
+  dateTime,
+  epistemicStatusLabel,
+  eventStatusLabel,
+  independenceCopy,
+} from "../format.js";
 
 type EventRow = {
   id: string;
@@ -12,6 +18,8 @@ type EventRow = {
   derivedCount: number;
   windowStart: string;
   materialityReason?: string | null;
+  epistemicStatus?: string | null;
+  candidateKind?: string | null;
   assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
 };
 
@@ -39,7 +47,7 @@ function EventsPage() {
     <>
       <PageHeader
         title="Events"
-        description="Clusters of related evidence in a time window. Independent sources are primaries, not reprints of the same page. Signals are created later, only when a cluster is material and analyzed."
+        description="Clusters of related evidence. Discovery can surface a candidate before analysis. A candidate is not a recommendation to buy, sell, or trade. Signals are created later, only after material analysis and the signal gate."
       />
       {rows.length === 0 ? (
         <EmptyState
@@ -55,6 +63,10 @@ function EventsPage() {
                 <StatusBadge label={eventStatusLabel(row.status)} />
                 <p className="record-meta">
                   <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
+                  {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
+                  {row.epistemicStatus ? (
+                    <span>{epistemicStatusLabel(row.epistemicStatus)}</span>
+                  ) : null}
                   <time dateTime={row.windowStart}>
                     {dateTime.format(new Date(row.windowStart))}
                   </time>

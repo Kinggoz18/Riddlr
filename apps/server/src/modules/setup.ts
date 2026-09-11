@@ -17,10 +17,17 @@ import {
 } from "@riddlr/db";
 import {
   assertSupportedMarketDomains,
+  DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
   DEFAULT_MARKET_DOMAIN,
+  SHIPPED_CRYPTO_SKILL_SLUGS,
+  skillOperatorCopy,
 } from "@riddlr/domain";
-import { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "@riddlr/domain-crypto";
+import {
+  cryptoDomainModule,
+  DEFAULT_CRYPTO_WATCHLIST,
+  mergeShippedCryptoObjectives,
+} from "@riddlr/domain-crypto";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 
@@ -74,10 +81,55 @@ export async function setSetupStep(ctx: AppContext, step: string, complete = fal
     .where(eq(instanceSettings.id, 1));
 }
 
+export async function ensureShippedCryptoSkills(ctx: AppContext, agentId?: string) {
+  for (const slug of SHIPPED_CRYPTO_SKILL_SLUGS) {
+    const body = readFileSync(join(skillDir, `${slug}.md`), "utf8");
+    const inserted = await ctx.db
+      .insert(skills)
+      .values({
+        slug,
+        version: "1",
+        origin: "shipped",
+        description: skillOperatorCopy({ slug, markdownBody: body }).description,
+        markdownBody: body,
+      })
+      .onConflictDoNothing()
+      .returning();
+    const skill =
+      inserted[0] ?? (await ctx.db.select().from(skills).where(eq(skills.slug, slug)))[0];
+    if (skill && agentId) {
+      await ctx.db.insert(agentSkills).values({ agentId, skillId: skill.id }).onConflictDoNothing();
+    }
+  }
+  if (!agentId) {
+    return;
+  }
+  const [agent] = await ctx.db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+  if (agent?.kind !== "system_default") {
+    return;
+  }
+  const nextObjectives = mergeShippedCryptoObjectives(agent.objectives ?? []);
+  const canned =
+    agent.description === "" ||
+    agent.description ===
+      "The default Crypto watcher. It scans attached sources on a schedule, clusters evidence into events, and analyzes only material events. It cannot trade.";
+  const nextDescription = canned ? DEFAULT_AGENT_DESCRIPTION : agent.description;
+  if (
+    nextObjectives.join("\0") !== (agent.objectives ?? []).join("\0") ||
+    nextDescription !== agent.description
+  ) {
+    await ctx.db
+      .update(agents)
+      .set({ objectives: nextObjectives, description: nextDescription })
+      .where(eq(agents.id, agentId));
+  }
+}
+
 export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: string) {
   const profile = cryptoDomainModule.defaultAgentProfile();
   const existing = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
   if (existing[0]) {
+    await ensureShippedCryptoSkills(ctx, existing[0].id);
     return existing[0];
   }
   const [agent] = await ctx.db
@@ -86,6 +138,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       name: profile.name || DEFAULT_AGENT_NAME,
       kind: "system_default",
       enabled: true,
+      description: profile.description,
       objectives: profile.objectives,
       schedule: "1h",
       tokenBudget: ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET,
@@ -99,33 +152,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
     agentId: agent.id,
     marketDomainId: DEFAULT_MARKET_DOMAIN,
   });
-  const skillFiles = [
-    "narrative-detection.md",
-    "event-correlation.md",
-    "stablecoin-risk.md",
-    "liquidity-analysis.md",
-    "whale-activity.md",
-    "regulatory-analysis.md",
-    "early-trend-detection.md",
-    "contrarian-analysis.md",
-  ];
-  for (const file of skillFiles) {
-    const body = readFileSync(join(skillDir, file), "utf8");
-    const slug = file.replace(".md", "");
-    const inserted = await ctx.db
-      .insert(skills)
-      .values({ slug, version: "1", origin: "shipped", markdownBody: body })
-      .onConflictDoNothing()
-      .returning();
-    const skill =
-      inserted[0] ?? (await ctx.db.select().from(skills).where(eq(skills.slug, slug)))[0];
-    if (skill) {
-      await ctx.db
-        .insert(agentSkills)
-        .values({ agentId: agent.id, skillId: skill.id })
-        .onConflictDoNothing();
-    }
-  }
+  await ensureShippedCryptoSkills(ctx, agent.id);
   const insertedWatchlist = await ctx.db
     .insert(watchlists)
     .values({ agentId: agent.id, name: "Default watchlist" })

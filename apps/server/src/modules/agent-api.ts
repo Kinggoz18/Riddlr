@@ -24,9 +24,12 @@ import {
   assertSafeSkillMarkdown,
   assertSkillSlug,
   assertSupportedMarketDomains,
+  DEFAULT_AGENT_DESCRIPTION,
   InvalidWatchlistItemError,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
+  shippedSkillCapability,
+  skillOperatorCopy,
   takeBounded,
   UnsafeSkillError,
 } from "@riddlr/domain";
@@ -37,6 +40,40 @@ import type { AppContext } from "../context.js";
 import { enqueueAgentScan } from "./scans.js";
 
 const DEFAULT_SEARCH_NAME = "Watchlist";
+
+function operatorAgentDescription(agent: { kind: string; description?: string | null }) {
+  const stored = agent.description?.trim();
+  if (stored) {
+    return stored;
+  }
+  return agent.kind === "system_default" ? DEFAULT_AGENT_DESCRIPTION : "";
+}
+
+function presentSkill(row: {
+  id: string;
+  slug: string;
+  origin: string;
+  version?: string | null;
+  description?: string | null;
+  markdownBody?: string;
+}) {
+  const copy = skillOperatorCopy({
+    slug: row.slug,
+    description: row.description,
+    markdownBody: row.markdownBody,
+  });
+  const catalog = shippedSkillCapability(row.slug);
+  return {
+    id: row.id,
+    slug: row.slug,
+    origin: row.origin,
+    version: row.version,
+    displayName: copy.displayName,
+    description: copy.description,
+    category: catalog?.category ?? "user",
+    markdownBody: row.markdownBody,
+  };
+}
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
@@ -171,6 +208,8 @@ async function listAgentsPayload(ctx: AppContext) {
             id: skills.id,
             slug: skills.slug,
             origin: skills.origin,
+            description: skills.description,
+            markdownBody: skills.markdownBody,
           })
           .from(agentSkills)
           .innerJoin(skills, eq(agentSkills.skillId, skills.id))
@@ -214,6 +253,7 @@ async function listAgentsPayload(ctx: AppContext) {
         name: agent.name,
         kind: agent.kind,
         enabled: agent.enabled,
+        description: operatorAgentDescription(agent),
         schedule: agent.schedule,
         customIntervalMs: agent.customIntervalMs,
         tokenBudget: agent.tokenBudget,
@@ -238,7 +278,16 @@ async function listAgentsPayload(ctx: AppContext) {
           .map((item) => item.marketDomainId),
         skills: skillRows
           .filter((item) => item.agentId === agent.id)
-          .map((item) => ({ id: item.id, slug: item.slug, origin: item.origin })),
+          .map((item) => {
+            const presented = presentSkill(item);
+            return {
+              id: presented.id,
+              slug: presented.slug,
+              origin: presented.origin,
+              displayName: presented.displayName,
+              description: presented.description,
+            };
+          }),
         watchlist: watchlist
           ? {
               id: watchlist.id,
@@ -322,6 +371,7 @@ export function registerAgentRoutes(
         name: body.name,
         kind: "user",
         enabled: body.enabled ?? true,
+        description: body.description?.trim() ?? "",
         objectives: body.objectives ?? [],
         schedule: body.schedule,
         customIntervalMs: body.customIntervalMs,
@@ -429,6 +479,7 @@ export function registerAgentRoutes(
       .update(agents)
       .set({
         name: body.name ?? agent.name,
+        description: body.description?.trim() ?? agent.description,
         schedule: body.schedule ?? agent.schedule,
         customIntervalMs: body.customIntervalMs ?? agent.customIntervalMs,
         enabled: body.enabled ?? agent.enabled,
@@ -498,6 +549,7 @@ export function registerAgentRoutes(
         name: `${source.name} copy`.slice(0, 80),
         kind: "user",
         enabled: false,
+        description: source.description ?? "",
         objectives: source.objectives,
         schedule: source.schedule,
         customIntervalMs: source.customIntervalMs,
@@ -603,13 +655,7 @@ export function registerAgentRoutes(
   app.get("/api/v1/skills", { preHandler: authed }, async () => {
     const rows = await ctx.db.select().from(skills).orderBy(asc(skills.slug)).limit(50);
     return {
-      skills: rows.map((row) => ({
-        id: row.id,
-        slug: row.slug,
-        origin: row.origin,
-        version: row.version,
-        markdownBody: row.markdownBody,
-      })),
+      skills: rows.map((row) => presentSkill(row)),
     };
   });
 
@@ -634,6 +680,11 @@ export function registerAgentRoutes(
         slug: body.slug,
         version: "1",
         origin: "user",
+        description: skillOperatorCopy({
+          slug: body.slug,
+          description: body.description,
+          markdownBody: body.markdownBody,
+        }).description,
         markdownBody: body.markdownBody,
       })
       .returning();
@@ -643,7 +694,7 @@ export function registerAgentRoutes(
       action: "skill.create",
       resource: skill?.id,
     });
-    return { skill };
+    return { skill: skill ? presentSkill(skill) : undefined };
   });
 
   app.get("/api/v1/skills/:id", { preHandler: authed }, async (request, reply) => {
@@ -653,13 +704,7 @@ export function registerAgentRoutes(
       return sendError(reply, 404, "not_found", "Skill not found");
     }
     return {
-      skill: {
-        id: skill.id,
-        slug: skill.slug,
-        origin: skill.origin,
-        version: skill.version,
-        markdownBody: skill.markdownBody,
-      },
+      skill: presentSkill(skill),
     };
   });
 
@@ -673,26 +718,29 @@ export function registerAgentRoutes(
     if (skill.origin === "shipped") {
       return sendError(reply, 409, "shipped_skill", "Shipped skills cannot be overwritten.");
     }
+    const markdownBody = body.markdownBody ?? skill.markdownBody;
     try {
-      assertSafeSkillMarkdown(body.markdownBody);
+      assertSafeSkillMarkdown(markdownBody);
     } catch (error) {
       return failSkill(error, reply);
     }
     const [updated] = await ctx.db
       .update(skills)
-      .set({ markdownBody: body.markdownBody })
+      .set({
+        description:
+          body.description !== undefined
+            ? skillOperatorCopy({
+                slug: skill.slug,
+                description: body.description,
+                markdownBody,
+              }).description
+            : skill.description,
+        markdownBody,
+      })
       .where(eq(skills.id, id))
       .returning();
     return {
-      skill: updated
-        ? {
-            id: updated.id,
-            slug: updated.slug,
-            origin: updated.origin,
-            version: updated.version,
-            markdownBody: updated.markdownBody,
-          }
-        : undefined,
+      skill: updated ? presentSkill(updated) : undefined,
     };
   });
 

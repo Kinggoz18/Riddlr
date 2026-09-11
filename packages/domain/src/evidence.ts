@@ -115,11 +115,13 @@ export function normalizeEvidence(raw: RawEvidence): NormalizedEvidence {
 export function independenceCounts(roles: EvidenceRole[]): {
   independentSourceCount: number;
   derivedReprintCount: number;
+  contradictingCount: number;
 } {
   return {
     independentSourceCount: roles.filter((role) => role === "primary" || role === "supporting")
       .length,
     derivedReprintCount: roles.filter((role) => role === "derived").length,
+    contradictingCount: roles.filter((role) => role === "contradicting").length,
   };
 }
 
@@ -128,7 +130,11 @@ export function classifyReprint(params: {
   sameContentHash: boolean;
   nearDuplicate?: boolean;
   sameHostnameSameDay?: boolean;
+  opposingClaims?: boolean;
 }): EvidenceRole {
+  if (params.opposingClaims) {
+    return "contradicting";
+  }
   if (params.sameCanonicalUrl || params.sameContentHash || params.nearDuplicate) {
     return "derived";
   }

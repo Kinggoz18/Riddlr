@@ -41,6 +41,7 @@ function createTestOnlyModule(): DomainModule {
     defaultAgentProfile() {
       return {
         name: "Test-only module agent",
+        description: "Fixture watcher for domain-module contract tests.",
         objectives: ["contract_coverage"],
         assetClasses: ["cryptocurrency"],
       };

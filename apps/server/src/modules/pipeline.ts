@@ -30,10 +30,17 @@ import {
 } from "@riddlr/db";
 import {
   absorbMarketDataClusters,
+  buildEventFacts,
   classifyReprint,
   clusterEventTitle,
   clusterEvidence,
+  decideSignalGate,
+  discoverCandidate,
+  estimatePromptTokens,
   eventClusterFingerprint,
+  factsToApplicability,
+  formatAnalysisFacts,
+  formatDiscoveryNotes,
   independenceCounts,
   isMaterialEvent,
   isNearDuplicate,
@@ -41,10 +48,15 @@ import {
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
+  nextEventStatus,
   normalizeEvidence,
+  observationsFromMarketPayload,
   SIGNAL_JSON_SCHEMA,
+  selectApplicableSkills,
+  skippedSkillNotice,
   sourceHostname,
   takeBounded,
+  textOpposes,
   uniqueIndependentHosts,
   validateSignalOutput,
   watchlistSearchQuery,
@@ -308,13 +320,14 @@ export async function runScan(
 
     const prepared = evidenceRows.map((row) => {
       const normalized = normalizeEvidence({
-        sourceFamily: "collected",
-        adapterId: "pipeline",
+        sourceFamily: row.sourceFamily ?? "collected",
+        adapterId: row.adapterId ?? "pipeline",
         url: row.canonicalUrl ?? undefined,
         title: row.title ?? undefined,
         bodyText: row.bodyText ?? undefined,
         fetchedAt: row.fetchedAt,
         publishedAt: row.publishedAt ?? undefined,
+        adapterPayload: row.adapterPayload ?? undefined,
       });
       return {
         id: row.id,
@@ -376,7 +389,16 @@ export async function runScan(
       const clusterNorm = cluster.map((item) => item.normalized);
       const extracted = module.extractAssets(clusterNorm);
       const sourced = takeBounded(
-        module.extractObservations(clusterNorm),
+        [
+          ...cluster.flatMap((item) =>
+            observationsFromMarketPayload(
+              item.row.adapterPayload,
+              item.row.adapterId ?? item.id,
+              item.publishedAt ?? item.row.fetchedAt,
+            ),
+          ),
+          ...module.extractObservations(clusterNorm),
+        ],
         MAX_OBSERVATIONS_PER_EVENT,
       );
       const roles = cluster.map((item, index) => {
@@ -403,6 +425,9 @@ export async function runScan(
             (other, otherIndex) => otherIndex < index && isNearDuplicate(item.text, other.text),
           ),
           sameHostnameSameDay: sameDayHost,
+          opposingClaims: cluster.some(
+            (other, otherIndex) => otherIndex < index && textOpposes(item.text, other.text),
+          ),
         });
       });
       const counts = independenceCounts(roles);
@@ -422,12 +447,20 @@ export async function runScan(
         observations: sourced,
         watchlist: agentContext.watchlist,
       });
-      const notes = [
-        ...context.notes,
-        overlap.length > 0
-          ? `Portfolio holdings overlap: ${overlap.map((item) => item.canonicalId).join(", ")}`
-          : "Portfolio holdings overlap: none",
-      ];
+      const facts = buildEventFacts({
+        evidence: cluster.map((item, index) => ({
+          hostname: item.hostname,
+          sourceFamily: item.sourceFamily ?? item.row.sourceFamily ?? undefined,
+          text: item.text,
+          publishedAt: item.publishedAt,
+          role: roles[index] ?? "primary",
+          adapterPayload: item.row.adapterPayload,
+        })),
+        assets: extracted,
+        observations: sourced,
+        watchlistOverlap,
+        portfolioOverlap: overlap.length > 0,
+      });
       const material = isMaterialEvent({
         independentHostCount: hostCount,
         independentFamilyCount: new Set(clusterRows.map((row) => row.sourceFamily ?? row.sourceId))
@@ -442,6 +475,25 @@ export async function runScan(
           return role === "primary" && (family === "x" || family === "discord");
         }),
       });
+      const discovery = discoverCandidate({
+        facts,
+        objectives: agentContext.agent?.objectives ?? [],
+        text: cluster.map((item) => item.text).join("\n"),
+        material,
+      });
+      const status = nextEventStatus({
+        evidenceCount: clusterRows.length,
+        discovery,
+        material,
+      });
+      const notes = [
+        ...context.notes,
+        ...formatAnalysisFacts(facts),
+        ...formatDiscoveryNotes(discovery),
+        overlap.length > 0
+          ? `Portfolio holdings overlap: ${overlap.map((item) => item.canonicalId).join(", ")}`
+          : "Portfolio holdings overlap: none",
+      ];
       const [event] = await ctx.db
         .insert(events)
         .values({
@@ -452,12 +504,15 @@ export async function runScan(
             evidenceTitles: clusterRows.map((item) => item.title),
             hostnames: cluster.map((item) => item.hostname ?? "unknown-host"),
           }),
-          status: clusterRows.length ? "needs_analysis" : "empty",
+          status,
           windowStart: scan.windowStart,
           independentCount: hostCount,
           derivedCount: counts.derivedReprintCount,
           clusterFingerprint: fingerprint,
           materialityReason: material.reason,
+          epistemicStatus: discovery.epistemicStatus,
+          candidateKind: discovery.kind,
+          discoveryReason: discovery.reason,
         })
         .onConflictDoNothing()
         .returning();
@@ -527,13 +582,13 @@ export async function runScan(
             notes,
             agentContext,
             deps.fetchImpl,
+            {
+              facts,
+              material,
+              title: event.title,
+            },
           );
         }
-      } else if (clusterRows.length > 0) {
-        await ctx.db
-          .update(events)
-          .set({ status: "immaterial", materialityReason: material.reason })
-          .where(eq(events.id, event.id));
       }
     }
 
@@ -603,6 +658,30 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
   };
 }
 
+function fallbackFacts(
+  evidenceRows: Array<{
+    id: string;
+    title: string | null;
+    bodyText: string | null;
+    canonicalUrl: string | null;
+    sourceFamily?: string | null;
+  }>,
+  _notes: string[],
+) {
+  return buildEventFacts({
+    evidence: evidenceRows.map((row) => ({
+      hostname: sourceHostname(row.canonicalUrl),
+      sourceFamily: row.sourceFamily ?? undefined,
+      text: `${row.title ?? ""} ${row.bodyText ?? ""}`,
+      role: "primary",
+    })),
+    assets: [],
+    observations: [],
+    watchlistOverlap: false,
+    portfolioOverlap: false,
+  });
+}
+
 async function maybeAnalyze(
   ctx: AppContext,
   eventId: string,
@@ -612,10 +691,17 @@ async function maybeAnalyze(
     title: string | null;
     bodyText: string | null;
     canonicalUrl: string | null;
+    sourceFamily?: string | null;
+    adapterPayload?: Record<string, unknown> | null;
   }>,
   notes: string[],
   agentContext: Awaited<ReturnType<typeof loadAgentScanContext>>,
   fetchImpl?: typeof fetch,
+  hint?: {
+    facts: ReturnType<typeof buildEventFacts>;
+    material: ReturnType<typeof isMaterialEvent>;
+    title: string;
+  },
 ) {
   const budget = agentContext.agent?.tokenBudget ?? ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET;
   const dayUtc = new Date().toISOString().slice(0, 10);
@@ -663,23 +749,40 @@ async function maybeAnalyze(
           apiKey,
           fetchImpl,
         });
+  const selection = selectApplicableSkills({
+    attached: agentContext.skillPolicies,
+    facts: factsToApplicability(hint?.facts ?? fallbackFacts(evidenceRows, notes)),
+  });
+  const selectedPolicies = selection.selected
+    .map((item) => agentContext.skillPolicies.find((policy) => policy.slug === item.slug))
+    .filter((item): item is { slug: string; markdown: string } => Boolean(item));
+  const factNotes = hint
+    ? formatAnalysisFacts(hint.facts)
+    : notes.filter((note) => note.length > 0);
+  const skippedNotices = selection.skipped
+    .map((item) => skippedSkillNotice(item))
+    .filter((item): item is string => Boolean(item));
   const prompt = buildAnalysisPrompt({
-    eventSummary: "Crypto cluster",
+    eventSummary: hint?.title ?? "Crypto cluster",
     evidence: evidenceRows.map((row) => ({
       id: row.id,
       title: row.title ?? undefined,
       bodyText: row.bodyText ?? undefined,
       url: row.canonicalUrl ?? undefined,
     })),
-    contextNotes: notes,
-    skillPolicies: agentContext.skillPolicies,
+    contextNotes: [
+      ...factNotes,
+      ...skippedNotices,
+      ...notes.filter((note) => !factNotes.includes(note)),
+    ],
+    skillPolicies: selectedPolicies,
   });
   const promptHash = createHash("sha256").update(prompt.system).digest("hex");
   const skillHash = createHash("sha256")
-    .update(agentContext.skillPolicies.map((item) => item.markdown).join("\n"))
+    .update(selectedPolicies.map((item) => `${item.slug}\n${item.markdown}`).join("\n"))
     .digest("hex");
   const contextHash = createHash("sha256")
-    .update(JSON.stringify({ notes, evidence: evidenceRows.map((row) => row.id) }))
+    .update(JSON.stringify({ notes: factNotes, evidence: evidenceRows.map((row) => row.id) }))
     .digest("hex");
   const [cached] = await ctx.db
     .select()
@@ -762,6 +865,31 @@ async function maybeAnalyze(
       });
     }
     const signal = validateSignalOutput(parsed, allowed);
+    const material = hint?.material ?? {
+      material: true,
+      reason: "independent_hosts",
+    };
+    const gate = decideSignalGate({
+      facts: hint?.facts ?? fallbackFacts(evidenceRows, notes),
+      risk: signal.risk,
+      confidence: signal.confidence,
+      material,
+    });
+    const skillTrace = {
+      selected: selection.selected,
+      skipped: selection.skipped.map((item) => ({
+        ...item,
+        notice: skippedSkillNotice(item),
+      })),
+      llmCalls: cacheHit ? 0 : 1,
+      contextChars: prompt.system.length + prompt.user.length,
+      estimatedPromptTokens: estimatePromptTokens(prompt.system.length + prompt.user.length),
+      signalGate: {
+        disposition: gate.disposition,
+        notifyEligible: gate.notifyEligible,
+        reason: gate.reason,
+      },
+    };
     await ctx.db.insert(aiUsageEvents).values({
       agentId,
       provider: provider.kind,
@@ -791,27 +919,39 @@ async function maybeAnalyze(
       completionTokens,
       latencyMs,
       rawOutput: parsed as Record<string, unknown>,
+      skillTrace,
     });
-    const [saved] = await ctx.db
-      .insert(signals)
-      .values({
-        eventId,
-        agentId,
-        headline: signal.headline,
-        whyItMatters: signal.whyItMatters,
-        proof: signal.proof,
-        action: signal.action,
-        risk: signal.risk,
-        confidence: String(signal.confidence),
-        marketContext: signal.marketContext,
-        contradictoryEvidence: signal.contradictoryEvidence,
-        invalidationConditions: signal.invalidationConditions,
-        schemaVersion: "1",
-      })
-      .onConflictDoNothing()
-      .returning();
-    await ctx.db.update(events).set({ status: "analyzed" }).where(eq(events.id, eventId));
-    if (saved) {
+    let saved: { id: string } | undefined;
+    if (gate.persist) {
+      const inserted = await ctx.db
+        .insert(signals)
+        .values({
+          eventId,
+          agentId,
+          headline: signal.headline,
+          whyItMatters: signal.whyItMatters,
+          proof: signal.proof,
+          action: signal.action,
+          risk: signal.risk,
+          confidence: String(signal.confidence),
+          marketContext: signal.marketContext,
+          contradictoryEvidence: signal.contradictoryEvidence,
+          invalidationConditions: signal.invalidationConditions,
+          schemaVersion: "1",
+          notifyEligible: gate.notifyEligible,
+          epistemicStatus: "signal",
+        })
+        .onConflictDoNothing()
+        .returning();
+      saved = inserted[0];
+      await ctx.db
+        .update(events)
+        .set({ status: "analyzed", epistemicStatus: "signal" })
+        .where(eq(events.id, eventId));
+    } else {
+      await ctx.db.update(events).set({ status: "analyzed" }).where(eq(events.id, eventId));
+    }
+    if (saved && gate.notifyEligible) {
       if (ctx.notifyQueue) {
         await ctx.notifyQueue.add(
           "notify",
@@ -853,19 +993,92 @@ export async function analyzeQueuedEvent(
       title: evidenceItems.title,
       bodyText: evidenceItems.bodyText,
       canonicalUrl: evidenceItems.canonicalUrl,
+      sourceFamily: evidenceItems.sourceFamily,
+      adapterPayload: evidenceItems.adapterPayload,
+      publishedAt: evidenceItems.publishedAt,
+      fetchedAt: evidenceItems.fetchedAt,
+      role: eventEvidence.role,
     })
     .from(eventEvidence)
     .innerJoin(evidenceItems, eq(eventEvidence.evidenceId, evidenceItems.id))
     .where(eq(eventEvidence.eventId, eventId))
     .limit(ctx.config.RIDDLR_ANALYSIS_EVIDENCE_LIMIT);
+  const observationRows = await ctx.db
+    .select()
+    .from(observations)
+    .where(eq(observations.eventId, eventId))
+    .limit(MAX_OBSERVATIONS_PER_EVENT);
+  const assetLinks = await ctx.db
+    .select()
+    .from(eventAssets)
+    .where(eq(eventAssets.eventId, eventId))
+    .limit(50);
+  const assetIds = assetLinks.map((item) => item.assetId);
+  const eventAssetRows =
+    assetIds.length > 0
+      ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(50)
+      : [];
   const agentContext = await loadAgentScanContext(ctx, event.agentId);
+  const watchlistIds = new Set(agentContext.watchlist.map((item) => item.canonicalId));
+  const facts = buildEventFacts({
+    evidence: linked.map((row) => ({
+      hostname: sourceHostname(row.canonicalUrl),
+      sourceFamily: row.sourceFamily ?? undefined,
+      text: `${row.title ?? ""} ${row.bodyText ?? ""}`,
+      publishedAt: row.publishedAt ?? undefined,
+      role: (row.role === "supporting" || row.role === "derived" || row.role === "contradicting"
+        ? row.role
+        : "primary") as "primary" | "supporting" | "derived" | "contradicting",
+      adapterPayload: row.adapterPayload,
+    })),
+    assets: eventAssetRows.map((item) => ({
+      assetClass: item.assetClass,
+      canonicalId: item.canonicalId,
+    })),
+    observations: [
+      ...linked.flatMap((row) =>
+        observationsFromMarketPayload(row.adapterPayload, row.id, row.publishedAt ?? row.fetchedAt),
+      ),
+      ...observationRows.map((row) => ({
+        kind: row.kind,
+        value: row.value,
+        unit: row.unit ?? undefined,
+        observedAt: row.observedAt,
+        sourceId: row.sourceId,
+        assetCanonicalId: row.assetCanonicalId ?? undefined,
+      })),
+    ],
+    watchlistOverlap: eventAssetRows.some((item) => watchlistIds.has(item.canonicalId)),
+    portfolioOverlap: false,
+  });
+  const material = isMaterialEvent({
+    independentHostCount: facts.independentHostCount,
+    independentFamilyCount: facts.independentFamilyCount,
+    evidenceCount: facts.evidenceCount,
+    derivedCount: facts.derivedCount,
+    watchlistOverlap: facts.watchlistOverlap,
+    portfolioOverlap: facts.portfolioOverlap,
+    sourcedObservationCount: observationRows.length,
+    hasAuthoritativePrimary: facts.hasAuthoritativePrimary,
+  });
+  const discovery = discoverCandidate({
+    facts,
+    objectives: agentContext.agent?.objectives ?? [],
+    text: linked.map((row) => `${row.title ?? ""} ${row.bodyText ?? ""}`).join("\n"),
+    material,
+  });
   await maybeAnalyze(
     ctx,
     event.id,
     event.agentId,
     linked,
-    event.materialityReason ? [`Materiality: ${event.materialityReason}`] : [],
+    [
+      ...formatAnalysisFacts(facts),
+      ...formatDiscoveryNotes(discovery),
+      event.materialityReason ? `Materiality: ${event.materialityReason}` : "",
+    ].filter(Boolean),
     agentContext,
     fetchImpl,
+    { facts, material, title: event.title },
   );
 }
