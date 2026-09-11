@@ -15,16 +15,21 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    throw new Error("Riddlr is unavailable. Check the server and try again.");
+  }
   const body = (await response.json().catch(() => ({}))) as T & {
     error?: { message?: string };
   };
   if (!response.ok) {
-    throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+    throw new Error(body.error?.message ?? `Request failed (${response.status}). Try again.`);
   }
   return body;
 }

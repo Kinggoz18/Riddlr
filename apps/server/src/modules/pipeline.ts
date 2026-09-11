@@ -29,7 +29,9 @@ import {
   watchlists,
 } from "@riddlr/db";
 import {
+  absorbMarketDataClusters,
   classifyReprint,
+  clusterEventTitle,
   clusterEvidence,
   eventClusterFingerprint,
   independenceCounts,
@@ -54,6 +56,8 @@ import {
 } from "@riddlr/llm";
 import {
   createCoinGeckoAdapter,
+  createCoinMarketCapAdapter,
+  createCryptoComAdapter,
   createDiscordAdapter,
   createSearxngAdapter,
   createXAdapter,
@@ -98,6 +102,8 @@ export async function runScan(
     adapters.register(createDiscordAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createXAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
     const module = ctx.domains.require("crypto");
     const agentContext = await loadAgentScanContext(ctx, scan.agentId);
     let partial = false;
@@ -144,23 +150,27 @@ export async function runScan(
           });
         }
       }
-      const requestHash = createHash("sha256")
-        .update(
-          JSON.stringify({
-            sourceId: source.id,
-            adapterId: source.adapterId,
-            query: watchlistSearchQuery(
+      const queryText =
+        adapter.family === "market_data"
+          ? agentContext.watchlist.map((item) => item.canonicalId).join(" ")
+          : watchlistSearchQuery(
               agentContext.watchlist.map((item) => ({
                 canonicalId: item.canonicalId,
                 symbol: item.symbol,
                 name: item.displayName,
               })),
               adapter.id === "searxng"
-                ? "cryptocurrency bitcoin ethereum stablecoin narrative"
+                ? "cryptocurrency bitcoin ethereum stablecoin news"
                 : adapter.id === "x"
                   ? "crypto"
                   : "",
-            ),
+            );
+      const requestHash = createHash("sha256")
+        .update(
+          JSON.stringify({
+            sourceId: source.id,
+            adapterId: source.adapterId,
+            query: queryText,
           }),
         )
         .digest("hex");
@@ -175,18 +185,7 @@ export async function runScan(
         })
         .returning();
       const result = await adapter.fetch(runtimeConfig, {
-        query: watchlistSearchQuery(
-          agentContext.watchlist.map((item) => ({
-            canonicalId: item.canonicalId,
-            symbol: item.symbol,
-            name: item.displayName,
-          })),
-          adapter.id === "searxng"
-            ? "cryptocurrency bitcoin ethereum stablecoin narrative"
-            : adapter.id === "x"
-              ? "crypto"
-              : "",
-        ),
+        query: queryText,
         timeRange: "day",
         limit: remaining,
       });
@@ -323,6 +322,7 @@ export async function runScan(
         normalized,
         hostname: sourceHostname(row.canonicalUrl),
         publishedAt: row.publishedAt ?? undefined,
+        sourceFamily: row.sourceFamily ?? undefined,
         assetCanonicalIds: module.extractAssets([normalized]).map((item) => item.canonicalId),
         text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
       };
@@ -355,14 +355,15 @@ export async function runScan(
       }
     }
 
-    const { clusters } =
+    const clustered =
       prepared.length > 0 ? clusterEvidence(prepared, MAX_EVENTS_PER_SCAN) : { clusters: [] };
+    const clusters = absorbMarketDataClusters(clustered.clusters);
 
     if (clusters.length === 0) {
       await ctx.db.insert(events).values({
         agentId: scan.agentId,
         scanId,
-        title: "Crypto intelligence cluster",
+        title: "No evidence in this scan window",
         status: "empty",
         windowStart: scan.windowStart,
         independentCount: 0,
@@ -438,9 +439,7 @@ export async function runScan(
         sourcedObservationCount: sourced.length,
         hasAuthoritativePrimary: roles.some((role, index) => {
           const family = clusterRows[index]?.sourceFamily;
-          return (
-            role === "primary" && (family === "search" || family === "x" || family === "discord")
-          );
+          return role === "primary" && (family === "x" || family === "discord");
         }),
       });
       const [event] = await ctx.db
@@ -448,7 +447,11 @@ export async function runScan(
         .values({
           agentId: scan.agentId,
           scanId,
-          title: clusterRows[0]?.title || "Crypto intelligence cluster",
+          title: clusterEventTitle({
+            assets: extracted,
+            evidenceTitles: clusterRows.map((item) => item.title),
+            hostnames: cluster.map((item) => item.hostname ?? "unknown-host"),
+          }),
           status: clusterRows.length ? "needs_analysis" : "empty",
           windowStart: scan.windowStart,
           independentCount: hostCount,

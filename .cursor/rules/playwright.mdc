@@ -8,4 +8,5 @@ alwaysApply: false
 
 `getByRole` and `getByLabel` first. No `waitForTimeout`. Cover four-step setup
 on an empty Compose volume (`pnpm compose:reset`). A completed instance shows
-Sign in. There is no 2FA bypass. Capture the authenticator URL during first-run.
+Sign in. Authenticator setup is skippable. If enrolled, capture the secret
+from the QR or key field, not a raw otpauth URL.

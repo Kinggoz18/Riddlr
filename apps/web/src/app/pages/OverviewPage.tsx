@@ -1,13 +1,20 @@
-import { Card, EmptyState, Skeleton } from "@riddlr/ui";
+import { Card, EmptyState, PageHeader, Skeleton, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
 import { api } from "../api.js";
+import { dateTime, eventStatusLabel } from "../format.js";
 
 function OverviewPage() {
   const [data, setData] = useState<{
     agents: Array<{ id: string; name: string; kind: string }>;
     signals: Array<{ id: string; headline: string; risk: string }>;
     sources: Array<{ name: string; lastHealthOk: boolean | null }>;
-    domains: Array<{ id: string; name: string; status: string; comingSoon: boolean }>;
+    scans: Array<{ id: string; status: string; startedAt: string; partial: boolean }>;
+    events: Array<{ id: string; title: string; status: string; windowStart: string }>;
+    aiUsage: Array<{ promptTokens?: number | null }>;
+    llmConfigured?: boolean;
+    totpEnabled?: boolean;
+    nextSteps?: Array<{ id: string; title: string; body: string; href: string; done: boolean }>;
   }>();
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -21,54 +28,156 @@ function OverviewPage() {
   if (!data) {
     return <Skeleton label="Loading overview…" />;
   }
+  const defaultAgent = data.agents.find((item) => item.kind === "system_default");
+  const healthySources = data.sources.filter((source) => source.lastHealthOk === true).length;
+  const latestSignal = data.signals[0];
+  const lastScan = data.scans[0];
+  const tokens = data.aiUsage.reduce((sum, row) => sum + (row.promptTokens ?? 0), 0);
+  const remainingSteps = (data.nextSteps ?? []).filter((item) => !item.done);
   return (
     <>
-      <h1>Overview</h1>
-      <div className="grid">
+      <PageHeader
+        title="Overview"
+        description="Current Crypto desk: latest validated signal, recent evidence clusters, and source health."
+      />
+      {remainingSteps.length ? (
         <Card>
-          <h2>Default agent</h2>
-          <p>{data.agents.find((item) => item.kind === "system_default")?.name ?? "Not created"}</p>
-          <p className="badge">Crypto</p>
+          <h2>Finish the desk</h2>
+          <p className="field-note">
+            First-run is done. These remaining items are what make a full intelligence loop.
+          </p>
+          <ol className="next-steps">
+            {remainingSteps.map((item) => (
+              <li key={item.id}>
+                <NavLink to={item.href}>
+                  <strong>{item.title}</strong>
+                  <small>{item.body}</small>
+                </NavLink>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      ) : null}
+      {data.llmConfigured === false ? (
+        <p className="notice notice-info">
+          No model connected. Scans still collect evidence. Analysis waits until you add a provider
+          in <NavLink to="/settings">Settings</NavLink>.
+        </p>
+      ) : null}
+      <section className="overview-desk">
+        <article className="intelligence-panel">
+          <div className="panel-heading">
+            <h2>Latest signal</h2>
+            <NavLink to="/signals">View all</NavLink>
+          </div>
+          {latestSignal ? (
+            <NavLink className="signal-lead" to={`/signals/${latestSignal.id}`}>
+              <span>{latestSignal.headline}</span>
+              <StatusBadge label={latestSignal.risk} tone="risk" />
+            </NavLink>
+          ) : (
+            <div className="quiet-state">
+              <p>No signals yet</p>
+              <NavLink to="/agents">Run a scan</NavLink>
+            </div>
+          )}
+        </article>
+        <aside className="overview-status">
+          <div>
+            <span>Agents</span>
+            <strong>{data.agents.length}</strong>
+          </div>
+          <div>
+            <span>Sources healthy</span>
+            <strong>
+              {healthySources}/{data.sources.length}
+            </strong>
+          </div>
+          <div>
+            <span>Domain</span>
+            <strong>Crypto</strong>
+          </div>
+        </aside>
+      </section>
+      <section className="overview-row" aria-label="Workspace status">
+        <Card>
+          <div className="panel-heading">
+            <h2>Recent events</h2>
+            <NavLink to="/events">View all</NavLink>
+          </div>
+          {data.events.length ? (
+            <ul className="data-list">
+              {data.events.slice(0, 5).map((event) => (
+                <li key={event.id}>
+                  <span>
+                    <NavLink to={`/events/${event.id}`}>{event.title}</NavLink>
+                    <small>{eventStatusLabel(event.status)}</small>
+                  </span>
+                  <time dateTime={event.windowStart}>
+                    {dateTime.format(new Date(event.windowStart))}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="quiet-state">No events yet</p>
+          )}
         </Card>
         <Card>
-          <h2>Markets</h2>
-          {data.domains.map((domain) => (
-            <p key={domain.id}>
-              {domain.name}{" "}
-              {domain.comingSoon ? (
-                <span className="badge soon">Coming soon</span>
-              ) : (
-                <span className="badge">Supported</span>
-              )}
+          <div className="panel-heading">
+            <h2>Last scan</h2>
+            <NavLink to="/scans">History</NavLink>
+          </div>
+          {lastScan ? (
+            <p className="stat-value">
+              {lastScan.status}
+              {lastScan.partial ? " · partial" : ""} ·{" "}
+              {dateTime.format(new Date(lastScan.startedAt))}
             </p>
-          ))}
-        </Card>
-        <Card>
-          <h2>Source health</h2>
-          {data.sources.length === 0 ? (
-            <p>No sources scanned yet.</p>
           ) : (
-            data.sources.map((source) => (
-              <p key={source.name}>
-                {source.name}:{" "}
-                {source.lastHealthOk === false
-                  ? "degraded"
-                  : source.lastHealthOk
-                    ? "ok"
-                    : "unknown"}
-              </p>
-            ))
+            <p className="quiet-state">No scans yet</p>
+          )}
+          <p className="field-note">
+            {defaultAgent?.name ?? "Default agent not configured"} · {tokens} prompt tokens recorded
+          </p>
+        </Card>
+      </section>
+      <section className="overview-row" aria-label="Sources">
+        <Card>
+          <div className="panel-heading">
+            <h2>Sources</h2>
+            <NavLink to="/sources">Manage</NavLink>
+          </div>
+          {data.sources.length ? (
+            <ul className="status-list">
+              {data.sources.map((source) => (
+                <li key={source.name}>
+                  <span>{source.name}</span>
+                  <StatusBadge
+                    label={
+                      source.lastHealthOk === false
+                        ? "Degraded"
+                        : source.lastHealthOk
+                          ? "Healthy"
+                          : "Pending"
+                    }
+                    tone={source.lastHealthOk === false ? "danger" : "ok"}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="quiet-state">No sources</p>
           )}
         </Card>
         <Card>
-          <h2>Signals</h2>
-          {data.signals[0] ? (
-            <p>{data.signals[0].headline}</p>
-          ) : (
-            <p>No signals yet. Run a scan from Agents.</p>
-          )}
+          <div className="panel-heading">
+            <h2>Default agent</h2>
+            <NavLink to="/agents">Manage</NavLink>
+          </div>
+          <p className="stat-value">{defaultAgent?.name ?? "Not configured"}</p>
         </Card>
-      </div>
+      </section>
     </>
   );
 }

@@ -23,12 +23,15 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN pnpm --filter @riddlr/server... build
+RUN node scripts/docker-point-exports-to-dist.mjs
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN groupadd --system riddlr && useradd --system --gid riddlr --home /app riddlr
 COPY --from=build --chown=riddlr:riddlr /app /app
-USER riddlr
+COPY docker/server-entrypoint.sh /usr/local/bin/riddlr-entrypoint
+RUN chmod 0755 /usr/local/bin/riddlr-entrypoint
 EXPOSE 3001
+ENTRYPOINT ["/usr/local/bin/riddlr-entrypoint"]
 CMD ["node", "apps/server/dist/cmd/api.js"]

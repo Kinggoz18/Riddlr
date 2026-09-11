@@ -1,4 +1,11 @@
-import { discordSourceSchema, sourcePatchSchema, xSourceSchema } from "@riddlr/api-contract";
+import {
+  coingeckoSourceSchema,
+  coinmarketcapSourceSchema,
+  cryptocomSourceSchema,
+  discordSourceSchema,
+  sourcePatchSchema,
+  xSourceSchema,
+} from "@riddlr/api-contract";
 import { encryptSecret } from "@riddlr/crypto";
 import {
   auditLogs,
@@ -10,6 +17,8 @@ import {
 } from "@riddlr/db";
 import {
   createCoinGeckoAdapter,
+  createCoinMarketCapAdapter,
+  createCryptoComAdapter,
   createDiscordAdapter,
   createSearxngAdapter,
   createXAdapter,
@@ -18,6 +27,13 @@ import {
 import { count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import {
+  attachSourceToAgents,
+  isMarketDataAdapter,
+  marketAdapter,
+  setActiveMarketSource,
+  sourceRuntimeConfig,
+} from "./market-sources.js";
 
 export function publicSource(row: typeof sources.$inferSelect) {
   const config = { ...(row.config ?? {}) };
@@ -45,6 +61,8 @@ export function registerSourceRoutes(
   const searxng = createSearxngAdapter();
   const x = createXAdapter();
   const coingecko = createCoinGeckoAdapter();
+  const coinmarketcap = createCoinMarketCapAdapter();
+  const cryptocom = createCryptoComAdapter();
 
   app.get("/api/v1/sources", { preHandler: authed }, async () => {
     const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
@@ -72,6 +90,16 @@ export function registerSourceRoutes(
           id: coingecko.id,
           family: coingecko.family,
           capabilities: coingecko.capabilities,
+        },
+        {
+          id: coinmarketcap.id,
+          family: coinmarketcap.family,
+          capabilities: coinmarketcap.capabilities,
+        },
+        {
+          id: cryptocom.id,
+          family: cryptocom.family,
+          capabilities: cryptocom.capabilities,
         },
         {
           id: "onchain",
@@ -152,6 +180,76 @@ export function registerSourceRoutes(
     });
   });
 
+  app.post("/api/v1/sources/coingecko", { preHandler: authed }, async (request, reply) => {
+    const body = coingeckoSourceSchema.parse(request.body);
+    const assetIds = body.assetIds?.length ? body.assetIds : ["bitcoin", "ethereum", "tether"];
+    const validated = await coingecko.validate({ assetIds, token: body.apiKey });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    if (body.apiKey) {
+      return insertSecretSource(ctx, request, reply, {
+        family: "market_data",
+        adapterId: "coingecko",
+        name: body.name,
+        purpose: "coingecko",
+        token: body.apiKey,
+        config: { assetIds },
+      });
+    }
+    return insertMarketSource(ctx, request, reply, {
+      adapterId: "coingecko",
+      name: body.name,
+      config: { assetIds },
+    });
+  });
+
+  app.post("/api/v1/sources/coinmarketcap", { preHandler: authed }, async (request, reply) => {
+    const body = coinmarketcapSourceSchema.parse(request.body);
+    const assetIds = body.assetIds?.length ? body.assetIds : ["bitcoin", "ethereum", "tether"];
+    const validated = await coinmarketcap.validate({ assetIds, token: body.apiKey });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertSecretSource(ctx, request, reply, {
+      family: "market_data",
+      adapterId: "coinmarketcap",
+      name: body.name,
+      purpose: "coinmarketcap",
+      token: body.apiKey,
+      config: { assetIds },
+    });
+  });
+
+  app.post("/api/v1/sources/cryptocom", { preHandler: authed }, async (request, reply) => {
+    const body = cryptocomSourceSchema.parse(request.body);
+    const assetIds = body.assetIds?.length ? body.assetIds : ["bitcoin", "ethereum", "tether"];
+    const validated = await cryptocom.validate({ assetIds });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertMarketSource(ctx, request, reply, {
+      adapterId: "cryptocom",
+      name: body.name,
+      config: { assetIds },
+    });
+  });
+
+  app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await ctx.db.select().from(sources).where(eq(sources.id, id)).limit(1);
+    if (!row) {
+      return reply.code(404).send({ error: { code: "not_found", message: "Source not found" } });
+    }
+    return { source: publicSource(row) };
+  });
+
   app.patch("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = sourcePatchSchema.parse(request.body);
@@ -194,6 +292,9 @@ export function registerSourceRoutes(
       })
       .where(eq(sources.id, id))
       .returning();
+    if (updated && isMarketDataAdapter(updated.adapterId) && updated.enabled) {
+      await setActiveMarketSource(ctx, updated.id);
+    }
     return { source: updated ? publicSource(updated) : publicSource(row) };
   });
 
@@ -208,10 +309,8 @@ export function registerSourceRoutes(
         ? discord
         : row.adapterId === "x"
           ? x
-          : row.adapterId === "coingecko"
-            ? coingecko
-            : searxng;
-    const health = await adapter.healthCheck(row.config);
+          : (marketAdapter(row.adapterId) ?? searxng);
+    const health = await adapter.healthCheck(await sourceRuntimeConfig(ctx, row));
     await ctx.db
       .update(sources)
       .set({
@@ -275,11 +374,11 @@ export function registerSourceRoutes(
     if (!row) {
       return reply.code(404).send({ error: { code: "not_found", message: "Source not found" } });
     }
-    if (row.adapterId !== "discord" && row.adapterId !== "x" && row.adapterId !== "coingecko") {
+    if (row.adapterId === "searxng") {
       return reply.code(409).send({
         error: {
           code: "immutable_source",
-          message: "Only Discord and X sources can be removed from this page.",
+          message: "SearXNG cannot be removed from this page.",
         },
       });
     }
@@ -325,6 +424,17 @@ async function insertSecretSource(
       },
     });
   }
+  if (
+    isMarketDataAdapter(input.adapterId) &&
+    existing.some((row) => row.adapterId === input.adapterId)
+  ) {
+    return reply.code(409).send({
+      error: {
+        code: "source_exists",
+        message: `${input.name} is already configured. Enable it to make it the active market source.`,
+      },
+    });
+  }
   const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
   const keyVersion = settingsRows[0]?.keyVersion ?? 1;
   const encrypted = encryptSecret({
@@ -356,6 +466,62 @@ async function insertSecretSource(
       config: input.config,
     })
     .returning();
+  if (source && isMarketDataAdapter(source.adapterId)) {
+    await setActiveMarketSource(ctx, source.id);
+  }
+  if (source) {
+    await attachSourceToAgents(ctx, source.id);
+  }
+  const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+  await ctx.db.insert(auditLogs).values({
+    actorUserId: auth?.user.id,
+    action: "source.create",
+    resource: source?.id,
+  });
+  return { source: source ? publicSource(source) : undefined };
+}
+
+async function insertMarketSource(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  input: {
+    adapterId: string;
+    name: string;
+    config: Record<string, unknown>;
+  },
+) {
+  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+    return reply.code(400).send({
+      error: {
+        code: "source_limit",
+        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+      },
+    });
+  }
+  if (existing.some((row) => row.adapterId === input.adapterId)) {
+    return reply.code(409).send({
+      error: {
+        code: "source_exists",
+        message: `${input.name} is already configured. Enable it to make it the active market source.`,
+      },
+    });
+  }
+  const [source] = await ctx.db
+    .insert(sources)
+    .values({
+      family: "market_data",
+      adapterId: input.adapterId,
+      enabled: true,
+      name: input.name,
+      config: input.config,
+    })
+    .returning();
+  if (source) {
+    await setActiveMarketSource(ctx, source.id);
+    await attachSourceToAgents(ctx, source.id);
+  }
   const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
   await ctx.db.insert(auditLogs).values({
     actorUserId: auth?.user.id,

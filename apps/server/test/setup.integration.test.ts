@@ -49,6 +49,20 @@ function cookieHeader(setCookie: string | string[] | undefined): string {
   return String(session ?? "").split(";")[0] ?? "";
 }
 
+function coinGeckoMarketsResponse() {
+  return Response.json([
+    {
+      id: "bitcoin",
+      symbol: "btc",
+      name: "Bitcoin",
+      current_price: 64000,
+      market_cap: 1,
+      total_volume: 2,
+      last_updated: "2026-09-10T00:00:00.000Z",
+    },
+  ]);
+}
+
 describe("setup, auth, and domain persistence", () => {
   let stop: (() => Promise<void>) | undefined;
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -146,14 +160,13 @@ describe("setup, auth, and domain persistence", () => {
     expect(admin.statusCode).toBe(200);
     cookie = cookieHeader(admin.headers["set-cookie"]);
 
-    const totpStart = await app.inject({
+    const skip = await app.inject({
       method: "POST",
-      url: "/api/v1/setup/totp/start",
+      url: "/api/v1/setup/totp/skip",
       headers: { cookie },
     });
-    expect(totpStart.statusCode).toBe(200);
-    const secret = totpStart.json().secret as string;
-    totpSecret = secret;
+    expect(skip.statusCode).toBe(200);
+    cookie = cookieHeader(skip.headers["set-cookie"]) || cookie;
 
     const tooEarly = await app.inject({
       method: "POST",
@@ -162,16 +175,6 @@ describe("setup, auth, and domain persistence", () => {
       payload: { marketDomainIds: ["crypto"] },
     });
     expect(tooEarly.statusCode).toBe(409);
-
-    const totpVerify = await app.inject({
-      method: "POST",
-      url: "/api/v1/setup/totp/verify",
-      headers: { cookie },
-      payload: { token: currentTotp(secret) },
-    });
-    expect(totpVerify.statusCode).toBe(200);
-    cookie = cookieHeader(totpVerify.headers["set-cookie"]);
-    recoveryCode = totpVerify.json().recoveryCodes[0] as string;
 
     const ssrfLlm = await app.inject({
       method: "POST",
@@ -230,6 +233,37 @@ describe("setup, auth, and domain persistence", () => {
     });
     expect(totpAfterComplete.statusCode).toBe(409);
 
+    const loginWithoutTotp = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: "ops@example.com", password: "correct horse battery" },
+    });
+    expect(loginWithoutTotp.statusCode).toBe(200);
+    expect(loginWithoutTotp.json().requiresTwoFactor).toBe(false);
+    cookie = cookieHeader(loginWithoutTotp.headers["set-cookie"]);
+    const overviewWithoutTotp = await app.inject({
+      method: "GET",
+      url: "/api/v1/overview",
+      headers: { cookie },
+    });
+    expect(overviewWithoutTotp.statusCode).toBe(200);
+
+    const totpStart = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/totp/start",
+      headers: { cookie },
+    });
+    expect(totpStart.statusCode).toBe(200);
+    totpSecret = totpStart.json().secret as string;
+    const totpVerify = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/totp/verify",
+      headers: { cookie },
+      payload: { token: currentTotp(totpSecret) },
+    });
+    expect(totpVerify.statusCode).toBe(200);
+    recoveryCode = totpVerify.json().recoveryCodes[0] as string;
+
     const agentsResponse = await app.inject({
       method: "GET",
       url: "/api/v1/agents",
@@ -238,6 +272,56 @@ describe("setup, auth, and domain persistence", () => {
     const agent = agentsResponse.json().agents[0];
     expect(agent.name).toBe("Riddlr Intelligence Agent");
     expect(agent.domains).toEqual(["crypto"]);
+    expect(agent.watchlist.items.map((item: { canonicalId: string }) => item.canonicalId)).toEqual(
+      expect.arrayContaining(["coingecko:bitcoin", "coingecko:ethereum", "coingecko:tether"]),
+    );
+    const sourceList = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    expect(sourceList.json().sources.map((item: { adapterId: string }) => item.adapterId)).toEqual(
+      expect.arrayContaining(["searxng", "coingecko"]),
+    );
+
+    const cryptocom = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/cryptocom",
+      headers: { cookie },
+      payload: { name: "Crypto.com Exchange" },
+    });
+    expect(cryptocom.statusCode).toBe(200);
+    const afterMarket = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const market = afterMarket
+      .json()
+      .sources.filter((item: { family?: string; adapterId: string }) =>
+        ["coingecko", "cryptocom"].includes(item.adapterId),
+      );
+    expect(market.filter((item: { enabled: boolean }) => item.enabled)).toHaveLength(1);
+    expect(
+      market.find((item: { adapterId: string }) => item.adapterId === "cryptocom")?.enabled,
+    ).toBe(true);
+    const geckoId = market.find((item: { adapterId: string }) => item.adapterId === "coingecko")
+      ?.id as string;
+    const restored = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/sources/${geckoId}`,
+      headers: { cookie },
+      payload: { enabled: true },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().source.enabled).toBe(true);
+
+    const llmSkipLocked = await app.inject({
+      method: "POST",
+      url: "/api/v1/setup/llm/skip",
+      headers: { cookie },
+    });
+    expect(llmSkipLocked.statusCode).toBe(409);
 
     const joins = await ctx.db.select().from(agentMarketDomains);
     expect(joins).toHaveLength(1);
@@ -421,19 +505,24 @@ describe("setup, auth, and domain persistence", () => {
 
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
       if (url.includes("/search")) {
         return Response.json({
           results: [
             {
               url: "https://example.com/bitcoin-etf",
               title: "Bitcoin ETF inflows accelerate",
-              content: "Bitcoin demand rose after reported ETF inflows.",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
               engine: "fixture",
             },
             {
-              url: "https://news.example.com/ethereum",
-              title: "Ethereum and bitcoin narratives overlap",
-              content: "Ethereum upgrade coverage mentions bitcoin liquidity.",
+              url: "https://news.example.com/bitcoin-etf",
+              title: "Bitcoin ETF inflows rose after latest issuer filing",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
               engine: "fixture",
             },
           ],
@@ -866,6 +955,9 @@ describe("setup, auth, and domain persistence", () => {
     const before = (await ctx.db.select().from(signals)).length;
     const fetchImpl: typeof fetch = async (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
       if (url.includes("/search")) {
         return Response.json({
           results: [
@@ -893,7 +985,7 @@ describe("setup, auth, and domain persistence", () => {
       .select()
       .from(events)
       .where(eq(events.scanId, scan?.id as string));
-    expect(eventRows[0]?.status).toBe("needs_analysis");
+    expect(eventRows.some((row) => row.status === "needs_analysis")).toBe(true);
   });
 
   it("stores an encrypted Discord source, redacts the token, and polls official REST messages", async () => {
@@ -951,6 +1043,9 @@ describe("setup, auth, and domain persistence", () => {
       .returning();
     const fetchImpl: typeof fetch = async (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
       if (url.includes("/search")) {
         return Response.json({ results: [] });
       }
@@ -1027,6 +1122,9 @@ describe("setup, auth, and domain persistence", () => {
       .returning();
     const fetchImpl: typeof fetch = async (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
       if (url.includes("/search?") || url.includes("/search")) {
         if (url.includes("api.x.com")) {
           expect(url).toContain("/tweets/search/recent");

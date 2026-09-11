@@ -12,12 +12,26 @@ Each agent has:
 - attached markdown skills
 - a watchlist of canonical asset IDs
 
-The default agent cannot be deleted or renamed.
+The default agent cannot be deleted or renamed. First-run seeds its watchlist
+with `coingecko:bitcoin`, `coingecko:ethereum`, and `coingecko:tether`, and
+attaches SearXNG plus CoinGecko.
+
+Agents, skills, sources, and portfolios are list / create / edit routes, not
+one page of stacked forms. Discord may be added more than once.
 
 ## Skills
 
 Shipped skills live under `skills/crypto/` and load onto the default agent at
-first-run. User skills are markdown stored in PostgreSQL.
+first-run:
+
+- narrative-detection
+- event-correlation
+- stablecoin-risk
+- liquidity-analysis
+- whale-activity
+- regulatory-analysis
+- early-trend-detection
+- contrarian-analysis
 
 Skills cannot add tools, filesystem access, or secret access. User skills cannot
 override system policy. Shipped slugs cannot be overwritten or deleted.

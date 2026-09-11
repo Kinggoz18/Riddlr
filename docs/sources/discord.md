@@ -15,8 +15,9 @@ It does not scrape Discord and does not connect to the Gateway for ingestion.
 4. Invite the bot with **VIEW_CHANNEL** and **READ_MESSAGE_HISTORY** only.
    The permission integer is `66560`. Do not grant Administrator.
 
-Sources → **Add Discord source** accepts a server snowflake, included and
-excluded channel snowflakes, optional keywords, and a lookback of 1–24 hours.
+Sources → **Add source** → **Configure Discord** accepts a server snowflake,
+included and excluded channel IDs as chips, optional keywords, and a lookback
+of 1–24 hours. Add another Discord source for a second server.
 
 ## What the adapter actually fetches
 

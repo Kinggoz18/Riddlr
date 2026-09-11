@@ -6,6 +6,8 @@ alwaysApply: false
 
 # UI/UX
 
-Dark navy base, mint accent used sparingly. Proof-first signal layout. No chart
-spam. No fake data. Coming-soon domains are obvious and not clickable into
-broken pages. WCAG 2.2 AA on setup, login, and overview.
+Dark near-black base (`#050807`), mint `#3ee0b2` from the wordmark, used
+sparingly. Brand mark is the mint candlestick puzzle. Proof-first signal
+layout. No chart spam. No fake data. Coming-soon domains are obvious and not
+clickable into broken pages. Visible success and error notices on mutations.
+WCAG 2.2 AA on setup, login, and overview.

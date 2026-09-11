@@ -1,4 +1,5 @@
 import { takeBounded } from "@riddlr/domain";
+import { MAX_MARKET_IDS, marketSlugs } from "./market-ids.js";
 import {
   classifyHttpStatus,
   type FetchQuery,
@@ -7,21 +8,10 @@ import {
 } from "./types.js";
 
 export const COINGECKO_API_BASE = "https://api.coingecko.com/api/v3";
-export const MAX_MARKET_IDS = 16;
+export { MAX_MARKET_IDS };
 
 function parseIds(config: Record<string, unknown>, query: FetchQuery): string[] {
-  const fromConfig = Array.isArray(config.assetIds)
-    ? config.assetIds.map((item) => String(item))
-    : [];
-  const fromQuery = query.query
-    .split(/[,\s]+/)
-    .map((item) => item.trim().toLowerCase())
-    .filter((item) => item.startsWith("coingecko:"))
-    .map((item) => item.slice("coingecko:".length));
-  return takeBounded(
-    [...new Set([...fromConfig, ...fromQuery].filter((item) => item.length >= 2))],
-    MAX_MARKET_IDS,
-  );
+  return marketSlugs(config, query.query);
 }
 
 export function parseCoinGeckoMarkets(payload: unknown, fetchedAt: Date): FetchResult {
@@ -45,6 +35,7 @@ export function parseCoinGeckoMarkets(payload: unknown, fetchedAt: Date): FetchR
       current_price?: unknown;
       market_cap?: unknown;
       total_volume?: unknown;
+      price_change_percentage_24h?: unknown;
       last_updated?: unknown;
     };
     const id = typeof row.id === "string" ? row.id : undefined;
@@ -56,20 +47,22 @@ export function parseCoinGeckoMarkets(payload: unknown, fetchedAt: Date): FetchR
       adapterId: "coingecko",
       externalId: id,
       url: `https://www.coingecko.com/en/coins/${id}`,
-      title: typeof row.name === "string" ? row.name : id,
-      bodyText: JSON.stringify({
-        priceUsd: row.current_price,
-        marketCapUsd: row.market_cap,
-        volumeUsd: row.total_volume,
-      }),
+      title: typeof row.name === "string" ? `${row.name} market snapshot` : id,
+      bodyText: `${typeof row.name === "string" ? row.name : id} quoted at USD ${row.current_price}. Market cap USD ${row.market_cap ?? "unknown"}. Volume USD ${row.total_volume ?? "unknown"}.`,
       publishedAt: typeof row.last_updated === "string" ? new Date(row.last_updated) : fetchedAt,
       fetchedAt,
       adapterPayload: {
         priceUsd: row.current_price,
         marketCapUsd: row.market_cap,
         volumeUsd: row.total_volume,
+        change24h:
+          typeof row.price_change_percentage_24h === "number"
+            ? row.price_change_percentage_24h
+            : undefined,
         unit: "usd",
         canonicalId: `coingecko:${id}`,
+        symbol: typeof row.symbol === "string" ? row.symbol.toUpperCase() : undefined,
+        name: typeof row.name === "string" ? row.name : undefined,
       },
     });
   }
@@ -127,6 +120,7 @@ export function createCoinGeckoAdapter(fetchImpl: typeof fetch = fetch): SourceA
       url.searchParams.set("vs_currency", "usd");
       url.searchParams.set("ids", ids.join(","));
       url.searchParams.set("per_page", String(ids.length));
+      url.searchParams.set("price_change_percentage", "24h");
       try {
         const response = await fetchImpl(url, {
           headers: config.token ? { "x-cg-demo-api-key": String(config.token) } : undefined,

@@ -1,4 +1,4 @@
-import { Button, EmptyState } from "@riddlr/ui";
+import { Button, EmptyState, PageHeader } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
 
@@ -37,7 +37,10 @@ function UsagePage() {
   }
   return (
     <>
-      <h1>AI usage</h1>
+      <PageHeader
+        title="AI usage"
+        description="Recorded only after a real LLM call. Token budget exhaustion leaves events needing analysis."
+      />
       {rows.map((row) => (
         <p key={`${row.provider}-${row.model}-${row.createdAt}`}>
           {row.provider} {row.model} · {row.promptTokens ?? 0} tokens · {row.latencyMs ?? 0} ms

@@ -1,4 +1,4 @@
-import { Card, EmptyState } from "@riddlr/ui";
+import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api.js";
@@ -37,33 +37,54 @@ function SignalDetailPage() {
   const s = data.signal;
   return (
     <>
-      <h1>{s.headline}</h1>
-      <Card>
-        <h2>Why it matters</h2>
-        <p>{s.whyItMatters}</p>
-        <h2>Proof</h2>
-        <p>{s.proof.summary}</p>
-        <ul>
-          {data.evidence.map((item) => (
-            <li key={item.id}>
-              <a href={item.canonicalUrl}>{item.title ?? item.id}</a>
-              <p>{item.bodyText}</p>
-            </li>
-          ))}
-        </ul>
-        <h2>Market context</h2>
-        <p>{s.marketContext}</p>
-        <h2>Contradictory evidence</h2>
-        <p>{s.contradictoryEvidence}</p>
-        <h2>Action</h2>
-        <p>{s.action}</p>
-        <h2>Risk / confidence</h2>
-        <p>
-          {s.risk} · {s.confidence}
-        </p>
-        <h2>Invalidation</h2>
-        <p>{s.invalidationConditions}</p>
-      </Card>
+      <PageHeader
+        title={s.headline}
+        description="Validated output with proof evidence IDs on the event. The model cannot trade."
+      />
+      <p className="record-meta">
+        <StatusBadge label={s.risk} tone="risk" />
+        <span>Confidence {s.confidence}</span>
+      </p>
+      <div className="proof-stack">
+        <Card>
+          <h2>Why it matters</h2>
+          <p>{s.whyItMatters}</p>
+        </Card>
+        <Card>
+          <h2>Proof</h2>
+          <p>{s.proof.summary}</p>
+          <ul className="data-list">
+            {data.evidence.map((item) => (
+              <li key={item.id}>
+                <span>
+                  {item.canonicalUrl ? (
+                    <a href={item.canonicalUrl}>{item.title ?? item.id}</a>
+                  ) : (
+                    (item.title ?? item.id)
+                  )}
+                  {item.bodyText ? <small>{item.bodyText}</small> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card>
+          <h2>Market context</h2>
+          <p>{s.marketContext || "None supplied."}</p>
+        </Card>
+        <Card>
+          <h2>Contradictory evidence</h2>
+          <p>{s.contradictoryEvidence || "None supplied."}</p>
+        </Card>
+        <Card>
+          <h2>Action</h2>
+          <p>{s.action}</p>
+        </Card>
+        <Card>
+          <h2>Invalidation</h2>
+          <p>{s.invalidationConditions || "None supplied."}</p>
+        </Card>
+      </div>
     </>
   );
 }

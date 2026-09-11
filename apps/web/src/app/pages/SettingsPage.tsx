@@ -1,6 +1,8 @@
-import { Button, Card, EmptyState, Field } from "@riddlr/ui";
+import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
+import { toastFail, useToast } from "../Toast.js";
+import { TotpEnroll } from "../TotpEnroll.js";
 
 type SessionRow = {
   id: string;
@@ -29,6 +31,7 @@ function SettingsPage() {
       cooldownMinutes: number;
       quietHours?: { startHour: number; endHour: number };
     };
+    totpEnabled?: boolean;
     encryption: { alg: string; keyVersion: number; previousKeyConfigured: boolean };
     sessionPolicy?: { absoluteHours: number; idleMinutes: number; maxSessions: number };
   }>();
@@ -40,14 +43,23 @@ function SettingsPage() {
   const [savedCodes, setSavedCodes] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [message, setMessage] = useState<string>();
+  const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [totp, setTotp] = useState("");
+  const [otpauth, setOtpauth] = useState<string>();
+  const [secret, setSecret] = useState<string>();
+  const [enrollBusy, setEnrollBusy] = useState(false);
   const [rotatePassword, setRotatePassword] = useState("");
   const [rotateTotp, setRotateTotp] = useState("");
   const [minRisk, setMinRisk] = useState("moderate");
   const [cooldownMinutes, setCooldownMinutes] = useState("30");
+  const [quietStart, setQuietStart] = useState("");
+  const [quietEnd, setQuietEnd] = useState("");
+  const [llmProvider, setLlmProvider] = useState("openai_compatible");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("https://api.openai.com");
+  const [llmModel, setLlmModel] = useState("gpt-4.1-mini");
+  const [llmKey, setLlmKey] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [whatsappTo, setWhatsappTo] = useState("");
@@ -70,6 +82,16 @@ function SettingsPage() {
     if (settings.notificationPolicy) {
       setMinRisk(settings.notificationPolicy.minRisk);
       setCooldownMinutes(String(settings.notificationPolicy.cooldownMinutes));
+      setQuietStart(
+        settings.notificationPolicy.quietHours
+          ? String(settings.notificationPolicy.quietHours.startHour)
+          : "",
+      );
+      setQuietEnd(
+        settings.notificationPolicy.quietHours
+          ? String(settings.notificationPolicy.quietHours.endHour)
+          : "",
+      );
     }
   }
 
@@ -88,23 +110,166 @@ function SettingsPage() {
 
   return (
     <>
-      <h1>Settings</h1>
-      <p>LLM: {data?.llmConfigured ? "configured" : "missing"}</p>
-      <p>Telegram: {data?.telegramConfigured ? "configured" : "not configured"}</p>
-      <p>WhatsApp: {data?.whatsappConfigured ? "configured" : "not configured"}</p>
-      <p>
-        Encryption: {data?.encryption.alg} · Key version {data?.encryption.keyVersion}
-        {data?.encryption.previousKeyConfigured ? " · previous key configured" : ""}
-      </p>
-      {data?.sessionPolicy ? (
-        <p>
-          Sessions expire after {data.sessionPolicy.absoluteHours} hours, idle{" "}
-          {data.sessionPolicy.idleMinutes} minutes, max {data.sessionPolicy.maxSessions} devices.
-        </p>
-      ) : null}
-      {message ? <output>{message}</output> : null}
+      <PageHeader
+        title="Settings"
+        description="Model, notification policy, sessions, and encryption. Secrets are stored encrypted and never shown again."
+      />
+      <nav className="page-subnav" aria-label="Settings">
+        <a href="#settings-model">Model</a>
+        <a href="#settings-security">Security</a>
+        <a href="#settings-notifications">Notifications</a>
+        <a href="#settings-sessions">Sessions</a>
+      </nav>
+      <section className="config-strip" aria-label="Configuration status">
+        <span>
+          Model
+          <StatusBadge label={data?.llmConfigured ? "Connected" : "Missing"} />
+        </span>
+        <span>
+          Telegram
+          <StatusBadge label={data?.telegramConfigured ? "Connected" : "Off"} />
+        </span>
+        <span>
+          WhatsApp
+          <StatusBadge label={data?.whatsappConfigured ? "Connected" : "Off"} />
+        </span>
+        <span>
+          Authenticator
+          <StatusBadge label={data?.totpEnabled ? "On" : "Off"} />
+        </span>
+        <span>
+          Encryption
+          <StatusBadge label={`Key ${data?.encryption.keyVersion ?? 1}`} />
+        </span>
+      </section>
 
-      <Card>
+      <Card id="settings-model">
+        <h2>Model</h2>
+        <p className="field-note">
+          {data?.llmConfigured
+            ? "A provider is connected. Saving a new key replaces it."
+            : "Required for analysis. Scans still collect evidence without a model."}
+        </p>
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/settings/llm", {
+                method: "POST",
+                body: JSON.stringify({
+                  provider: llmProvider,
+                  baseUrl: llmBaseUrl,
+                  model: llmModel,
+                  apiKey: llmKey,
+                }),
+              });
+              setLlmKey("");
+              await refresh();
+              toast("Model saved");
+            } catch (err) {
+              toast(toastFail(err, "Couldn’t save model"), "danger");
+            }
+          }}
+        >
+          <Field label="Provider">
+            <select
+              id="settings-provider"
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value)}
+            >
+              <option value="openai_compatible">OpenAI-compatible</option>
+              <option value="anthropic_compatible">Anthropic-compatible</option>
+            </select>
+          </Field>
+          <Field label="Base URL">
+            <input
+              id="settings-base-url"
+              type="url"
+              value={llmBaseUrl}
+              onChange={(e) => setLlmBaseUrl(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Model">
+            <input
+              id="settings-model"
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="API key" hint="Stored encrypted. Never shown again.">
+            <input
+              id="settings-api-key"
+              type="password"
+              autoComplete="off"
+              value={llmKey}
+              onChange={(e) => setLlmKey(e.target.value)}
+              required
+            />
+          </Field>
+          <Button type="submit">Save provider</Button>
+        </form>
+      </Card>
+
+      <Card id="settings-security">
+        <h2>Authenticator</h2>
+        {data?.totpEnabled ? (
+          <StatusBadge label="Enabled" />
+        ) : otpauth && secret ? (
+          <TotpEnroll
+            otpauth={otpauth}
+            secret={secret}
+            token={totp}
+            onToken={setTotp}
+            busy={enrollBusy}
+            onVerify={async () => {
+              setEnrollBusy(true);
+              try {
+                const body = await api<{ recoveryCodes: string[] }>(
+                  "/api/v1/settings/totp/verify",
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ token: totp }),
+                  },
+                );
+                setRecoveryCodes(body.recoveryCodes);
+                setSavedCodes(false);
+                setTotp("");
+                setOtpauth(undefined);
+                setSecret(undefined);
+                await refresh();
+                toast("Authenticator on");
+              } catch (err) {
+                toast(toastFail(err, "Couldn’t verify code"), "danger");
+              } finally {
+                setEnrollBusy(false);
+              }
+            }}
+          />
+        ) : (
+          <p className="ui-actions">
+            <Button
+              onClick={async () => {
+                try {
+                  const result = await api<{ otpauth: string; secret: string }>(
+                    "/api/v1/settings/totp/start",
+                    { method: "POST" },
+                  );
+                  setOtpauth(result.otpauth);
+                  setSecret(result.secret);
+                } catch (err) {
+                  toast(toastFail(err, "Couldn’t start setup"), "danger");
+                }
+              }}
+            >
+              Set up authenticator
+            </Button>
+          </p>
+        )}
+      </Card>
+
+      <Card id="settings-notifications">
         <h2>Notification policy</h2>
         <form
           onSubmit={async (event) => {
@@ -115,12 +280,16 @@ function SettingsPage() {
                 body: JSON.stringify({
                   minRisk,
                   cooldownMinutes: Number(cooldownMinutes),
+                  quietHours:
+                    quietStart !== "" && quietEnd !== ""
+                      ? { startHour: Number(quietStart), endHour: Number(quietEnd) }
+                      : undefined,
                 }),
               });
               await refresh();
-              setMessage("Notification policy saved.");
+              toast("Saved");
             } catch (err) {
-              setMessage(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t save"), "danger");
             }
           }}
         >
@@ -142,17 +311,33 @@ function SettingsPage() {
               onChange={(e) => setCooldownMinutes(e.target.value)}
             />
           </Field>
+          <Field label="Quiet hours start" hint="Optional 0–23. Leave blank for no quiet hours.">
+            <input
+              id="quiet-hours-start"
+              type="number"
+              min={0}
+              max={23}
+              value={quietStart}
+              onChange={(e) => setQuietStart(e.target.value)}
+            />
+          </Field>
+          <Field label="Quiet hours end">
+            <input
+              id="quiet-hours-end"
+              type="number"
+              min={0}
+              max={23}
+              value={quietEnd}
+              onChange={(e) => setQuietEnd(e.target.value)}
+            />
+          </Field>
           <Button type="submit">Save notification policy</Button>
         </form>
       </Card>
 
       <Card>
         <h2>WhatsApp Cloud API</h2>
-        <p style={{ color: "var(--muted)" }}>
-          Official Graph API only. Session text requires an inbound message in the last 24 hours.
-          Otherwise Riddlr sends an approved template. Configure the webhook at
-          /api/v1/webhooks/whatsapp.
-        </p>
+        <code>/api/v1/webhooks/whatsapp</code>
         <form
           onSubmit={async (event) => {
             event.preventDefault();
@@ -171,9 +356,9 @@ function SettingsPage() {
               setAccessToken("");
               setVerifyToken("");
               await refresh();
-              setMessage("WhatsApp Cloud API saved. The access token is not shown again.");
+              toast("WhatsApp saved");
             } catch (err) {
-              setMessage(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t save WhatsApp"), "danger");
             }
           }}
         >
@@ -233,7 +418,7 @@ function SettingsPage() {
         </form>
       </Card>
 
-      <Card>
+      <Card id="settings-sessions">
         <h2>Sessions</h2>
         {sessions.length === 0 ? (
           <EmptyState title="No sessions" body="Sign in to create a session." />
@@ -251,9 +436,9 @@ function SettingsPage() {
                       try {
                         await api(`/api/v1/sessions/${row.id}/revoke`, { method: "POST" });
                         await refresh();
-                        setMessage("Session revoked.");
+                        toast("Session ended");
                       } catch (err) {
-                        setMessage(err instanceof Error ? err.message : "Failed");
+                        toast(toastFail(err, "Couldn’t end session"), "danger");
                       }
                     }}
                   >
@@ -269,9 +454,9 @@ function SettingsPage() {
             try {
               await api("/api/v1/sessions/revoke-others", { method: "POST" });
               await refresh();
-              setMessage("Other sessions signed out.");
+              toast("Signed out elsewhere");
             } catch (err) {
-              setMessage(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t sign out other sessions"), "danger");
             }
           }}
         >
@@ -285,7 +470,7 @@ function SettingsPage() {
         {recoveryCodes.length > 0 && !savedCodes ? (
           <>
             <p>Save these codes now. They are shown once.</p>
-            <ul>
+            <ul className="recovery-codes">
               {recoveryCodes.map((code) => (
                 <li key={code}>
                   <code>{code}</code>
@@ -294,7 +479,7 @@ function SettingsPage() {
             </ul>
             <Button onClick={() => setSavedCodes(true)}>I have saved these codes</Button>
           </>
-        ) : (
+        ) : data?.totpEnabled ? (
           <form
             onSubmit={async (event) => {
               event.preventDefault();
@@ -310,9 +495,9 @@ function SettingsPage() {
                 setSavedCodes(false);
                 setTotp("");
                 await refresh();
-                setMessage("New recovery codes generated.");
+                toast("New recovery codes");
               } catch (err) {
-                setMessage(err instanceof Error ? err.message : "Failed");
+                toast(toastFail(err, "Couldn’t regenerate codes"), "danger");
               }
             }}
           >
@@ -328,6 +513,8 @@ function SettingsPage() {
             </Field>
             <Button type="submit">Regenerate recovery codes</Button>
           </form>
+        ) : (
+          <p className="field-note">Enable authenticator to generate recovery codes.</p>
         )}
       </Card>
 
@@ -360,7 +547,7 @@ function SettingsPage() {
                 setAudit((current) => takeBoundedClient(current, body.audit));
                 setAuditHasMore(body.audit.length === 20);
               } catch (err) {
-                setMessage(err instanceof Error ? err.message : "Failed");
+                toast(toastFail(err, "Couldn’t load audit log"), "danger");
               }
             }}
           >
@@ -378,16 +565,19 @@ function SettingsPage() {
           onSubmit={async (event) => {
             event.preventDefault();
             try {
-              const body = await api<{ keyVersion: number }>("/api/v1/settings/encryption/rotate", {
+              await api("/api/v1/settings/encryption/rotate", {
                 method: "POST",
-                body: JSON.stringify({ currentPassword: rotatePassword, token: rotateTotp }),
+                body: JSON.stringify({
+                  currentPassword: rotatePassword,
+                  token: rotateTotp || undefined,
+                }),
               });
               setRotatePassword("");
               setRotateTotp("");
               await refresh();
-              setMessage(`Encryption key version is now ${body.keyVersion}.`);
+              toast("Key rotated");
             } catch (err) {
-              setMessage(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t rotate key"), "danger");
             }
           }}
         >
@@ -400,14 +590,17 @@ function SettingsPage() {
               required
             />
           </Field>
-          <Field label="Authenticator code for key rotation">
+          <Field
+            label="Authenticator code for key rotation"
+            hint={data?.totpEnabled ? undefined : "Not required until authenticator is enabled."}
+          >
             <input
               id="authenticator-code-for-key-rotation"
               inputMode="numeric"
               autoComplete="one-time-code"
               value={rotateTotp}
               onChange={(e) => setRotateTotp(e.target.value)}
-              required
+              required={Boolean(data?.totpEnabled)}
             />
           </Field>
           <Button type="submit">Rotate encryption keys</Button>
@@ -427,9 +620,9 @@ function SettingsPage() {
               setCurrentPassword("");
               setNewPassword("");
               await refresh();
-              setMessage("Password updated. Other sessions were signed out.");
+              toast("Password updated");
             } catch (err) {
-              setMessage(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t update password"), "danger");
             }
           }}
         >

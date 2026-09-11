@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { encryptSecret } from "@riddlr/crypto";
 import {
   agentMarketDomains,
   agentSkills,
   agentSources,
   agents,
+  encryptedSecrets,
   instanceSettings,
+  providerConfigs,
   skills,
   sources,
+  watchlistItems,
   watchlists,
 } from "@riddlr/db";
 import {
@@ -16,7 +20,7 @@ import {
   DEFAULT_AGENT_NAME,
   DEFAULT_MARKET_DOMAIN,
 } from "@riddlr/domain";
-import { cryptoDomainModule } from "@riddlr/domain-crypto";
+import { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "@riddlr/domain-crypto";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 
@@ -95,7 +99,16 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
     agentId: agent.id,
     marketDomainId: DEFAULT_MARKET_DOMAIN,
   });
-  const skillFiles = ["narrative-detection.md", "event-correlation.md", "stablecoin-risk.md"];
+  const skillFiles = [
+    "narrative-detection.md",
+    "event-correlation.md",
+    "stablecoin-risk.md",
+    "liquidity-analysis.md",
+    "whale-activity.md",
+    "regulatory-analysis.md",
+    "early-trend-detection.md",
+    "contrarian-analysis.md",
+  ];
   for (const file of skillFiles) {
     const body = readFileSync(join(skillDir, file), "utf8");
     const slug = file.replace(".md", "");
@@ -113,10 +126,28 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
         .onConflictDoNothing();
     }
   }
-  await ctx.db
+  const insertedWatchlist = await ctx.db
     .insert(watchlists)
     .values({ agentId: agent.id, name: "Default watchlist" })
-    .onConflictDoNothing({ target: watchlists.agentId });
+    .onConflictDoNothing({ target: watchlists.agentId })
+    .returning();
+  const persistedWatchlist =
+    insertedWatchlist[0] ??
+    (await ctx.db.select().from(watchlists).where(eq(watchlists.agentId, agent.id)))[0];
+  if (persistedWatchlist) {
+    for (const item of DEFAULT_CRYPTO_WATCHLIST) {
+      await ctx.db
+        .insert(watchlistItems)
+        .values({
+          watchlistId: persistedWatchlist.id,
+          assetClass: item.assetClass,
+          canonicalId: item.canonicalId,
+          symbol: item.symbol ?? null,
+          name: item.displayName ?? null,
+        })
+        .onConflictDoNothing();
+    }
+  }
   const existingSource = await ctx.db
     .select()
     .from(sources)
@@ -142,7 +173,77 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       .values({ agentId: agent.id, sourceId: source.id })
       .onConflictDoNothing();
   }
+  const existingMarket = await ctx.db
+    .select()
+    .from(sources)
+    .where(eq(sources.adapterId, "coingecko"))
+    .limit(1);
+  const market =
+    existingMarket[0] ??
+    (
+      await ctx.db
+        .insert(sources)
+        .values({
+          family: "market_data",
+          adapterId: "coingecko",
+          name: "CoinGecko",
+          enabled: true,
+          config: {
+            assetIds: DEFAULT_CRYPTO_WATCHLIST.map((item) =>
+              item.canonicalId.replace(/^coingecko:/, ""),
+            ),
+          },
+        })
+        .returning()
+    )[0];
+  if (market) {
+    await ctx.db
+      .insert(agentSources)
+      .values({ agentId: agent.id, sourceId: market.id })
+      .onConflictDoNothing();
+  }
   return agent;
+}
+
+export async function saveLlmProvider(
+  ctx: AppContext,
+  body: { provider: string; baseUrl: string; model: string; apiKey: string },
+) {
+  const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
+  const keyVersion = settingsRows[0]?.keyVersion ?? 1;
+  const encrypted = encryptSecret({
+    masterKey: ctx.masterKey,
+    plaintext: body.apiKey,
+    purpose: "llm",
+    keyVersion,
+    aad: `llm|${keyVersion}`,
+  });
+  const existing = await ctx.db.select().from(providerConfigs);
+  for (const row of existing) {
+    if (
+      row.kind.includes("compatible") ||
+      row.kind.includes("openai") ||
+      row.kind.includes("anthropic")
+    ) {
+      await ctx.db.delete(providerConfigs).where(eq(providerConfigs.id, row.id));
+    }
+  }
+  const [secret] = await ctx.db
+    .insert(encryptedSecrets)
+    .values({
+      purpose: "llm",
+      ciphertext: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      tag: encrypted.tag,
+      alg: encrypted.alg,
+      keyVersion: encrypted.keyVersion,
+    })
+    .returning();
+  await ctx.db.insert(providerConfigs).values({
+    kind: body.provider,
+    settings: { baseUrl: body.baseUrl, model: body.model, configured: true },
+    secretId: secret?.id,
+  });
 }
 
 export function assertDomainsForExecution(ids: string[]) {

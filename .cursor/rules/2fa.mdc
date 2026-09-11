@@ -6,4 +6,5 @@ alwaysApply: true
 # 2FA
 
 RFC 6238 TOTP, 6 digits, 30s. Confirm before enable. Recovery codes hashed.
-Do not skip 2FA in production onboarding. Secrets for TOTP are encrypted at rest.
+Onboarding strongly advises authenticator setup and allows skip. Secrets for
+TOTP are encrypted at rest. Login requires TOTP only when a verified factor exists.

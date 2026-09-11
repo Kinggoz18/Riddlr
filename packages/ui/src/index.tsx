@@ -1,12 +1,21 @@
-import type { CSSProperties, ReactNode } from "react";
+import {
+  Children,
+  type CSSProperties,
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+  useId,
+} from "react";
 
 export const tokens = {
-  bg: "#07111c",
-  elevated: "#0c1a29",
+  bg: "#050807",
+  elevated: "#0c1411",
   mint: "#3ee0b2",
-  text: "#e7f3ee",
-  muted: "#8aa39a",
-  danger: "#ff6b6b",
+  text: "#e8faf3",
+  muted: "#8fa59c",
+  danger: "#ff8a7a",
+  ok: "#3ee0b2",
   line: "rgba(62, 224, 178, 0.18)",
 };
 
@@ -14,27 +23,27 @@ export function Button(props: {
   children: ReactNode;
   type?: "button" | "submit";
   disabled?: boolean;
+  busy?: boolean;
+  variant?: "primary" | "ghost" | "danger" | "quiet";
+  className?: string;
   onClick?: () => void;
+  "aria-label"?: string;
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
 }) {
+  const variant = props.variant ?? "primary";
   return (
     <button
       type={props.type ?? "button"}
-      disabled={props.disabled}
+      disabled={props.disabled || props.busy}
       onClick={props.onClick}
-      className="ui-button"
-      style={{
-        background: tokens.mint,
-        color: "#04110c",
-        border: 0,
-        borderRadius: 8,
-        padding: "10px 16px",
-        minHeight: 44,
-        fontWeight: 700,
-        cursor: props.disabled ? "not-allowed" : "pointer",
-        opacity: props.disabled ? 0.5 : 1,
-      }}
+      className={`ui-button ui-button-${variant}${props.className ? ` ${props.className}` : ""}`}
+      aria-busy={props.busy || undefined}
+      aria-label={props["aria-label"]}
+      aria-expanded={props["aria-expanded"]}
+      aria-controls={props["aria-controls"]}
     >
-      {props.children}
+      {props.busy ? "Working…" : props.children}
     </button>
   );
 }
@@ -45,20 +54,43 @@ export function Field(props: {
   hint?: string;
   error?: string;
 }) {
-  const id = props.label.toLowerCase().replace(/\s+/g, "-");
+  const generatedId = useId();
+  const child = Children.only(props.children);
+  const existingId =
+    isValidElement<{ id?: string }>(child) && typeof child.props.id === "string"
+      ? child.props.id
+      : undefined;
+  const id = existingId ?? generatedId;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
+  const describedBy = [props.hint ? hintId : null, props.error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
+  const control = isValidElement(child)
+    ? cloneElement(
+        child as ReactElement<{
+          id?: string;
+          "aria-describedby"?: string;
+          "aria-invalid"?: boolean;
+        }>,
+        {
+          id,
+          "aria-describedby": describedBy || undefined,
+          "aria-invalid": props.error ? true : undefined,
+        },
+      )
+    : child;
   return (
-    <label htmlFor={id} style={{ display: "grid", gap: 6, color: tokens.text }}>
-      <span>{props.label}</span>
-      {props.children}
+    <label htmlFor={id} className="ui-field">
+      <span className="ui-field-label">{props.label}</span>
+      {control}
       {props.hint ? (
-        <small id={hintId} style={{ color: tokens.muted }}>
+        <small id={hintId} className="ui-field-hint">
           {props.hint}
         </small>
       ) : null}
       {props.error ? (
-        <small id={errorId} role="alert" style={{ color: tokens.danger }}>
+        <small id={errorId} role="alert" className="ui-field-error">
           {props.error}
         </small>
       ) : null}
@@ -66,56 +98,81 @@ export function Field(props: {
   );
 }
 
-export function Card(props: { children: ReactNode; style?: CSSProperties }) {
+export function Card(props: {
+  children: ReactNode;
+  style?: CSSProperties;
+  className?: string;
+  id?: string;
+}) {
   return (
     <section
-      className="ui-card"
-      style={{
-        background: tokens.elevated,
-        border: `1px solid ${tokens.line}`,
-        borderRadius: 16,
-        padding: 20,
-        ...props.style,
-      }}
+      id={props.id}
+      className={`ui-card${props.className ? ` ${props.className}` : ""}`}
+      style={props.style}
     >
       {props.children}
     </section>
   );
 }
 
-export function EmptyState(props: { title: string; body: string }) {
+export function EmptyState(props: {
+  title: string;
+  body: string;
+  asPageTitle?: boolean;
+  action?: ReactNode;
+}) {
+  const Title = props.asPageTitle ? "h1" : "h2";
   return (
     <Card>
-      <h2 style={{ marginTop: 0 }}>{props.title}</h2>
-      <p style={{ color: tokens.muted }}>{props.body}</p>
+      <Title className="ui-empty-title">{props.title}</Title>
+      <p className="lede">{props.body}</p>
+      {props.action ? <p className="ui-actions">{props.action}</p> : null}
     </Card>
   );
 }
 
 export function StatusBadge(props: { label: string; tone?: "ok" | "soon" | "danger" | "risk" }) {
-  return <span className={`badge${props.tone === "soon" ? " soon" : ""}`}>{props.label}</span>;
+  const tone =
+    props.tone === "soon"
+      ? "soon"
+      : props.tone === "danger" || props.tone === "risk"
+        ? "danger"
+        : "";
+  return <span className={`badge${tone ? ` ${tone}` : ""}`}>{props.label}</span>;
 }
 
-export function Banner(props: { children: ReactNode; tone?: "info" | "danger" }) {
+export function Banner(props: { children: ReactNode; tone?: "info" | "danger" | "ok" }) {
+  const tone = props.tone ?? "info";
   return (
     <p
-      role={props.tone === "danger" ? "alert" : "status"}
+      className={`notice notice-${tone}`}
+      role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
-      style={{
-        border: `1px solid ${props.tone === "danger" ? tokens.danger : tokens.line}`,
-        borderRadius: 12,
-        padding: "12px 16px",
-        color: props.tone === "danger" ? tokens.danger : tokens.text,
-      }}
     >
       {props.children}
     </p>
   );
 }
 
+export function Notice(props: { children: ReactNode; tone?: "info" | "danger" | "ok" }) {
+  return <Banner tone={props.tone}>{props.children}</Banner>;
+}
+
+export function PageHeader(props: { title: string; description?: string; actions?: ReactNode }) {
+  return (
+    <header className="page-header">
+      <div className="page-header-row">
+        <h1>{props.title}</h1>
+        {props.actions ? <div className="page-header-actions">{props.actions}</div> : null}
+      </div>
+      {props.description ? <p className="lede">{props.description}</p> : null}
+    </header>
+  );
+}
+
 export function Skeleton(props: { label?: string }) {
   return (
-    <p aria-busy="true" aria-live="polite">
+    <p className="ui-skeleton" aria-busy="true" aria-live="polite">
       {props.label ?? "Loading…"}
     </p>
   );
@@ -130,26 +187,21 @@ export function Dialog(props: {
 }) {
   return (
     <div
+      className="ui-dialog-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="dialog-title"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "grid",
-        placeItems: "center",
-        padding: 24,
-      }}
     >
       <Card style={{ maxWidth: 420, width: "100%" }}>
         <h2 id="dialog-title">{props.title}</h2>
         {props.children}
-        <p style={{ display: "flex", gap: 8 }}>
+        <p className="ui-actions">
           {props.onConfirm ? (
             <Button onClick={props.onConfirm}>{props.confirmLabel ?? "Confirm"}</Button>
           ) : null}
-          <Button onClick={props.onClose}>Close</Button>
+          <Button variant="ghost" onClick={props.onClose}>
+            Close
+          </Button>
         </p>
       </Card>
     </div>
@@ -160,5 +212,9 @@ export function Pagination(props: { onOlder?: () => void; hasMore?: boolean }) {
   if (!props.hasMore || !props.onOlder) {
     return null;
   }
-  return <Button onClick={props.onOlder}>Load older</Button>;
+  return (
+    <Button variant="ghost" onClick={props.onOlder}>
+      Load older
+    </Button>
+  );
 }

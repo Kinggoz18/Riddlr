@@ -19,5 +19,6 @@ describe("CoinGecko market-data adapter", () => {
     );
     expect(parsed.evidence[0]?.adapterPayload?.canonicalId).toBe("coingecko:bitcoin");
     expect(parsed.evidence[0]?.adapterPayload?.priceUsd).toBe(64000);
+    expect(parsed.evidence[0]?.bodyText).toContain("USD 64000");
   });
 });

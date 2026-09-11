@@ -59,9 +59,11 @@ watchlist. Coming-soon domains cannot execute. See
 [agents-and-skills.md](agents-and-skills.md) and
 [watchlists.md](watchlists.md).
 
-Live sources are SearXNG (bundled), Discord (operator-configured bot), X
-(operator-configured recent search with bounded `next_token`), and CoinGecko
-market data (optional operator key). On-chain scanning is not implemented.
+Live sources are SearXNG (bundled), Discord (operator-configured bot; more
+than one Discord source is allowed), X (operator-configured recent search with
+bounded `next_token`), and one active market-data source: CoinGecko,
+CoinMarketCap, or Crypto.com Exchange public tickers. On-chain scanning is not
+implemented.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

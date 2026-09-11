@@ -10,8 +10,8 @@ Provider credentials and TOTP secrets are encrypted before insert.
 - Previous key: `RIDDLR_ENCRYPTION_MASTER_KEY_PREVIOUS` (optional). Decrypt
   tries the current key, then the previous key.
 - Application key version lives on `instance_settings` and on each envelope.
-  `POST /api/v1/settings/encryption/rotate` (password + TOTP) re-encrypts
-  secrets in batches of 50 and increments the version.
+  `POST /api/v1/settings/encryption/rotate` (password, plus TOTP if enabled)
+  re-encrypts secrets in batches of 50 and increments the version.
 
 The API never returns ciphertext contents. Settings show `configured`,
 algorithm, and key version only. Logs redact secret fields.

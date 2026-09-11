@@ -25,15 +25,18 @@ recovery codes, password reset hashing, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, and paginated audit/lists.
 
-Browser tests need an instance that has not completed onboarding:
+Browser tests need Compose with free Docker disk, Chromium
+(`pnpm exec playwright install chromium`), and an instance that has not
+completed onboarding. Specs tagged `@a11y` run axe-core and fail on serious
+or critical violations.
 
 ```bash
 pnpm compose:reset
 pnpm test:browser
 ```
 
-TOTP enrollment is locked after setup. Capture the authenticator URL during
-first-run. Do not call `/setup/totp/start` afterward.
+TOTP enrollment can be skipped during first-run and enabled later in Settings.
+Do not call `/setup/totp/start` after setup is complete.
 
 Integration tests mock SearXNG, Discord, X, WhatsApp, and LLM HTTP in-process. They do not
 call live provider networks.

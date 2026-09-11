@@ -1,1 +1,1 @@
-export { cryptoDomainModule } from "./module.js";
+export { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "./module.js";

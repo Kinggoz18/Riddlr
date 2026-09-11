@@ -1,5 +1,15 @@
 export { createCoinGeckoAdapter, parseCoinGeckoMarkets } from "./coingecko.js";
 export {
+  COINMARKETCAP_API_BASE,
+  createCoinMarketCapAdapter,
+  parseCoinMarketCapQuotes,
+} from "./coinmarketcap.js";
+export {
+  CRYPTOCOM_API_BASE,
+  createCryptoComAdapter,
+  parseCryptoComTickers,
+} from "./cryptocom.js";
+export {
   createDiscordAdapter,
   DISCORD_BOT_PERMISSIONS,
   MAX_DISCORD_CHANNELS,

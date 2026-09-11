@@ -32,8 +32,9 @@ public internet deployment.
 - An administrator account with TOTP 2FA and recovery codes
 - An encrypted LLM provider configuration
 - Bundled SearXNG search as the first live source
-- Optional Discord bot source (official HTTP API)
+- Optional Discord bot source (official HTTP API; more than one Discord source is allowed)
 - Optional X recent-search source (official API, plan-gated)
+- One active market-data source at a time: CoinGecko, CoinMarketCap, or Crypto.com Exchange public tickers
 - Read-only portfolios of public addresses and declared holdings
 - The default **Riddlr Intelligence Agent**, bound to Crypto
 - Additional Crypto agents, markdown skills, and canonical-ID watchlists
@@ -60,6 +61,9 @@ See [docs/architecture.md](docs/architecture.md).
 - [SearXNG](docs/sources/searxng.md)
 - [Discord](docs/sources/discord.md)
 - [X](docs/sources/x.md)
+- [CoinGecko](docs/sources/coingecko.md)
+- [CoinMarketCap](docs/sources/coinmarketcap.md)
+- [Crypto.com Exchange](docs/sources/cryptocom.md)
 - [Agents and skills](docs/agents-and-skills.md)
 - [Watchlists](docs/watchlists.md)
 - [Portfolios](docs/portfolios.md)

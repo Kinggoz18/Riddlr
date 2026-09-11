@@ -2,79 +2,117 @@ import { Button, Field } from "@riddlr/ui";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "../api.js";
+import { AuthShell } from "../Brand.js";
+import { toastFail, useToast } from "../Toast.js";
 
 function LoginPage() {
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [stage, setStage] = useState<"password" | "totp">("password");
-  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await action();
+    } catch (err) {
+      toast(toastFail(err, "Sign-in failed"), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <main className="page" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <h1>Sign in</h1>
-      {error ? <p role="alert">{error}</p> : null}
+    <AuthShell title="Welcome back">
       {stage === "password" ? (
         <form
-          onSubmit={async (event) => {
+          onSubmit={(event) => {
             event.preventDefault();
-            try {
-              await api("/api/v1/auth/login", {
+            void run(async () => {
+              const result = await api<{ requiresTwoFactor: boolean }>("/api/v1/auth/login", {
                 method: "POST",
                 body: JSON.stringify({ email, password }),
               });
-              setStage("totp");
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed");
-            }
+              if (result.requiresTwoFactor) {
+                setStage("totp");
+                return;
+              }
+              window.location.assign("/");
+            });
           }}
         >
           <Field label="Email or username">
             <input
               id="email-or-username"
+              name="email"
               autoComplete="username"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
             />
           </Field>
           <Field label="Password">
             <input
               id="password"
+              name="password"
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
             />
           </Field>
-          <Button type="submit">Continue</Button>
+          <p className="ui-actions">
+            <Button type="submit" busy={busy}>
+              Continue
+            </Button>
+          </p>
         </form>
       ) : (
         <form
-          onSubmit={async (event) => {
+          onSubmit={(event) => {
             event.preventDefault();
-            try {
+            void run(async () => {
               await api("/api/v1/auth/2fa", { method: "POST", body: JSON.stringify({ token }) });
               window.location.assign("/");
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed");
-            }
+            });
           }}
         >
           <Field label="Authenticator or recovery code">
             <input
               id="authenticator-or-recovery-code"
+              name="totp"
               autoComplete="one-time-code"
               inputMode="numeric"
+              spellCheck={false}
               value={token}
               onChange={(e) => setToken(e.target.value)}
+              required
             />
           </Field>
-          <Button type="submit">Verify</Button>
+          <p className="ui-actions">
+            <Button type="submit" busy={busy}>
+              Verify
+            </Button>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                setStage("password");
+                setToken("");
+              }}
+            >
+              Use a different account
+            </Button>
+          </p>
         </form>
       )}
       <p>
         <NavLink to="/reset">Forgot password</NavLink>
       </p>
-    </main>
+    </AuthShell>
   );
 }
 export { LoginPage };

@@ -1,4 +1,4 @@
-import { EmptyState } from "@riddlr/ui";
+import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
@@ -12,22 +12,37 @@ function NotificationsPage() {
       .then(setData)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
   }, []);
+  if (error) {
+    return <EmptyState title="Unable to load notifications" body={error} />;
+  }
   return (
     <>
-      <h1>Notifications</h1>
-      {error ? <p role="alert">{error}</p> : null}
+      <PageHeader
+        title="Notifications"
+        description="Deliveries after a signal passes risk, cooldown, and quiet-hour policy."
+      />
       {!data ? <p>Loading notifications…</p> : null}
       {data?.deliveries.length === 0 ? (
-        <EmptyState title="No deliveries" body="Validated signals notify configured channels." />
+        <EmptyState title="No deliveries" body="Configure a channel in Settings." />
       ) : null}
-      <ul>
-        {(data?.deliveries ?? []).map((item) => (
-          <li key={item.id}>
-            {item.channel} · {item.status}
-            {item.destination ? ` · ${item.destination}` : ""}
-          </li>
-        ))}
-      </ul>
+      {data?.deliveries.length ? (
+        <Card>
+          <ul className="data-list">
+            {data.deliveries.map((item) => (
+              <li key={item.id}>
+                <span>
+                  <strong>{item.channel}</strong>
+                  {item.destination ? <small>{item.destination}</small> : null}
+                </span>
+                <StatusBadge
+                  label={item.status}
+                  tone={item.status === "failed" ? "danger" : "ok"}
+                />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { Button, Card, EmptyState } from "@riddlr/ui";
+import { Button, Card, EmptyState, PageHeader } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
@@ -35,14 +35,19 @@ function SignalsPage() {
   }
   return (
     <>
-      <h1>Signals</h1>
-      {rows.map((row) => (
-        <Card key={row.id}>
-          <NavLink to={`/signals/${row.id}`}>{row.headline}</NavLink>
-          <p>Risk: {row.risk}</p>
-          <p>{row.whyItMatters}</p>
-        </Card>
-      ))}
+      <PageHeader
+        title="Signals"
+        description="Validated intelligence with proof. Empty until a material Crypto event is analyzed."
+      />
+      <section className="record-list">
+        {rows.map((row) => (
+          <Card key={row.id} className="record-row">
+            <NavLink to={`/signals/${row.id}`}>{row.headline}</NavLink>
+            <span className="badge danger">{row.risk}</span>
+            <p>{row.whyItMatters}</p>
+          </Card>
+        ))}
+      </section>
       {hasMore && rows.length < CLIENT_LIST_CAP ? (
         <Button
           onClick={async () => {

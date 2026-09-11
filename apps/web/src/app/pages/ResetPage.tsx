@@ -2,27 +2,28 @@ import { Button, Field } from "@riddlr/ui";
 import { useState } from "react";
 import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
+import { AuthShell } from "../Brand.js";
+import { toastFail, useToast } from "../Toast.js";
 
 function ResetPage() {
   const [search] = useSearchParams();
   const navigate = useNavigate();
   const token = search.get("token") ?? "";
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
   return (
-    <main className="page" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <h1>Reset password</h1>
+    <AuthShell title="Reset password">
       <p>
         <NavLink to="/login">Back to sign in</NavLink>
       </p>
-      {error ? <p role="alert">{error}</p> : null}
-      {notice ? <p>{notice}</p> : null}
       {token ? (
         <form
           onSubmit={async (event) => {
             event.preventDefault();
+            setBusy(true);
             try {
               await api("/api/v1/auth/reset/complete", {
                 method: "POST",
@@ -30,50 +31,68 @@ function ResetPage() {
               });
               navigate("/login");
             } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t reset password"), "danger");
+            } finally {
+              setBusy(false);
             }
           }}
         >
           <Field label="New password">
             <input
               id="new-password"
+              name="newPassword"
               type="password"
+              autoComplete="new-password"
               value={password}
               minLength={12}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </Field>
-          <Button type="submit">Set new password</Button>
+          <p className="ui-actions">
+            <Button type="submit" busy={busy}>
+              Set new password
+            </Button>
+          </p>
         </form>
       ) : (
         <form
           onSubmit={async (event) => {
             event.preventDefault();
+            setBusy(true);
             try {
               await api("/api/v1/auth/reset/request", {
                 method: "POST",
                 body: JSON.stringify({ email }),
               });
-              setNotice("If that account exists, a reset email is on its way.");
+              toast("Check your email");
             } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed");
+              toast(toastFail(err, "Couldn’t send reset email"), "danger");
+            } finally {
+              setBusy(false);
             }
           }}
         >
           <Field label="Email">
             <input
               id="email"
+              name="email"
               type="email"
+              autoComplete="username"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </Field>
-          <Button type="submit">Send reset link</Button>
+          <p className="ui-actions">
+            <Button type="submit" busy={busy}>
+              Send reset link
+            </Button>
+          </p>
         </form>
       )}
-    </main>
+    </AuthShell>
   );
 }
 export { ResetPage };

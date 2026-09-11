@@ -33,6 +33,7 @@ import {
 import { count, desc, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import { loadEnabledMarketQuotes } from "./market-sources.js";
 
 export function registerPortfolioRoutes(
   app: FastifyInstance,
@@ -58,12 +59,17 @@ export function registerPortfolioRoutes(
             .where(inArray(portfolioHoldings.portfolioId, ids))
             .limit(ids.length * MAX_PORTFOLIO_HOLDINGS)
         : [];
+    const market = await loadEnabledMarketQuotes(
+      ctx,
+      holdings.map((item) => item.canonicalId),
+    );
     return {
       portfolios: rows.map((row) => ({
         ...row,
         wallets: wallets.filter((item) => item.portfolioId === row.id),
         holdings: holdings.filter((item) => item.portfolioId === row.id),
       })),
+      market,
       onchain: {
         implemented: false,
         message:
@@ -235,11 +241,13 @@ export function registerPortfolioRoutes(
             .orderBy(desc(events.windowStart))
             .limit(20)
         : [];
+    const market = await loadEnabledMarketQuotes(ctx, canonicalIds);
     return {
       portfolio,
       wallets,
       holdings,
       affectedEvents,
+      market,
       onchainImplemented: false,
     };
   });

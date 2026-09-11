@@ -2,6 +2,7 @@ import {
   agentCreateSchema,
   agentUpdateSchema,
   skillCreateSchema,
+  skillUpdateSchema,
   type watchlistItemSchema,
 } from "@riddlr/api-contract";
 import {
@@ -197,6 +198,14 @@ async function listAgentsPayload(ctx: AppContext) {
           .where(inArray(agentSources.agentId, ids))
           .limit(max * 32)
       : [];
+  const sourceCatalog =
+    sourceRows.length > 0
+      ? await ctx.db
+          .select()
+          .from(sources)
+          .where(inArray(sources.id, [...new Set(sourceRows.map((item) => item.sourceId))]))
+          .limit(32)
+      : [];
   return {
     agents: rows.map((agent) => {
       const watchlist = watchlistRows.find((row) => row.agentId === agent.id);
@@ -214,6 +223,16 @@ async function listAgentsPayload(ctx: AppContext) {
         sourceIds: sourceRows
           .filter((item) => item.agentId === agent.id)
           .map((item) => item.sourceId),
+        sources: sourceRows
+          .filter((item) => item.agentId === agent.id)
+          .map((item) => {
+            const source = sourceCatalog.find((row) => row.id === item.sourceId);
+            return {
+              id: item.sourceId,
+              name: source?.name ?? item.sourceId,
+              adapterId: source?.adapterId,
+            };
+          }),
         domains: domainRows
           .filter((item) => item.agentId === agent.id)
           .map((item) => item.marketDomainId),
@@ -250,6 +269,16 @@ export function registerAgentRoutes(
   authed: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>,
 ) {
   app.get("/api/v1/agents", { preHandler: authed }, async () => listAgentsPayload(ctx));
+
+  app.get("/api/v1/agents/:id", { preHandler: authed }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const listed = await listAgentsPayload(ctx);
+    const agent = listed.agents.find((item) => item.id === id);
+    if (!agent) {
+      return sendError(reply, 404, "not_found", "Agent not found");
+    }
+    return { agent };
+  });
 
   app.get("/api/v1/watchlists", { preHandler: authed }, async () => {
     const listed = await listAgentsPayload(ctx);
@@ -321,6 +350,17 @@ export function registerAgentRoutes(
       await ctx.db
         .insert(agentSources)
         .values(sourceRows.map((source) => ({ agentId: agent.id, sourceId: source.id })));
+    } else {
+      const sourceRows = await ctx.db
+        .select()
+        .from(sources)
+        .where(eq(sources.enabled, true))
+        .limit(32);
+      if (sourceRows.length > 0) {
+        await ctx.db
+          .insert(agentSources)
+          .values(sourceRows.map((source) => ({ agentId: agent.id, sourceId: source.id })));
+      }
     }
     if (body.skillIds) {
       try {
@@ -476,6 +516,11 @@ export function registerAgentRoutes(
         .insert(agentSources)
         .values(source.sourceIds.map((sourceId) => ({ agentId: agent.id, sourceId })));
     }
+    if (source.skills.length > 0) {
+      await ctx.db
+        .insert(agentSkills)
+        .values(source.skills.map((skill) => ({ agentId: agent.id, skillId: skill.id })));
+    }
     await replaceWatchlist(ctx, agent.id, `${agent.name} Watchlist`, source.watchlist?.items ?? []);
     const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
     await ctx.db.insert(auditLogs).values({
@@ -599,6 +644,56 @@ export function registerAgentRoutes(
       resource: skill?.id,
     });
     return { skill };
+  });
+
+  app.get("/api/v1/skills/:id", { preHandler: authed }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [skill] = await ctx.db.select().from(skills).where(eq(skills.id, id)).limit(1);
+    if (!skill) {
+      return sendError(reply, 404, "not_found", "Skill not found");
+    }
+    return {
+      skill: {
+        id: skill.id,
+        slug: skill.slug,
+        origin: skill.origin,
+        version: skill.version,
+        markdownBody: skill.markdownBody,
+      },
+    };
+  });
+
+  app.patch("/api/v1/skills/:id", { preHandler: authed }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = skillUpdateSchema.parse(request.body);
+    const [skill] = await ctx.db.select().from(skills).where(eq(skills.id, id)).limit(1);
+    if (!skill) {
+      return sendError(reply, 404, "not_found", "Skill not found");
+    }
+    if (skill.origin === "shipped") {
+      return sendError(reply, 409, "shipped_skill", "Shipped skills cannot be overwritten.");
+    }
+    try {
+      assertSafeSkillMarkdown(body.markdownBody);
+    } catch (error) {
+      return failSkill(error, reply);
+    }
+    const [updated] = await ctx.db
+      .update(skills)
+      .set({ markdownBody: body.markdownBody })
+      .where(eq(skills.id, id))
+      .returning();
+    return {
+      skill: updated
+        ? {
+            id: updated.id,
+            slug: updated.slug,
+            origin: updated.origin,
+            version: updated.version,
+            markdownBody: updated.markdownBody,
+          }
+        : undefined,
+    };
   });
 
   app.delete("/api/v1/skills/:id", { preHandler: authed }, async (request, reply) => {

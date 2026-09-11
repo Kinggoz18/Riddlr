@@ -21,7 +21,6 @@ import {
   decryptSecretWithKeys,
   encryptSecret,
   generateRecoveryCodes,
-  generateTotpSecret,
   hashPassword,
   hashRecoveryCode,
   hashToken,
@@ -35,7 +34,6 @@ import {
   aiUsageEvents,
   assets,
   auditLogs,
-  authFactors,
   encryptedSecrets,
   eventAssets,
   eventEvidence,
@@ -47,6 +45,7 @@ import {
   notificationDeliveries,
   observations,
   passwordResetTokens,
+  portfolios,
   providerConfigs,
   recoveryCodes,
   scanSourceRuns,
@@ -98,9 +97,17 @@ import {
   createDefaultCryptoAgent,
   getSetupState,
   requireSetupStep,
+  saveLlmProvider,
   setSetupStep,
 } from "./modules/setup.js";
 import { publicSource, registerSourceRoutes } from "./modules/source-api.js";
+import {
+  confirmTotpEnrollment,
+  decryptTotpSecret,
+  discardUnverifiedTotp,
+  loadVerifiedTotpFactor,
+  startTotpEnrollment,
+} from "./modules/totp.js";
 
 async function currentUser(ctx: AppContext, request: FastifyRequest) {
   const token = readSessionToken(ctx.config.cookieSecret, request.cookies[COOKIE]);
@@ -295,24 +302,7 @@ export async function buildApp(ctx: AppContext) {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
     await requireSetupStep(ctx, "security");
-    const { secret, otpauth } = generateTotpSecret();
-    const encrypted = encryptSecret({
-      masterKey: ctx.masterKey,
-      plaintext: secret,
-      purpose: "totp",
-      keyVersion: 1,
-      aad: `totp|${auth.user.id}|1`,
-    });
-    await ctx.db.delete(authFactors).where(eq(authFactors.userId, auth.user.id));
-    await ctx.db.insert(authFactors).values({
-      userId: auth.user.id,
-      kind: "totp",
-      secretCiphertext: encrypted.ciphertext,
-      secretNonce: encrypted.nonce,
-      secretTag: encrypted.tag,
-      keyVersion: 1,
-    });
-    return { otpauth, secret };
+    return startTotpEnrollment(ctx, auth.user.id, auth.user.email);
   });
 
   app.post("/api/v1/setup/totp/verify", totpLimit, async (request, reply) => {
@@ -320,62 +310,46 @@ export async function buildApp(ctx: AppContext) {
     requireUser(auth);
     await requireSetupStep(ctx, "security");
     const body = totpVerifySchema.parse(request.body);
-    const factors = await ctx.db
-      .select()
-      .from(authFactors)
-      .where(eq(authFactors.userId, auth.user.id))
-      .limit(1);
-    const factor = factors[0];
-    if (!factor) {
-      return reply
-        .code(400)
-        .send({ error: { code: "missing_totp", message: "Start TOTP first." } });
+    const result = await confirmTotpEnrollment(ctx, auth.user.id, body.token);
+    if (!result.ok) {
+      if (result.code === "invalid_totp") {
+        ctx.metrics.authEvents.inc({ result: "invalid_totp" });
+        return reply.code(401).send({ error: { code: result.code, message: result.message } });
+      }
+      return reply.code(400).send({ error: { code: result.code, message: result.message } });
     }
-    const secret = decryptSecretWithKeys({
-      keys: ctx.masterKeys,
-      secret: {
-        ciphertext: factor.secretCiphertext,
-        nonce: factor.secretNonce,
-        tag: factor.secretTag,
-        alg: "aes-256-gcm",
-        keyVersion: factor.keyVersion,
-      },
-      purpose: "totp",
-      aad: `totp|${auth.user.id}|${factor.keyVersion}`,
-    });
-    if (!verifyTotp(secret, body.token)) {
-      ctx.metrics.authEvents.inc({ result: "invalid_totp" });
-      return reply
-        .code(401)
-        .send({ error: { code: "invalid_totp", message: "Invalid authenticator code." } });
-    }
-    await ctx.db
-      .update(authFactors)
-      .set({ verifiedAt: new Date() })
-      .where(eq(authFactors.id, factor.id));
-    const codes = generateRecoveryCodes();
-    await ctx.db.delete(recoveryCodes).where(eq(recoveryCodes.userId, auth.user.id));
-    await ctx.db
-      .insert(recoveryCodes)
-      .values(codes.map((code) => ({ userId: auth.user.id, codeHash: hashRecoveryCode(code) })));
     await rotateSessionCookie(ctx, request, reply, {
       userId: auth.user.id,
       twoFactorSatisfied: true,
       keepId: auth.session.id,
     });
     await setSetupStep(ctx, "llm");
-    return { recoveryCodes: codes, next: "llm" };
+    return { recoveryCodes: result.recoveryCodes, next: "llm" };
+  });
+
+  app.post("/api/v1/setup/totp/skip", totpLimit, async (request, reply) => {
+    const auth = await currentUser(ctx, request);
+    requireUser(auth);
+    await requireSetupStep(ctx, "security");
+    await discardUnverifiedTotp(ctx, auth.user.id);
+    await rotateSessionCookie(ctx, request, reply, {
+      userId: auth.user.id,
+      twoFactorSatisfied: true,
+      keepId: auth.session.id,
+    });
+    await setSetupStep(ctx, "llm");
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth.user.id,
+      action: "setup.totp_skipped",
+      resource: auth.user.id,
+    });
+    return { ok: true, next: "llm", totpEnabled: false };
   });
 
   app.post("/api/v1/setup/llm", async (request, reply) => {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
     await requireSetupStep(ctx, "llm");
-    if (!auth.session.twoFactorSatisfied) {
-      return reply
-        .code(401)
-        .send({ error: { code: "2fa_required", message: "Complete 2FA first." } });
-    }
     const body = llmSetupSchema.parse(request.body);
     try {
       await assertSafeResolvedHttpUrl(body.baseUrl);
@@ -384,44 +358,28 @@ export async function buildApp(ctx: AppContext) {
         error: { code: "unsafe_url", message: "LLM base URL host is not allowed." },
       });
     }
-    const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
-    const keyVersion = settingsRows[0]?.keyVersion ?? 1;
-    const encrypted = encryptSecret({
-      masterKey: ctx.masterKey,
-      plaintext: body.apiKey,
-      purpose: "llm",
-      keyVersion,
-      aad: `llm|${keyVersion}`,
-    });
-    const [secret] = await ctx.db
-      .insert(encryptedSecrets)
-      .values({
-        purpose: "llm",
-        ciphertext: encrypted.ciphertext,
-        nonce: encrypted.nonce,
-        tag: encrypted.tag,
-        alg: encrypted.alg,
-        keyVersion: encrypted.keyVersion,
-      })
-      .returning();
-    await ctx.db.insert(providerConfigs).values({
-      kind: body.provider,
-      settings: { baseUrl: body.baseUrl, model: body.model, configured: true },
-      secretId: secret?.id,
-    });
+    await saveLlmProvider(ctx, body);
     await setSetupStep(ctx, "domains_sources");
     return { ok: true, next: "domains_sources", configured: true };
+  });
+
+  app.post("/api/v1/setup/llm/skip", async (request) => {
+    const auth = await currentUser(ctx, request);
+    requireUser(auth);
+    await requireSetupStep(ctx, "llm");
+    await setSetupStep(ctx, "domains_sources");
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth.user.id,
+      action: "setup.llm_skipped",
+      resource: auth.user.id,
+    });
+    return { ok: true, next: "domains_sources", configured: false };
   });
 
   app.post("/api/v1/setup/complete", async (request, reply) => {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
     await requireSetupStep(ctx, "domains_sources");
-    if (!auth.session.twoFactorSatisfied) {
-      return reply
-        .code(401)
-        .send({ error: { code: "2fa_required", message: "Complete 2FA first." } });
-    }
     const body = completeSetupSchema.parse(request.body);
     try {
       assertSupportedMarketDomains(body.marketDomainIds);
@@ -489,38 +447,35 @@ export async function buildApp(ctx: AppContext) {
         .code(401)
         .send({ error: { code: "invalid_credentials", message: "Invalid credentials." } });
     }
-    await issueSession(ctx, request, reply, { userId: user.id, twoFactorSatisfied: false });
+    const totp = await loadVerifiedTotpFactor(ctx, user.id);
+    await issueSession(ctx, request, reply, {
+      userId: user.id,
+      twoFactorSatisfied: !totp,
+    });
     ctx.metrics.authEvents.inc({ result: "login" });
-    return { ok: true, requiresTwoFactor: true };
+    if (!totp) {
+      await sendSecurityMail({
+        config: ctx.config,
+        to: user.email,
+        kind: "new_session",
+        text: `A session was opened for ${user.email}. You can revoke it from Settings.`,
+        logger: ctx.logger,
+      });
+    }
+    return { ok: true, requiresTwoFactor: Boolean(totp) };
   });
 
   app.post("/api/v1/auth/2fa", authLimit, async (request, reply) => {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
     const body = twoFactorSchema.parse(request.body);
-    const factors = await ctx.db
-      .select()
-      .from(authFactors)
-      .where(eq(authFactors.userId, auth.user.id))
-      .limit(1);
-    const factor = factors[0];
+    const factor = await loadVerifiedTotpFactor(ctx, auth.user.id);
     if (!factor) {
       return reply
         .code(400)
         .send({ error: { code: "missing_totp", message: "No TOTP configured." } });
     }
-    const secret = decryptSecretWithKeys({
-      keys: ctx.masterKeys,
-      secret: {
-        ciphertext: factor.secretCiphertext,
-        nonce: factor.secretNonce,
-        tag: factor.secretTag,
-        alg: "aes-256-gcm",
-        keyVersion: factor.keyVersion,
-      },
-      purpose: "totp",
-      aad: `totp|${auth.user.id}|${factor.keyVersion}`,
-    });
+    const secret = decryptTotpSecret(ctx, factor, auth.user.id);
     const codes = await ctx.db
       .select()
       .from(recoveryCodes)
@@ -833,29 +788,97 @@ export async function buildApp(ctx: AppContext) {
       id: auth.user.id,
       email: auth.user.email,
       twoFactorSatisfied: auth.session.twoFactorSatisfied,
+      totpEnabled: Boolean(await loadVerifiedTotpFactor(ctx, auth.user.id)),
     };
   });
 
-  app.get("/api/v1/overview", { preHandler: authed }, async () => {
+  app.get("/api/v1/overview", { preHandler: authed }, async (request) => {
+    const auth = await currentUser(ctx, request);
     const agentRows = await ctx.db
       .select()
       .from(agents)
       .limit(ctx.config.RIDDLR_SCHEDULER_AGENT_LIMIT);
-    const signalRows = await ctx.db.select().from(signals).limit(10);
-    const scanRows = await ctx.db.select().from(scans).limit(10);
+    const signalRows = await ctx.db
+      .select()
+      .from(signals)
+      .orderBy(desc(signals.createdAt))
+      .limit(10);
+    const scanRows = await ctx.db.select().from(scans).orderBy(desc(scans.startedAt)).limit(10);
     const sourceRows = await ctx.db
       .select()
       .from(sources)
       .limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
     const domains = await ctx.db.select().from(marketDomains).limit(16);
+    const eventRows = await ctx.db.select().from(events).orderBy(desc(events.windowStart)).limit(8);
     const usage = await ctx.db.select().from(aiUsageEvents).limit(20);
+    const providers = await ctx.db.select().from(providerConfigs).limit(16);
+    const portfolioRows = await ctx.db.select().from(portfolios).limit(16);
+    const llmConfigured = providers.some(
+      (item) =>
+        item.kind.includes("compatible") ||
+        item.kind.includes("openai") ||
+        item.kind.includes("anthropic"),
+    );
+    const totpEnabled = Boolean(auth && (await loadVerifiedTotpFactor(ctx, auth.user.id)));
+    const telegramConfigured = providers.some((item) => item.kind === "telegram");
+    const whatsappConfigured = providers.some((item) => item.kind === "whatsapp");
+    const hasPrimarySocial = sourceRows.some(
+      (item) => item.adapterId === "discord" || item.adapterId === "x",
+    );
     return {
       agents: agentRows,
       signals: signalRows,
       scans: scanRows,
+      events: eventRows,
       sources: sourceRows.map(publicSource),
       domains,
       aiUsage: usage,
+      llmConfigured,
+      totpEnabled,
+      nextSteps: [
+        {
+          id: "llm",
+          title: "Connect a model",
+          body: "Analysis needs a provider. Scans still collect evidence without one.",
+          href: "/settings",
+          done: llmConfigured,
+        },
+        {
+          id: "totp",
+          title: "Turn on authenticator",
+          body: "Sign-in should require a 6-digit code once a factor is verified.",
+          href: "/settings",
+          done: totpEnabled,
+        },
+        {
+          id: "social",
+          title: "Add Discord or X",
+          body: "Search hits are not independent primaries. Discord and X can be.",
+          href: "/sources/new",
+          done: hasPrimarySocial,
+        },
+        {
+          id: "portfolio",
+          title: "Record a portfolio",
+          body: "Declared holdings let material events overlap with what you hold. Public addresses only.",
+          href: "/portfolios/new",
+          done: portfolioRows.length > 0,
+        },
+        {
+          id: "notify",
+          title: "Send signals somewhere",
+          body: "Telegram or WhatsApp delivers after risk, cooldown, and quiet hours.",
+          href: "/settings",
+          done: telegramConfigured || whatsappConfigured,
+        },
+        {
+          id: "scan",
+          title: "Run the first scan",
+          body: "A scan clusters evidence. Signals appear only after a material event is analyzed.",
+          href: "/agents",
+          done: scanRows.length > 0,
+        },
+      ],
     };
   });
 
@@ -899,7 +922,34 @@ export async function buildApp(ctx: AppContext) {
           .orderBy(desc(events.windowStart))
           .limit(limit)
       : await ctx.db.select().from(events).orderBy(desc(events.windowStart)).limit(limit);
-    return { events: rows };
+    const ids = rows.map((row) => row.id);
+    const assetLinks =
+      ids.length > 0
+        ? await ctx.db
+            .select()
+            .from(eventAssets)
+            .where(inArray(eventAssets.eventId, ids))
+            .limit(200)
+        : [];
+    const assetIds = [...new Set(assetLinks.map((item) => item.assetId))];
+    const assetRows =
+      assetIds.length > 0
+        ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(200)
+        : [];
+    return {
+      events: rows.map((row) => ({
+        ...row,
+        assets: assetLinks
+          .filter((link) => link.eventId === row.id)
+          .map((link) => assetRows.find((asset) => asset.id === link.assetId))
+          .filter((item): item is (typeof assetRows)[number] => Boolean(item))
+          .map((asset) => ({
+            canonicalId: asset.canonicalId,
+            symbol: asset.symbol,
+            name: asset.name,
+          })),
+      })),
+    };
   });
   app.get("/api/v1/events/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -1031,7 +1081,8 @@ export async function buildApp(ctx: AppContext) {
       sources: sourceRows.map(publicSource),
     };
   });
-  app.get("/api/v1/settings", { preHandler: authed }, async () => {
+  app.get("/api/v1/settings", { preHandler: authed }, async (request) => {
+    const auth = await currentUser(ctx, request);
     const providers = await ctx.db.select().from(providerConfigs).limit(16);
     const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
     return {
@@ -1043,6 +1094,7 @@ export async function buildApp(ctx: AppContext) {
       ),
       telegramConfigured: providers.some((item) => item.kind === "telegram"),
       whatsappConfigured: providers.some((item) => item.kind === "whatsapp"),
+      totpEnabled: Boolean(auth && (await loadVerifiedTotpFactor(ctx, auth.user.id))),
       notificationPolicy: settingsRows[0]?.notificationPolicy ?? {
         minRisk: "moderate",
         cooldownMinutes: 30,
@@ -1069,6 +1121,53 @@ export async function buildApp(ctx: AppContext) {
       })),
     };
   });
+  app.post("/api/v1/settings/llm", { preHandler: authed }, async (request, reply) => {
+    const body = llmSetupSchema.parse(request.body);
+    try {
+      await assertSafeResolvedHttpUrl(body.baseUrl);
+    } catch {
+      return reply.code(400).send({
+        error: { code: "unsafe_url", message: "LLM base URL host is not allowed." },
+      });
+    }
+    await saveLlmProvider(ctx, body);
+    const auth = await currentUser(ctx, request);
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth?.user.id,
+      action: "settings.llm",
+      resource: auth?.user.id,
+    });
+    return { ok: true, configured: true };
+  });
+  app.post("/api/v1/settings/totp/start", { ...totpLimit, preHandler: authed }, async (request) => {
+    const auth = await currentUser(ctx, request);
+    requireUser(auth);
+    return startTotpEnrollment(ctx, auth.user.id, auth.user.email);
+  });
+  app.post(
+    "/api/v1/settings/totp/verify",
+    { ...totpLimit, preHandler: authed },
+    async (request, reply) => {
+      const auth = await currentUser(ctx, request);
+      requireUser(auth);
+      const body = totpVerifySchema.parse(request.body);
+      const result = await confirmTotpEnrollment(ctx, auth.user.id, body.token);
+      if (!result.ok) {
+        if (result.code === "invalid_totp") {
+          ctx.metrics.authEvents.inc({ result: "invalid_totp" });
+          return reply.code(401).send({ error: { code: result.code, message: result.message } });
+        }
+        const status = result.code === "totp_enabled" ? 409 : 400;
+        return reply.code(status).send({ error: { code: result.code, message: result.message } });
+      }
+      await ctx.db.insert(auditLogs).values({
+        actorUserId: auth.user.id,
+        action: "auth.totp_enabled",
+        resource: auth.user.id,
+      });
+      return { recoveryCodes: result.recoveryCodes, totpEnabled: true };
+    },
+  );
   app.get("/api/v1/sessions", { preHandler: authed }, async (request) => {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
@@ -1142,29 +1241,13 @@ export async function buildApp(ctx: AppContext) {
     const auth = await currentUser(ctx, request);
     requireUser(auth);
     const body = recoveryRotateSchema.parse(request.body);
-    const factors = await ctx.db
-      .select()
-      .from(authFactors)
-      .where(eq(authFactors.userId, auth.user.id))
-      .limit(1);
-    const factor = factors[0];
+    const factor = await loadVerifiedTotpFactor(ctx, auth.user.id);
     if (!factor) {
       return reply
         .code(400)
         .send({ error: { code: "missing_totp", message: "No TOTP configured." } });
     }
-    const secret = decryptSecretWithKeys({
-      keys: ctx.masterKeys,
-      secret: {
-        ciphertext: factor.secretCiphertext,
-        nonce: factor.secretNonce,
-        tag: factor.secretTag,
-        alg: "aes-256-gcm",
-        keyVersion: factor.keyVersion,
-      },
-      purpose: "totp",
-      aad: `totp|${auth.user.id}|${factor.keyVersion}`,
-    });
+    const secret = decryptTotpSecret(ctx, factor, auth.user.id);
     if (!verifyTotp(secret, body.token)) {
       return reply.code(401).send({ error: { code: "invalid_totp", message: "Invalid code." } });
     }
@@ -1210,31 +1293,17 @@ export async function buildApp(ctx: AppContext) {
         .code(401)
         .send({ error: { code: "invalid_credentials", message: "Invalid credentials." } });
     }
-    const factors = await ctx.db
-      .select()
-      .from(authFactors)
-      .where(eq(authFactors.userId, auth.user.id))
-      .limit(1);
-    const factor = factors[0];
-    if (!factor) {
-      return reply
-        .code(400)
-        .send({ error: { code: "missing_totp", message: "No TOTP configured." } });
-    }
-    const secret = decryptSecretWithKeys({
-      keys: ctx.masterKeys,
-      secret: {
-        ciphertext: factor.secretCiphertext,
-        nonce: factor.secretNonce,
-        tag: factor.secretTag,
-        alg: "aes-256-gcm",
-        keyVersion: factor.keyVersion,
-      },
-      purpose: "totp",
-      aad: `totp|${auth.user.id}|${factor.keyVersion}`,
-    });
-    if (!verifyTotp(secret, body.token)) {
-      return reply.code(401).send({ error: { code: "invalid_totp", message: "Invalid code." } });
+    const totp = await loadVerifiedTotpFactor(ctx, auth.user.id);
+    if (totp) {
+      if (!body.token) {
+        return reply
+          .code(400)
+          .send({ error: { code: "missing_totp", message: "Authenticator code is required." } });
+      }
+      const secret = decryptTotpSecret(ctx, totp, auth.user.id);
+      if (!verifyTotp(secret, body.token)) {
+        return reply.code(401).send({ error: { code: "invalid_totp", message: "Invalid code." } });
+      }
     }
     const rotated = await rotateEncryptionKeys(ctx);
     await ctx.db.insert(auditLogs).values({

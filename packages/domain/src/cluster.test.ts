@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  absorbMarketDataClusters,
   characterShingles,
+  clusterEventTitle,
   clusterEvidence,
   independenceGraph,
   isNearDuplicate,
@@ -81,6 +83,39 @@ describe("near-duplicate clustering", () => {
     expect(clusters).toHaveLength(8);
     expect(remainder).toHaveLength(12);
     expect(clusters.flat()).toHaveLength(8);
+  });
+
+  it("absorbs market snapshots into a news cluster that already has the asset", () => {
+    const merged = absorbMarketDataClusters([
+      [
+        {
+          id: "news",
+          assetCanonicalIds: ["coingecko:bitcoin"],
+          text: "Bitcoin ETF inflows rose after a filing",
+          sourceFamily: "search",
+        },
+      ],
+      [
+        {
+          id: "px",
+          assetCanonicalIds: ["coingecko:bitcoin"],
+          text: "Bitcoin quoted at USD 64000",
+          sourceFamily: "market_data",
+        },
+      ],
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.map((item) => item.id).sort()).toEqual(["news", "px"]);
+  });
+
+  it("titles clusters from assets and hosts instead of homepage copy", () => {
+    expect(
+      clusterEventTitle({
+        assets: [{ canonicalId: "coingecko:ethereum", displayName: "Ethereum", symbol: "ETH" }],
+        evidenceTitles: ["Ethereum - Wikipedia"],
+        hostnames: ["en.wikipedia.org"],
+      }),
+    ).toBe("Ethereum cluster · en.wikipedia.org");
   });
 
   it("counts Reuters reprints as one independent host", () => {

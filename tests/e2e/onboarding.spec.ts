@@ -6,12 +6,12 @@ test.describe.configure({ mode: "serial" });
 
 const password = "correct horse battery";
 const email = "ops@example.com";
-let otpauth = "";
+const otpauth = "";
 
 async function signIn(page: Page) {
   await page.goto("/");
   const overview = page.getByRole("heading", { name: "Overview" });
-  const signin = page.getByRole("heading", { name: "Sign in" });
+  const signin = page.getByRole("heading", { name: "Welcome back" });
   await expect(overview.or(signin)).toBeVisible({ timeout: 15_000 });
   if (await overview.isVisible()) {
     return;
@@ -19,8 +19,11 @@ async function signIn(page: Page) {
   await page.getByLabel(/Email/).fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Authenticator or recovery code").fill(totpFromOtpauth(otpauth));
-  await page.getByRole("button", { name: "Verify" }).click();
+  const totp = page.getByLabel("Authenticator or recovery code");
+  if (await totp.isVisible()) {
+    await totp.fill(totpFromOtpauth(otpauth));
+    await page.getByRole("button", { name: "Verify" }).click();
+  }
   await expect(overview).toBeVisible();
 }
 
@@ -35,39 +38,30 @@ test("first-run onboarding is four steps with crypto supported and other domains
   page,
 }) => {
   await page.goto("/");
-  const setupHeading = page.getByRole("heading", { name: "First-run setup" });
+  const setupHeading = page.getByRole("heading", { name: "Set up Riddlr" });
   await expect(setupHeading).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("list", { name: "Setup steps" })).toBeVisible();
-  await expect(page.getByRole("listitem").filter({ hasText: "Authenticator" })).toBeVisible();
-  await expect(page.getByText("LLM provider")).toBeVisible();
-  await expect(page.getByText("Domains and sources")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Security" })).toBeVisible();
+  await expect(page.getByText("Model")).toBeVisible();
+  await expect(page.getByText("Sources")).toBeVisible();
 
-  if (await page.getByRole("button", { name: "Create administrator" }).isVisible()) {
-    await page.getByLabel(/Email/).fill(email);
-    await page.getByLabel("Password").fill(password);
-    await expectNoSeriousAxe(page);
-    await page.getByRole("button", { name: "Create administrator" }).click();
-  } else {
-    const login = await page.request.post("/api/v1/auth/login", {
-      headers: { "content-type": "application/json" },
-      data: JSON.stringify({ email, password }),
-    });
-    expect(login.ok()).toBeTruthy();
-  }
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password").fill(password);
+  await expectNoSeriousAxe(page);
+  await page.getByRole("button", { name: "Create administrator" }).click();
 
-  await expect(page.getByRole("button", { name: "Generate authenticator secret" })).toBeVisible();
-  await page.getByRole("button", { name: "Generate authenticator secret" }).click();
-  await expect(page.getByText(/otpauth:\/\//)).toBeVisible();
-  const totpText = (await page.getByText(/otpauth:\/\//).textContent()) ?? "";
-  otpauth = totpText.match(/otpauth:\/\/\S+/)?.[0] ?? "";
-  await page.getByLabel("Authenticator code").fill(totpFromOtpauth(otpauth));
-  await page.getByRole("button", { name: "Verify 2FA" }).click();
-  await expect(page.getByRole("heading", { name: "Recovery codes" })).toBeVisible();
-  await page.getByRole("button", { name: "I have saved these codes" }).click();
+  await expect(page.getByRole("heading", { name: "Save your password" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("img", { name: "Google Authenticator QR code" })).toBeVisible();
+  await expect(page.getByText(/Setup key/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Skip for now" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByLabel("API key")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Skip for now" })).toBeVisible();
   await page.getByLabel("API key").fill("sk-e2e-not-a-real-key");
   await page.getByRole("button", { name: "Save provider" }).click();
-  await expect(page.getByRole("heading", { name: "What should Riddlr monitor?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose markets" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Crypto/ })).toBeChecked();
   for (const name of ["Equities", "Forex", "Commodities", "Macro"]) {
     await expect(page.getByRole("checkbox", { name: new RegExp(name) })).toBeDisabled();
@@ -76,46 +70,63 @@ test("first-run onboarding is four steps with crypto supported and other domains
   await expectNoSeriousAxe(page);
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 20_000 });
-  expect(otpauth).toMatch(/^otpauth:\/\//);
 
   await signIn(page);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText("Riddlr Intelligence Agent")).toBeVisible();
-  await expect(page.getByText("Coming soon").first()).toBeVisible();
 });
 
 test("dashboard surfaces, settings, health, and responsive layout @a11y", async ({ page }) => {
+  test.setTimeout(60_000);
   await signIn(page);
   await page.getByRole("link", { name: "Agents" }).click();
-  await expect(page.getByText("Domains: crypto")).toBeVisible();
-  await page.getByLabel("Agent name").fill("Watchlist agent");
-  await page.getByLabel("Canonical asset ids", { exact: true }).fill("coingecko:bitcoin");
-  await page.getByRole("button", { name: "Create agent" }).click();
-  await expect(page.getByRole("heading", { name: "Watchlist agent" })).toBeVisible();
+  await expect(page.getByText("Domains: crypto").first()).toBeVisible();
+  const watchlistAgent = page.getByRole("heading", { name: "Watchlist agent" });
+  const watchlistLink = page.getByRole("link", { name: "Watchlist agent" });
+  if ((await watchlistAgent.count()) === 0 && (await watchlistLink.count()) === 0) {
+    await page.getByRole("link", { name: "Create agent" }).click();
+    await page.getByLabel("Agent name").fill("Watchlist agent");
+    await page.getByRole("button", { name: "Bitcoin" }).click();
+    await page.getByRole("button", { name: "Create agent" }).click();
+  }
+  await expect(
+    page.getByRole("link", { name: "Watchlist agent" }).or(watchlistAgent).first(),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Sources" }).click();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await expect(page.getByRole("heading", { name: "Discord" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "CoinGecko" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "CoinMarketCap" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Crypto.com Exchange" })).toBeVisible();
+  await page.getByRole("link", { name: "Configure Discord" }).click();
   await expect(page.getByRole("heading", { name: "Add Discord source" })).toBeVisible();
   await expect(page.getByText(/MESSAGE_CONTENT/)).toBeVisible();
   await expect(page.getByText(/not guild message-search archive/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure X" }).click();
   await expect(page.getByRole("heading", { name: "Add X source" })).toBeVisible();
-  await expect(page.getByText(/does not call archive search/i)).toBeVisible();
+  await expect(page.getByText(/Recent search only/)).toBeVisible();
   await page.getByRole("link", { name: "Portfolios" }).click();
-  await expect(page.getByText(/Never paste a seed phrase/i)).toBeVisible();
+  await expect(page.getByText(/Never enter a seed phrase/i)).toBeVisible();
   await page.getByRole("link", { name: "Signals" }).click();
   await expect(page.getByText(/No signals|Signals/)).toBeVisible();
   await page.getByRole("link", { name: "Settings" }).click();
-  await expect(page.getByText("aes-256-gcm")).toBeVisible();
-  await expect(page.getByText(/LLM: configured/)).toBeVisible();
+  await expect(page.getByText("Connected").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "WhatsApp Cloud API" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
   await expect(page.getByText("Current session")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Recovery codes" })).toBeVisible();
   await expect(page.getByText(/remaining/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
-  await expect(page.getByText(/Key version/)).toBeVisible();
-  await page.getByRole("link", { name: "System Health" }).click();
-  await expect(page.getByText("PostgreSQL: ok")).toBeVisible();
-  await expect(page.getByText(/Worker concurrency:/)).toBeVisible();
+  await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();
+  await page.getByRole("link", { name: "Health" }).click();
+  await expect(page.getByRole("heading", { name: "PostgreSQL" })).toBeVisible();
+  await expect(page.getByText("Concurrency")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
+  const menu = page.getByRole("button", { name: "Open navigation" });
+  if (await menu.isVisible()) {
+    await menu.click();
+  }
   await page.getByRole("link", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expectNoSeriousAxe(page);
@@ -123,6 +134,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
 
 test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page }) => {
   await signIn(page);
+  await page.getByRole("link", { name: "Events" }).click();
+  await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
   await page.getByRole("link", { name: "Watchlists" }).click();
   await expect(page.getByRole("heading", { name: /Watchlists/i })).toBeVisible();
   await page.getByRole("link", { name: "Notifications" }).click();
@@ -137,14 +150,12 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await expect(page.locator(":focus")).toBeVisible();
 });
 
-test("login requires 2FA after sign out", async ({ page }) => {
+test("login after sign out returns to overview", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await page.getByLabel(/Email/).fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Authenticator or recovery code").fill(totpFromOtpauth(otpauth));
-  await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 });

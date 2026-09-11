@@ -14,7 +14,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { message?
 
   override render() {
     if (this.state.message) {
-      return <EmptyState title="Something went wrong" body={this.state.message} />;
+      return <EmptyState asPageTitle title="Something went wrong" body={this.state.message} />;
     }
     return this.props.children;
   }

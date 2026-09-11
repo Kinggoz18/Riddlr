@@ -3,8 +3,13 @@
 No social sign-on.
 
 - Email or username plus Argon2id password
+- First-run asks for the password twice, then a skippable Keychain / password
+  manager save before authenticator setup
 - Opaque PostgreSQL sessions in an HttpOnly cookie
-- TOTP (RFC 6238) required during first-run
+- TOTP (RFC 6238) strongly advised during first-run and skippable; required at
+  sign-in only after it is enabled
+- Google Authenticator QR plus the base32 key; confirm a 6-digit code before
+  enable
 - Hashed single-use recovery codes; Settings shows remaining count only
 - Recovery rotate requires TOTP and returns new codes once
 - Password change revokes other sessions and keeps the current session

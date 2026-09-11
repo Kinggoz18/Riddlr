@@ -68,6 +68,7 @@ export type ClusterableEvidence = {
   text: string;
   publishedAt?: Date;
   hostname?: string;
+  sourceFamily?: string;
 };
 
 function inTimeWindow(left?: Date, right?: Date): boolean {
@@ -112,6 +113,72 @@ export function clusterEvidence<T extends ClusterableEvidence>(
 
 export function eventClusterFingerprint(ids: string[]): string {
   return [...ids].sort().join("|");
+}
+
+export function absorbMarketDataClusters<T extends ClusterableEvidence>(clusters: T[][]): T[][] {
+  const news = clusters.filter((cluster) =>
+    cluster.some((item) => item.sourceFamily !== "market_data"),
+  );
+  const market = clusters.filter(
+    (cluster) => cluster.length > 0 && cluster.every((item) => item.sourceFamily === "market_data"),
+  );
+  for (const snapshot of market) {
+    const ids = new Set(snapshot.flatMap((item) => item.assetCanonicalIds));
+    const host = news.find((cluster) =>
+      cluster.some((item) => item.assetCanonicalIds.some((id) => ids.has(id))),
+    );
+    if (host) {
+      host.push(...snapshot);
+    } else {
+      news.push(snapshot);
+    }
+  }
+  return news;
+}
+
+export function clusterEventTitle(input: {
+  assets: Array<{ displayName?: string | null; symbol?: string | null; canonicalId: string }>;
+  evidenceTitles: Array<string | null | undefined>;
+  hostnames: string[];
+}): string {
+  const assetLabels = takeBounded(
+    [
+      ...new Set(
+        input.assets.map((asset) => {
+          if (asset.displayName?.trim()) {
+            return asset.displayName.trim();
+          }
+          if (asset.symbol?.trim()) {
+            return asset.symbol.trim().toUpperCase();
+          }
+          return asset.canonicalId.split(":")[1]?.replace(/-/g, " ") ?? asset.canonicalId;
+        }),
+      ),
+    ],
+    3,
+  );
+  const hosts = takeBounded(
+    [
+      ...new Set(
+        input.hostnames
+          .map((host) => host.toLowerCase())
+          .filter((host) => host.length > 0 && host !== "unknown-host"),
+      ),
+    ],
+    2,
+  );
+  const hostSuffix = hosts.length > 0 ? ` · ${hosts.join(", ")}` : "";
+  if (assetLabels.length > 0) {
+    return `${assetLabels.join(", ")} cluster${hostSuffix}`;
+  }
+  const useful = input.evidenceTitles.find((title) => {
+    const value = title?.trim() ?? "";
+    return value.length >= 8 && value.length <= 140;
+  });
+  if (useful?.trim()) {
+    return `${useful.trim()}${hostSuffix}`;
+  }
+  return hosts.length > 0 ? `Evidence cluster · ${hosts[0]}` : "Unlabeled evidence cluster";
 }
 
 export type IndependenceNode = {

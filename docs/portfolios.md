@@ -4,8 +4,13 @@ Portfolios are read-only books of **public wallet addresses** and
 **operator-declared holdings**. Riddlr never asks for a seed phrase or private
 key and never submits a transaction.
 
-Holdings use canonical asset IDs (`coingecko:bitcoin`), not bare tickers.
-Quantity is an operator-declared figure. It is not fetched from chain.
+Holdings use canonical asset IDs (`coingecko:bitcoin`) underneath named
+assets in the dashboard. Quantity is an operator-declared figure. It is not
+fetched from chain.
+
+When CoinGecko, CoinMarketCap, or Crypto.com Exchange is the active market-data
+source, the portfolio list and detail screens show USD marks, 24h change, and
+weights. Only one market-data source is enabled at a time.
 
 On-chain scanning is **not implemented**. An unknown `onchain` source adapter
 records `capability_missing` and does not invent balances.

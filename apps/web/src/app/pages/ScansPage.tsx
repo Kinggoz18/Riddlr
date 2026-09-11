@@ -1,6 +1,11 @@
-import { Button, Card, EmptyState } from "@riddlr/ui";
+import { Button, Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
+
+const dateTime = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 function ScansPage() {
   const [data, setData] = useState<{
@@ -28,20 +33,33 @@ function ScansPage() {
   }
   return (
     <>
-      <h1>Scan history</h1>
-      {data.scans.map((scan) => (
-        <Card key={scan.id}>
-          <p>
-            {scan.status} {scan.partial ? "(partial)" : ""}
-          </p>
+      <PageHeader
+        title="Scan history"
+        description="Each run records source success, partial failure, and evidence counts. Failed sources do not invent empty success."
+      />
+      <section className="record-list">
+        {data.scans.map((scan) => (
+          <Card key={scan.id} className="record-row">
+            <time dateTime={scan.startedAt}>{dateTime.format(new Date(scan.startedAt))}</time>
+            <StatusBadge
+              label={scan.partial ? `${scan.status} · partial` : scan.status}
+              tone={scan.status === "failed" ? "danger" : "ok"}
+            />
+          </Card>
+        ))}
+      </section>
+      {data.sourceRuns.some((run) => run.errorMessage) ? (
+        <Card>
+          <h2>Source errors</h2>
+          <ul className="data-list">
+            {data.sourceRuns
+              .filter((run) => run.errorMessage)
+              .map((run, index) => (
+                <li key={`${run.status}-${run.errorMessage}-${index}`}>{run.errorMessage}</li>
+              ))}
+          </ul>
         </Card>
-      ))}
-      {data.sourceRuns.map((run, index) => (
-        <p key={`${run.status}-${run.errorMessage ?? "ok"}-${index}`}>
-          Source run: {run.status}
-          {run.errorMessage ? ` — ${run.errorMessage}` : ""}
-        </p>
-      ))}
+      ) : null}
       {hasMore && data.scans.length < CLIENT_LIST_CAP ? (
         <Button
           onClick={async () => {

@@ -1,8 +1,10 @@
 export {
+  absorbMarketDataClusters,
   CLUSTER_SIMILARITY_THRESHOLD,
   CLUSTER_WINDOW_MS,
   type ClusterableEvidence,
   characterShingles,
+  clusterEventTitle,
   clusterEvidence,
   eventClusterFingerprint,
   type IndependenceEdge,

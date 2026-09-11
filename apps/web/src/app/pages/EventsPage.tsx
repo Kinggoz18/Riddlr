@@ -1,23 +1,27 @@
-import { Button, Card, EmptyState } from "@riddlr/ui";
+import { Button, Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
+import { dateTime, eventStatusLabel, independenceCopy } from "../format.js";
+
+type EventRow = {
+  id: string;
+  title: string;
+  status: string;
+  independentCount: number;
+  derivedCount: number;
+  windowStart: string;
+  materialityReason?: string | null;
+  assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
+};
 
 function EventsPage() {
-  const [rows, setRows] = useState<
-    Array<{
-      id: string;
-      title: string;
-      independentCount: number;
-      derivedCount: number;
-      windowStart: string;
-    }>
-  >([]);
+  const [rows, setRows] = useState<EventRow[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   useEffect(() => {
-    void api<{ events: typeof rows }>("/api/v1/events?limit=50")
+    void api<{ events: EventRow[] }>("/api/v1/events?limit=50")
       .then((value) => {
         setRows(value.events);
         setHasMore(value.events.length === 50);
@@ -31,39 +35,59 @@ function EventsPage() {
   if (error) {
     return <EmptyState title="Unable to load events" body={error} />;
   }
-  if (rows.length === 0) {
-    return (
-      <EmptyState title="No events" body="Events appear when evidence clusters after a scan." />
-    );
-  }
   return (
     <>
-      <h1>Events</h1>
-      {rows.map((row) => (
-        <Card key={row.id}>
-          <NavLink to={`/events/${row.id}`}>{row.title}</NavLink>
-          <p>
-            Independent {row.independentCount} · Derived {row.derivedCount}
-          </p>
-        </Card>
-      ))}
-      {hasMore && rows.length < CLIENT_LIST_CAP ? (
-        <Button
-          onClick={async () => {
-            const last = rows.at(-1);
-            if (!last) {
-              return;
-            }
-            const body = await api<{ events: typeof rows }>(
-              `/api/v1/events?limit=50&before=${encodeURIComponent(last.windowStart)}`,
-            );
-            setRows((current) => takeBoundedClient(current, body.events));
-            setHasMore(body.events.length === 50);
-          }}
-        >
-          Load older
-        </Button>
-      ) : null}
+      <PageHeader
+        title="Events"
+        description="Clusters of related evidence in a time window. Independent sources are primaries, not reprints of the same page. Signals are created later, only when a cluster is material and analyzed."
+      />
+      {rows.length === 0 ? (
+        <EmptyState
+          title="No events"
+          body="An event is a cluster of evidence from a scan — not a single search hit. Run a scan from Agents."
+        />
+      ) : (
+        <>
+          <section className="record-list">
+            {rows.map((row) => (
+              <Card key={row.id} className="record-row">
+                <NavLink to={`/events/${row.id}`}>{row.title}</NavLink>
+                <StatusBadge label={eventStatusLabel(row.status)} />
+                <p className="record-meta">
+                  <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
+                  <time dateTime={row.windowStart}>
+                    {dateTime.format(new Date(row.windowStart))}
+                  </time>
+                  {(row.assets ?? []).length > 0 ? (
+                    <span>
+                      {(row.assets ?? [])
+                        .map((asset) => asset.symbol || asset.name || asset.canonicalId)
+                        .join(", ")}
+                    </span>
+                  ) : null}
+                </p>
+              </Card>
+            ))}
+          </section>
+          {hasMore && rows.length < CLIENT_LIST_CAP ? (
+            <Button
+              onClick={async () => {
+                const last = rows.at(-1);
+                if (!last) {
+                  return;
+                }
+                const body = await api<{ events: EventRow[] }>(
+                  `/api/v1/events?limit=50&before=${encodeURIComponent(last.windowStart)}`,
+                );
+                setRows((current) => takeBoundedClient(current, body.events));
+                setHasMore(body.events.length === 50);
+              }}
+            >
+              Load older
+            </Button>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

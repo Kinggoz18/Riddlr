@@ -33,7 +33,7 @@ export const recoveryRotateSchema = z.object({
 
 export const keyRotateSchema = z.object({
   currentPassword: z.string().min(1),
-  token: z.string().min(6),
+  token: z.string().min(6).optional(),
 });
 
 export const pageQuerySchema = z.object({
@@ -123,8 +123,29 @@ export const skillCreateSchema = z.object({
   markdownBody: z.string().min(8).max(32_768),
 });
 
+export const skillUpdateSchema = z.object({
+  markdownBody: z.string().min(8).max(32_768),
+});
+
 export const watchlistReplaceSchema = z.object({
   items: z.array(watchlistItemSchema).max(50),
+});
+
+export const coingeckoSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("CoinGecko"),
+  apiKey: z.string().min(8).max(200).optional(),
+  assetIds: z.array(z.string().min(2).max(80)).max(16).optional(),
+});
+
+export const coinmarketcapSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("CoinMarketCap"),
+  apiKey: z.string().min(8).max(200),
+  assetIds: z.array(z.string().min(2).max(80)).max(16).optional(),
+});
+
+export const cryptocomSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Crypto.com Exchange"),
+  assetIds: z.array(z.string().min(2).max(80)).max(16).optional(),
 });
 
 export const discordSourceSchema = z.object({

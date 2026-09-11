@@ -19,10 +19,10 @@ export async function verifyPassword(hash: string, password: string): Promise<bo
   }
 }
 
-export function generateTotpSecret(): { secret: string; otpauth: string } {
+export function generateTotpSecret(account = "Riddlr"): { secret: string; otpauth: string } {
   const totp = new TOTP({
     issuer: "Riddlr",
-    label: "Riddlr",
+    label: account,
     algorithm: "SHA1",
     digits: 6,
     period: 30,

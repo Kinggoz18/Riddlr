@@ -52,6 +52,27 @@ const KNOWN: Record<string, ExtractedAsset> = {
   },
 };
 
+export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
+  {
+    assetClass: "cryptocurrency",
+    canonicalId: "coingecko:bitcoin",
+    symbol: "BTC",
+    displayName: "Bitcoin",
+  },
+  {
+    assetClass: "cryptocurrency",
+    canonicalId: "coingecko:ethereum",
+    symbol: "ETH",
+    displayName: "Ethereum",
+  },
+  {
+    assetClass: "stablecoin",
+    canonicalId: "coingecko:tether",
+    symbol: "USDT",
+    displayName: "Tether",
+  },
+];
+
 const TOKEN_RE = /\b(bitcoin|ethereum|solana|btc|eth|sol|usdt|usdc|meme coin|stablecoin)\b/gi;
 const CRYPTO_ASSET_CLASSES = ["cryptocurrency", "meme_coin", "stablecoin"] as const;
 

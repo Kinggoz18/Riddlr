@@ -15,6 +15,7 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { SetupPage } from "./pages/SetupPage.js";
 import { SignalDetailPage } from "./pages/SignalDetailPage.js";
 import { SignalsPage } from "./pages/SignalsPage.js";
+import { SkillsPage } from "./pages/SkillsPage.js";
 import { SourcesPage } from "./pages/SourcesPage.js";
 import { UsagePage } from "./pages/UsagePage.js";
 import { WatchlistsPage } from "./pages/WatchlistsPage.js";
@@ -47,7 +48,13 @@ export function Gate() {
     return <Skeleton label="Loading…" />;
   }
   if (ready === "error") {
-    return <EmptyState title="Unable to load Riddlr" body={error ?? "Unknown error"} />;
+    return (
+      <EmptyState
+        asPageTitle
+        title="Can’t reach Riddlr"
+        body={error ?? "Check the server, then retry."}
+      />
+    );
   }
   if (ready === "setup") {
     return <SetupPage />;
@@ -63,11 +70,12 @@ export function Gate() {
         <Route path="/signals/:id" element={<SignalDetailPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
-        <Route path="/agents" element={<AgentsPage />} />
-        <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/agents/*" element={<AgentsPage />} />
+        <Route path="/skills/*" element={<SkillsPage />} />
+        <Route path="/sources/*" element={<SourcesPage />} />
         <Route path="/watchlists" element={<WatchlistsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/portfolios" element={<PortfoliosPage />} />
+        <Route path="/portfolios/*" element={<PortfoliosPage />} />
         <Route path="/scans" element={<ScansPage />} />
         <Route path="/usage" element={<UsagePage />} />
         <Route path="/health" element={<HealthPage />} />

@@ -12,9 +12,9 @@ does not call archive search (`/2/tweets/search/all`).
    paid plans do not. A 401 is a bad token. A 403 means recent search is not
    available on that plan.
 
-Sources → **Add X source** accepts authors, mentions, keywords, and a lookback
-of 1–168 hours (seven days). Provide at least one of authors, mentions, or
-keywords.
+Sources → **Add source** → **Configure X** accepts authors, mentions, and
+keywords as chips, plus a lookback of 1–168 hours (seven days). Provide at
+least one of authors, mentions, or keywords.
 
 ## What the adapter actually fetches
 
