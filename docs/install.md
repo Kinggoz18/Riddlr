@@ -13,7 +13,9 @@ Pre-built images skip building from source. They still need Docker.
 On macOS and Linux, `./scripts/riddlr-up.sh` checks this. If Docker is missing
 or stopped, it asks to install or start it (Linux Engine via get.docker.com,
 or Docker Desktop via Homebrew on a Mac). Pass `--install-docker` to skip
-the prompt. Docker Desktop on a Mac still shows its own first-run window. On
+the prompt. Docker Desktop on macOS and Windows shows its own first-run
+window; that window is not part of the Riddlr script. Until it is finished
+(and sometimes until the machine is restarted), `docker` will not work. On
 Linux you may need to log out once so your user can talk to Docker. Windows
 uses `scripts/riddlr-up.ps1` the same way.
 
@@ -35,14 +37,14 @@ See [onboarding.md](onboarding.md).
 If published images exist, the script pulls them. Otherwise it builds from
 the clone.
 
-Without cloning first:
+Without cloning first, this downloads `scripts/install.sh` from GitHub `main`,
+then that script clones the repository into `~/riddlr` and starts Riddlr:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Kinggoz18/Riddlr/main/scripts/install.sh | bash
 ```
 
-That clones into `~/riddlr` and starts Riddlr. Docker is still required. Pass
-flags after `--`:
+Docker is still required. Pass flags after `--`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Kinggoz18/Riddlr/main/scripts/install.sh | bash -s -- --public
@@ -59,9 +61,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\riddlr-up.ps1
 Open http://127.0.0.1:8080 in a browser on the same machine. If Docker Desktop
 is missing, the script asks to install it with winget (or Chocolatey). Pass
 `-InstallDocker` to skip the prompt. Finish Docker Desktop's first-run window
-if it appears. `-Public` exposes the dashboard on the network (see below).
+if it appears, then run the script again if `docker` is still missing. That
+window, and a possible reboot, are not automated. The Windows helper is new
+and has not been verified on a Windows PC; expect install and start to fail
+until Docker Desktop is fully running. `-Public` exposes the dashboard on
+the network (see below).
 
-Without cloning first:
+Without cloning first, this downloads `scripts/install.ps1` from GitHub
+`main`, which then clones the repository and starts Riddlr:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kinggoz18/Riddlr/main/scripts/install.ps1 -OutFile $env:TEMP\riddlr-install.ps1

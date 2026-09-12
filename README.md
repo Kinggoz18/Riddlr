@@ -28,9 +28,9 @@ replace Docker.
 curl -fsSL https://raw.githubusercontent.com/Kinggoz18/Riddlr/main/scripts/install.sh | bash
 ```
 
-That clones into `~/riddlr` and runs the same start script. Windows:
-`scripts/riddlr-up.ps1` after a clone, or `scripts/install.ps1`. See
-[Install](docs/install.md).
+That downloads `scripts/install.sh` from GitHub, which then clones the
+repository into `~/riddlr` and starts Riddlr. Windows: `scripts/riddlr-up.ps1`
+after a clone, or `scripts/install.ps1`. See [Install](docs/install.md).
 
 No `.env` file is required for local Compose. Encryption material is generated
 into a named volume on first boot. Those defaults are for local use, not a

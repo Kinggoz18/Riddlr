@@ -11,6 +11,12 @@
   (Windows: `scripts/riddlr-up.ps1`).
 - Git Bash on Windows cannot install Docker Desktop. Use the PowerShell script,
   or start Docker Desktop yourself and re-run.
+- Docker Desktop first-run window (macOS and Windows): Accept that window, wait
+  until Docker says it is running, restart the machine if `docker` is still
+  missing, then run the start script again. The Riddlr script does not complete
+  that window.
+- Windows `scripts/riddlr-up.ps1` has not been verified on a Windows PC. If it
+  fails after Docker Desktop is running, run it again or open an issue.
 - Can’t open http://127.0.0.1:8080 from another machine: that is expected. Use
   the SSH command from `./scripts/riddlr-up.sh`, or start with `--public`.
 - Compose `ENOSPC` / API cannot write secrets / Postgres checkpoint panic: the
