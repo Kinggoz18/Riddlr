@@ -15,8 +15,9 @@ Before tagging a release:
    ship in the tree.
 7. Record RSS and peak RSS in [benchmarks.md](benchmarks.md) only from a real
    measurement run. Do not invent latency or throughput targets.
-8. Publish container images (see below) so a first start can pull instead of
-   compile. Make the GHCR packages public after the first push.
+8. After tagging, confirm `docker pull` of `ghcr.io/kinggoz18/riddlr-server`
+   and `riddlr-web` works on both `linux/amd64` and `linux/arm64`. New package
+   names start private; set them public once.
 
 Long-history list queries (`events`, `signals`, `evidence`, `audit`, `scans`,
 `observations`) use descending timestamp indexes.
@@ -24,27 +25,23 @@ Long-history list queries (`events`, `signals`, `evidence`, `audit`, `scans`,
 ## Publish container images
 
 The start script pulls `ghcr.io/kinggoz18/riddlr-server:latest` and
-`riddlr-web:latest`. Those names are empty until this runs.
+`riddlr-web:latest` (`linux/amd64` and `linux/arm64`). Re-run this when you
+cut a release or need to rebuild those tags.
 
-1. Land `main` with `.github/workflows/images.yml` and the Compose `image:`
-   pins (lint must pass).
-2. On GitHub: **Actions → images → Run workflow** (use `main`). A `v*` tag
-   also publishes (`v0.1.0` also tags `0.1.0`). Prefer the workflow run until
-   you mean to cut a release.
+1. Land `main` with `.github/workflows/images.yml` (lint must pass).
+2. On GitHub: **Actions → images → Run workflow** (use `main`), or push a
+   `v*` tag (`v0.1.0` also tags `0.1.0`).
 3. Wait until both image builds finish.
-4. Open each new package → **Package settings → Change visibility → Public**:
+4. The first time a package name appears, open **Package settings → Change
+   visibility → Public**:
    - https://github.com/Kinggoz18/Riddlr/pkgs/container/riddlr-server
    - https://github.com/Kinggoz18/Riddlr/pkgs/container/riddlr-web  
-   New packages start **private**. There is no API for this step. Public is
-   required for an unauthenticated `docker compose pull`.
-5. Confirm on the same CPU architecture you expect people to use (Apple
-   Silicon needs `linux/arm64` as well as `linux/amd64`):
+   There is no API for this step. Later pushes to the same names stay public.
+5. Confirm:
 
 ```bash
 docker pull ghcr.io/kinggoz18/riddlr-server:latest
 docker pull ghcr.io/kinggoz18/riddlr-web:latest
 ```
 
-Until step 4, the start script prints that published images are not available
-and builds from the clone. Images currently on GHCR are `linux/amd64` only
-until the `images` workflow is re-run after it publishes `linux/arm64` too.
+If pull fails, the start script builds from the clone.

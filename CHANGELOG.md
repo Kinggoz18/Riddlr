@@ -15,9 +15,9 @@ All notable changes to Riddlr are documented in this file.
   Chocolatey for Docker Desktop).
 - `scripts/install.sh` / `scripts/install.ps1` clone into `~/riddlr` and start
   Compose. They do not replace Docker.
-- The start script pulls published GHCR images (`:latest`) when they exist and
-  are public, otherwise it builds from the clone. Docker is still required.
-  The `images` workflow publishes `linux/amd64` and `linux/arm64`.
+- The start script pulls published GHCR images (`:latest`, `linux/amd64` and
+  `linux/arm64`) when they exist, otherwise it builds from the clone. Docker is
+  still required.
 - Finish starts the default Crypto scan. Saving a model checks that it
   answers (skipped in the test environment).
 - See [install.md](docs/install.md).

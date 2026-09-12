@@ -12,10 +12,10 @@ Riddlr is ready, and print an SSH command when Riddlr is on a remote server.
 that expires after 15 minutes if unused. See [install.md](install.md).
 
 Give Docker at least 10 GB of disk. The start script pulls
-`ghcr.io/kinggoz18/riddlr-server:latest` and `riddlr-web:latest` when those
-tags exist and the packages are public, otherwise it builds from the clone.
-CI still uses `--build`. Pin a digest or version with `RIDDLR_SERVER_IMAGE`
-and `RIDDLR_WEB_IMAGE`.
+`ghcr.io/kinggoz18/riddlr-server:latest` and `riddlr-web:latest`
+(`linux/amd64` and `linux/arm64`). If that pull fails, it builds from the
+clone. CI still uses `--build`. Pin a digest or version with
+`RIDDLR_SERVER_IMAGE` and `RIDDLR_WEB_IMAGE`.
 
 Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
 to overlay the development Caddyfile (`/mailpit*`, `/searxng*`) and publish
