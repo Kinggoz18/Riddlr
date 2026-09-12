@@ -138,9 +138,10 @@ setup code, pass `--setup-code` as well.
 
 The start script pulls `ghcr.io/kinggoz18/riddlr-server:latest` and
 `riddlr-web:latest` when those tags exist and the GitHub packages are public.
-Otherwise it builds from the clone. A `v*` git tag, or a manual run of the
-`images` workflow, publishes them. Set `RIDDLR_SERVER_IMAGE` and
-`RIDDLR_WEB_IMAGE` to pin a version.
+Otherwise it builds from the clone. Images are `linux/amd64` and
+`linux/arm64`. A `v*` git tag, or a manual run of the `images` workflow,
+publishes them. Set `RIDDLR_SERVER_IMAGE` and `RIDDLR_WEB_IMAGE` to pin a
+version.
 
 ## Native development
 

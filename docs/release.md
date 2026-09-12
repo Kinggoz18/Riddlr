@@ -37,7 +37,8 @@ The start script pulls `ghcr.io/kinggoz18/riddlr-server:latest` and
    - https://github.com/Kinggoz18/Riddlr/pkgs/container/riddlr-web  
    New packages start **private**. There is no API for this step. Public is
    required for an unauthenticated `docker compose pull`.
-5. Confirm:
+5. Confirm on the same CPU architecture you expect people to use (Apple
+   Silicon needs `linux/arm64` as well as `linux/amd64`):
 
 ```bash
 docker pull ghcr.io/kinggoz18/riddlr-server:latest
@@ -45,4 +46,5 @@ docker pull ghcr.io/kinggoz18/riddlr-web:latest
 ```
 
 Until step 4, the start script prints that published images are not available
-and builds from the clone.
+and builds from the clone. Images currently on GHCR are `linux/amd64` only
+until the `images` workflow is re-run after it publishes `linux/arm64` too.
