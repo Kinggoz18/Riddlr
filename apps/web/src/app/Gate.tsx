@@ -73,7 +73,7 @@ export function Gate() {
         <Route path="/agents/*" element={<AgentsPage />} />
         <Route path="/skills/*" element={<SkillsPage />} />
         <Route path="/sources/*" element={<SourcesPage />} />
-        <Route path="/watchlists" element={<WatchlistsPage />} />
+        <Route path="/watchlists/*" element={<WatchlistsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/portfolios/*" element={<PortfoliosPage />} />
         <Route path="/scans" element={<ScansPage />} />

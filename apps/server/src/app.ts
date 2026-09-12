@@ -14,6 +14,7 @@ import {
   passwordResetRequestSchema,
   recoveryRotateSchema,
   setupAdminSchema,
+  setupUnlockSchema,
   totpVerifySchema,
   twoFactorSchema,
 } from "@riddlr/api-contract";
@@ -83,6 +84,7 @@ import {
   registerNotificationSettingsRoutes,
   registerPortfolioRoutes,
 } from "./modules/portfolio-api.js";
+import { enqueueAgentScan } from "./modules/scans.js";
 import { sendSecurityMail } from "./modules/security-mail.js";
 import {
   COOKIE,
@@ -96,6 +98,7 @@ import {
   touchSession,
 } from "./modules/sessions.js";
 import {
+  assertLlmReachable,
   createDefaultCryptoAgent,
   ensureShippedCryptoSkills,
   getSetupState,
@@ -103,6 +106,19 @@ import {
   saveLlmProvider,
   setSetupStep,
 } from "./modules/setup.js";
+import {
+  assertSetupAccess,
+  clearSetupCookie,
+  consumeSetupGate,
+  ensureSetupGate,
+  isSetupGateRoute,
+  issueSetupCookie,
+  markSetupClaimed,
+  setupCodeRecordExpired,
+  setupExpired,
+  setupStatusAccess,
+  verifySetupCode,
+} from "./modules/setup-gate.js";
 import { publicSource, registerSourceRoutes } from "./modules/source-api.js";
 import {
   confirmTotpEnrollment,
@@ -150,6 +166,7 @@ function requireUser(
 }
 
 export async function buildApp(ctx: AppContext) {
+  ensureSetupGate(ctx);
   const app = Fastify({ loggerInstance: ctx.logger, bodyLimit: 1_000_000 });
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
     const raw = Buffer.isBuffer(body) ? body : Buffer.from(body);
@@ -181,6 +198,14 @@ export async function buildApp(ctx: AppContext) {
   const totpLimit = { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } };
   const setupLimit = { config: { rateLimit: { max: 3, timeWindow: "1 minute" } } };
 
+  app.addHook("preHandler", async (request) => {
+    if (!isSetupGateRoute(request.url, request.method)) {
+      return;
+    }
+    const state = await getSetupState(ctx);
+    await assertSetupAccess(ctx, request, state.completed);
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({
@@ -189,7 +214,12 @@ export async function buildApp(ctx: AppContext) {
     }
     const status = (error as Error & { statusCode?: number }).statusCode ?? 500;
     if (status === 401) {
-      return reply.code(401).send({ error: { code: "unauthorized", message: "Unauthorized" } });
+      return reply.code(401).send({
+        error: {
+          code: (error as Error & { code?: string }).code ?? "unauthorized",
+          message: error.message || "Unauthorized",
+        },
+      });
     }
     if (status === 409) {
       return reply.code(409).send({
@@ -227,15 +257,46 @@ export async function buildApp(ctx: AppContext) {
     return ctx.metrics.register.metrics();
   });
 
-  app.get("/api/v1/setup/status", async () => {
+  app.get("/api/v1/setup/status", async (request) => {
     const state = await getSetupState(ctx);
+    const access = setupStatusAccess(ctx, request, state.completed);
     return {
       initialized: state.currentStep !== "admin" || state.completed,
       completed: state.completed,
       currentStep: state.currentStep,
       stepCount: ONBOARDING_STEP_COUNT,
+      setupAccess: access.setupAccess,
+      canContinue: access.canContinue,
+      setupCodeExpired: access.setupCodeExpired,
       domains: MARKET_DOMAIN_REGISTRY,
     };
+  });
+
+  app.post("/api/v1/setup/unlock", setupLimit, async (request, reply) => {
+    const state = await getSetupState(ctx);
+    if (state.completed) {
+      const error = new Error("Setup is already complete.");
+      (error as Error & { statusCode?: number; code?: string }).statusCode = 409;
+      (error as Error & { code?: string }).code = "setup_locked";
+      throw error;
+    }
+    if (setupCodeRecordExpired(ctx)) {
+      throw setupExpired();
+    }
+    const body = setupUnlockSchema.parse(request.body);
+    if (!verifySetupCode(ctx, body.code)) {
+      const error = new Error("Enter the setup code from the first start of this instance.");
+      (error as Error & { statusCode?: number; code?: string }).statusCode = 401;
+      (error as Error & { code?: string }).code = "setup_code";
+      throw error;
+    }
+    markSetupClaimed(ctx);
+    issueSetupCookie(ctx, reply);
+    await ctx.db.insert(auditLogs).values({
+      action: "setup.unlock",
+      resource: "setup",
+    });
+    return { ok: true };
   });
 
   app.get("/api/v1/market-domains", async () => ({ domains: MARKET_DOMAIN_REGISTRY }));
@@ -353,6 +414,20 @@ export async function buildApp(ctx: AppContext) {
         error: { code: "unsafe_url", message: "LLM base URL host is not allowed." },
       });
     }
+    try {
+      await assertLlmReachable(ctx, body);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      if (code === "llm_unreachable") {
+        return reply.code(400).send({
+          error: {
+            code,
+            message: error instanceof Error ? error.message : "Could not reach that model.",
+          },
+        });
+      }
+      throw error;
+    }
     await saveLlmProvider(ctx, body);
     await setSetupStep(ctx, "domains_sources");
     return { ok: true, next: "domains_sources", configured: true };
@@ -395,7 +470,7 @@ export async function buildApp(ctx: AppContext) {
         error: { code: "unsafe_url", message: "SearXNG URL host is not allowed." },
       });
     }
-    await createDefaultCryptoAgent(ctx, searxngUrl);
+    const agent = await createDefaultCryptoAgent(ctx, searxngUrl);
     if (body.telegramBotToken && body.telegramChatId) {
       const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
       const keyVersion = settingsRows[0]?.keyVersion ?? 1;
@@ -424,7 +499,16 @@ export async function buildApp(ctx: AppContext) {
       });
     }
     await setSetupStep(ctx, "complete", true);
-    return { ok: true, next: "complete" };
+    consumeSetupGate(ctx);
+    clearSetupCookie(ctx, reply);
+    let firstScanQueued = false;
+    try {
+      await enqueueAgentScan(ctx, agent.id);
+      firstScanQueued = true;
+    } catch (error) {
+      ctx.logger.warn({ err: error, agentId: agent.id }, "first scan enqueue failed");
+    }
+    return { ok: true, next: "complete", firstScanQueued };
   });
 
   app.post("/api/v1/auth/login", authLimit, async (request, reply) => {
@@ -820,6 +904,7 @@ export async function buildApp(ctx: AppContext) {
     const hasPrimarySocial = sourceRows.some(
       (item) => item.adapterId === "discord" || item.adapterId === "x",
     );
+    const workerHealthy = Boolean(await ctx.redis.get("riddlr:worker:heartbeat"));
     return {
       agents: agentRows,
       signals: signalRows,
@@ -830,6 +915,7 @@ export async function buildApp(ctx: AppContext) {
       aiUsage: usage,
       llmConfigured,
       totpEnabled,
+      workerHealthy,
       nextSteps: [
         {
           id: "llm",
@@ -869,7 +955,9 @@ export async function buildApp(ctx: AppContext) {
         {
           id: "scan",
           title: "Run the first scan",
-          body: "A scan clusters evidence. Signals appear only after a material event is analyzed.",
+          body: workerHealthy
+            ? "A scan clusters evidence. Signals appear only after a material event is analyzed."
+            : "The worker is not running. Start it, then run a scan from Agents.",
           href: "/agents",
           done: scanRows.length > 0,
         },
@@ -1137,6 +1225,20 @@ export async function buildApp(ctx: AppContext) {
       return reply.code(400).send({
         error: { code: "unsafe_url", message: "LLM base URL host is not allowed." },
       });
+    }
+    try {
+      await assertLlmReachable(ctx, body);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      if (code === "llm_unreachable") {
+        return reply.code(400).send({
+          error: {
+            code,
+            message: error instanceof Error ? error.message : "Could not reach that model.",
+          },
+        });
+      }
+      throw error;
     }
     await saveLlmProvider(ctx, body);
     const auth = await currentUser(ctx, request);

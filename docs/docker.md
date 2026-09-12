@@ -1,7 +1,21 @@
 # Docker
 
-Default Compose publishes **8080 only**. That origin serves the dashboard, API,
-and webhook paths. Mailpit and SearXNG are not on the public Caddyfile.
+Default Compose publishes **127.0.0.1:8080 only**. That origin serves the
+dashboard, API, and webhook paths. Mailpit and SearXNG are not on the public
+Caddyfile.
+
+`./scripts/riddlr-up.sh` is the start path on macOS and Linux. Windows uses
+`scripts/riddlr-up.ps1`. Both check Docker, can install or start it if you
+confirm (`--install-docker` / `-InstallDocker` skips the prompt), wait until
+Riddlr is ready, and print an SSH command when Riddlr is on a remote server.
+`--public` / `-Public` lets other devices open the URL and prints a setup code
+that expires after 15 minutes if unused. See [install.md](install.md).
+
+Give Docker at least 10 GB of disk. The start script pulls
+`ghcr.io/kinggoz18/riddlr-server:latest` and `riddlr-web:latest` when those
+tags exist and the packages are public, otherwise it builds from the clone.
+CI still uses `--build`. Pin a digest or version with `RIDDLR_SERVER_IMAGE`
+and `RIDDLR_WEB_IMAGE`.
 
 Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
 to overlay the development Caddyfile (`/mailpit*`, `/searxng*`) and publish

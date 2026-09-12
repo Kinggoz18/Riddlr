@@ -39,7 +39,7 @@ function UsagePage() {
     <>
       <PageHeader
         title="AI usage"
-        description="Recorded only after a real LLM call. Token budget exhaustion leaves events needing analysis."
+        description="Recorded only after a real LLM call. A finite daily token budget, when exhausted, leaves events needing analysis."
       />
       {rows.map((row) => (
         <p key={`${row.provider}-${row.model}-${row.createdAt}`}>

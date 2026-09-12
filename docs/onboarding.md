@@ -22,10 +22,19 @@ First-run is **four steps**. There is no fifth step.
 After Finish, setup routes close. The origin shows **Sign in**. Password-only
 sign-in works until authenticator is enabled.
 
-Overview then shows **Finish the desk**: connect a model if skipped, turn on
-authenticator if skipped, add Discord or X, record a portfolio, configure a
-notification channel, and run the first scan. These are not extra onboarding
-steps.
+If Riddlr was started so other devices can open the dashboard without SSH, the
+browser asks for the setup code printed at start **before** step 1. That
+screen is not a fifth onboarding step. Unused codes expire after 15 minutes;
+print a new one from the machine that runs Docker. After Finish, the code
+stops working.
+
+Saving a model checks that it answers. **Skip for now** still continues without
+a model; scans collect evidence and analysis waits. Finish starts the default
+Crypto scan when the queue is available. Overview shows that scan instead of
+asking you to run one by hand.
+
+Optional leftovers (authenticator, Discord/X, portfolio, notifications) stay
+under **Finish the desk**. They are not extra onboarding steps.
 
 To run first-run again, wipe instance volumes:
 

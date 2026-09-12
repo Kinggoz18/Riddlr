@@ -14,18 +14,32 @@ feed. It never trades, never signs, and never asks for private keys.
 ## Quick start
 
 ```bash
-docker compose up --build
+git clone https://github.com/Kinggoz18/Riddlr.git
+cd Riddlr
+./scripts/riddlr-up.sh
 ```
 
-Clone the repository first if you are not already in the working tree. A
-published remote URL is recorded here only after it is configured and
-verified.
+Open http://127.0.0.1:8080 in a browser on the same machine and complete setup
+(four steps). If Docker is missing, the start script can install or start it
+after you confirm. Pre-built images skip building from source; they do not
+replace Docker.
 
-Open http://127.0.0.1:8080 and complete first-run setup (four steps).
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kinggoz18/Riddlr/main/scripts/install.sh | bash
+```
+
+That clones into `~/riddlr` and runs the same start script. Windows:
+`scripts/riddlr-up.ps1` after a clone, or `scripts/install.ps1`. See
+[Install](docs/install.md).
 
 No `.env` file is required for local Compose. Encryption material is generated
 into a named volume on first boot. Those defaults are for local use, not a
 public internet deployment.
+
+On a remote server, run the same start command, then the SSH command it prints,
+and open http://127.0.0.1:8080 on the machine with the browser. To let other
+devices open the URL without SSH, start with `--public` / `-Public`. Unused
+setup codes expire after 15 minutes. See [Install](docs/install.md).
 
 ## What you get after setup
 
@@ -39,6 +53,7 @@ public internet deployment.
 - The default **Riddlr Intelligence Agent**, the first-run Crypto watcher
 - Additional Crypto agents, markdown skills, and canonical-ID watchlists
 - Overview, Signals, Events, Agents, Sources, Watchlists, Notifications, Portfolios, Scan History, AI Usage, and System Health
+- Side navigation with light or dark appearance (dark is the default)
 
 ## Architecture in one paragraph
 
@@ -53,6 +68,7 @@ See [docs/architecture.md](docs/architecture.md).
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Install](docs/install.md)
 - [Onboarding](docs/onboarding.md)
 - [Authentication](docs/auth.md)
 - [Secret storage](docs/secret-storage.md)

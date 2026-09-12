@@ -4,7 +4,6 @@
 pnpm test:unit
 pnpm test:integration
 pnpm compose:smoke
-pnpm test:browser
 pnpm licenses:check
 ```
 
@@ -17,7 +16,7 @@ test-only implementation, not a fake product domain.
 
 Integration tests use Testcontainers for PostgreSQL and Valkey. PostgreSQL
 uses a tmpfs data directory so the suite can start when the Docker VM disk is
-exhausted. They cover four-step onboarding, default-agent Crypto association,
+exhausted. They cover four-step onboarding, first-run access, default-agent Crypto association,
 coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, token-budget skip, Discord token encryption and official REST
 polling, X bearer encryption and recent search, session rotation after 2FA,
@@ -25,14 +24,18 @@ recovery codes, password reset hashing, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, and audit clear.
 
-Browser tests need Compose with free Docker disk, Chromium
-(`pnpm exec playwright install chromium`), and an instance that has not
-completed onboarding. Specs tagged `@a11y` run axe-core and fail on serious
-or critical violations.
+`pnpm compose:smoke` waits until Compose answers `/api/v1/setup/status` with
+four steps, five market domains, and local first-run access.
+
+Unit tests cover first-run access helpers, setup-code lifetime (15 minutes),
+and an LLM reachability probe with a mocked HTTP client. Integration tests cover
+public-mode unlock, Finish enqueueing the default scan, and setup access
+paths. They do not call live provider networks (`RIDDLR_ENV=test` skips the
+live model check).
 
 ```bash
 pnpm compose:reset
-pnpm test:browser
+pnpm compose:smoke
 ```
 
 TOTP enrollment can be skipped during first-run and enabled later in Settings.

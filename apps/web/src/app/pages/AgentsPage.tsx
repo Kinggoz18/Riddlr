@@ -4,9 +4,20 @@ import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom
 import { AssetPicker } from "../AssetPicker.js";
 import { api } from "../api.js";
 import { ChipList } from "../ChipInput.js";
-import { assetLabel, OBJECTIVE_OPTIONS, objectiveLabel, scheduleLabel } from "../format.js";
+import {
+  assetLabel,
+  DEFAULT_DAILY_TOKEN_BUDGET,
+  MAX_DAILY_TOKEN_BUDGET,
+  MIN_DAILY_TOKEN_BUDGET,
+  OBJECTIVE_OPTIONS,
+  objectiveLabel,
+  scheduleLabel,
+  tokenBudgetLabel,
+} from "../format.js";
 import { PageSubnav } from "../PageSubnav.js";
 import { toastFail, useToast } from "../Toast.js";
+import { WatchlistAssets } from "../WatchlistAssets.js";
+import { summarizeWatchlistLabels, WATCHLIST_PREVIEW_LIMIT } from "../watchlist-view.js";
 
 const SCHEDULES = ["30m", "1h", "2h", "4h", "6h", "12h", "daily"] as const;
 
@@ -26,7 +37,7 @@ export type Agent = {
   enabled: boolean;
   description?: string;
   schedule: string;
-  tokenBudget: number;
+  tokenBudget: number | null;
   default: boolean;
   objectives?: string[];
   domains: string[];
@@ -42,7 +53,13 @@ export type Agent = {
   watchlist: {
     id: string;
     name: string;
-    items: Array<{ id: string; canonicalId: string; assetClass: string }>;
+    items: Array<{
+      id: string;
+      canonicalId: string;
+      assetClass: string;
+      symbol?: string | null;
+      name?: string | null;
+    }>;
   } | null;
 };
 
@@ -110,9 +127,9 @@ function AgentsList() {
                 <span>Domains: {agent.domains.join(", ") || "none"}</span>
                 <span>{scheduleLabel(agent.schedule)}</span>
                 <span>
-                  {(agent.watchlist?.items ?? [])
-                    .map((item) => assetLabel(item.canonicalId))
-                    .join(" · ") || "empty watchlist"}
+                  {summarizeWatchlistLabels(
+                    (agent.watchlist?.items ?? []).map((item) => assetLabel(item.canonicalId)),
+                  )}
                 </span>
               </p>
               <p className="agent-toolbar">
@@ -151,7 +168,12 @@ function AgentForm(props: {
   const [name, setName] = useState(props.agent?.name ?? "");
   const [description, setDescription] = useState(props.agent?.description ?? "");
   const [schedule, setSchedule] = useState(props.agent?.schedule ?? "1h");
-  const [tokenBudget, setTokenBudget] = useState(String(props.agent?.tokenBudget ?? 8000));
+  const [tokenBudgetUnlimited, setTokenBudgetUnlimited] = useState(
+    props.agent ? props.agent.tokenBudget === null : false,
+  );
+  const [tokenBudget, setTokenBudget] = useState(
+    String(props.agent?.tokenBudget ?? DEFAULT_DAILY_TOKEN_BUDGET),
+  );
   const [canonicalIds, setCanonicalIds] = useState(
     (props.agent?.watchlist?.items ?? []).map((item) => item.canonicalId),
   );
@@ -189,7 +211,7 @@ function AgentForm(props: {
                 description,
                 marketDomainIds: ["crypto"],
                 schedule,
-                tokenBudget: Number(tokenBudget),
+                tokenBudget: tokenBudgetUnlimited ? null : Number(tokenBudget),
                 skillIds: selectedSkills,
                 sourceIds: selectedSources,
                 objectives: selectedObjectives,
@@ -260,18 +282,38 @@ function AgentForm(props: {
               ))}
             </select>
           </Field>
+          <label className="check-row" htmlFor="token-budget-unlimited">
+            <input
+              id="token-budget-unlimited"
+              type="checkbox"
+              checked={tokenBudgetUnlimited}
+              onChange={(e) => {
+                const unlimited = e.target.checked;
+                setTokenBudgetUnlimited(unlimited);
+                if (!unlimited && (!tokenBudget || Number(tokenBudget) < MIN_DAILY_TOKEN_BUDGET)) {
+                  setTokenBudget(String(DEFAULT_DAILY_TOKEN_BUDGET));
+                }
+              }}
+            />
+            Unlimited daily token usage
+          </label>
           <Field
-            label="Token budget"
-            hint="Daily prompt plus completion tokens before analysis is skipped."
+            label="Daily token budget"
+            hint={
+              tokenBudgetUnlimited
+                ? "No daily cap. Usage is still recorded. Prompt context stays bounded."
+                : "Daily prompt plus completion tokens before analysis is skipped."
+            }
           >
             <input
               id="token-budget"
               type="number"
-              min={500}
-              max={200000}
+              min={MIN_DAILY_TOKEN_BUDGET}
+              max={MAX_DAILY_TOKEN_BUDGET}
               value={tokenBudget}
               onChange={(e) => setTokenBudget(e.target.value)}
-              required
+              disabled={tokenBudgetUnlimited}
+              required={!tokenBudgetUnlimited}
             />
           </Field>
           <Field
@@ -446,7 +488,7 @@ function AgentDetail() {
         </div>
         <div>
           <dt>Daily token budget</dt>
-          <dd>{agent.tokenBudget.toLocaleString()}</dd>
+          <dd>{tokenBudgetLabel(agent.tokenBudget)}</dd>
         </div>
         <div>
           <dt>Watchlist</dt>
@@ -463,10 +505,18 @@ function AgentDetail() {
           />
         </Card>
         <Card>
-          <h2>Watchlist</h2>
-          <ChipList
-            values={(agent.watchlist?.items ?? []).map((item) => item.canonicalId)}
-            format={assetLabel}
+          <div className="panel-heading">
+            <h2>Watchlist</h2>
+            {agent.watchlist ? (
+              <NavLink to={`/watchlists/${agent.watchlist.id}`}>View all</NavLink>
+            ) : (
+              <NavLink to={`/agents/${agent.id}/edit`}>Edit</NavLink>
+            )}
+          </div>
+          <WatchlistAssets
+            items={agent.watchlist?.items ?? []}
+            limit={WATCHLIST_PREVIEW_LIMIT}
+            moreHref={agent.watchlist ? `/watchlists/${agent.watchlist.id}` : undefined}
             empty="No assets on this watcher"
           />
         </Card>

@@ -1,3 +1,4 @@
+import { needsSetupCode, SETUP_CODE_TTL_MINUTES } from "@riddlr/domain/web";
 import { Button, Card, Field } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, type Domain } from "../api.js";
@@ -13,10 +14,20 @@ const STEPS = [
   ["domains_sources", "Sources"],
 ] as const;
 
+type SetupStatus = {
+  currentStep: string;
+  completed: boolean;
+  domains: Domain[];
+  setupAccess?: "local" | "code";
+  canContinue?: boolean;
+  setupCodeExpired?: boolean;
+};
+
 function SetupPage() {
-  const [status, setStatus] = useState<{ currentStep: string; domains: Domain[] } | null>(null);
+  const [status, setStatus] = useState<SetupStatus | null>(null);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [setupCode, setSetupCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -35,9 +46,7 @@ function SetupPage() {
   const [telegramChat, setTelegramChat] = useState("");
 
   async function refreshStatus() {
-    const value = await api<{ currentStep: string; completed: boolean; domains: Domain[] }>(
-      "/api/v1/setup/status",
-    );
+    const value = await api<SetupStatus>("/api/v1/setup/status");
     setStatus(value);
     if (value.completed) {
       window.location.assign("/");
@@ -52,7 +61,13 @@ function SetupPage() {
   }, []);
 
   useEffect(() => {
-    if (status?.currentStep !== "security" || passwordSavePending || otpauth || codes.length > 0) {
+    if (
+      needsSetupCode(status ?? {}) ||
+      status?.currentStep !== "security" ||
+      passwordSavePending ||
+      otpauth ||
+      codes.length > 0
+    ) {
       return;
     }
     void api<{ otpauth: string; secret: string }>("/api/v1/setup/totp/start", { method: "POST" })
@@ -63,7 +78,7 @@ function SetupPage() {
       .catch((err: unknown) => {
         toast(toastFail(err, "Couldn’t start authenticator setup"), "danger");
       });
-  }, [status?.currentStep, passwordSavePending, otpauth, codes.length]);
+  }, [status, passwordSavePending, otpauth, codes.length]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -76,19 +91,65 @@ function SetupPage() {
     }
   }
 
+  const blocked = needsSetupCode(status ?? {});
   const stepNumber = Math.max(1, STEPS.findIndex(([id]) => id === status?.currentStep) + 1);
 
   return (
     <AuthShell title="Set up Riddlr">
       <ol className="stepper" aria-label="Setup steps">
         {STEPS.map(([id, label]) => (
-          <li key={id} aria-current={status?.currentStep === id ? "step" : undefined}>
+          <li key={id} aria-current={!blocked && status?.currentStep === id ? "step" : undefined}>
             {label}
           </li>
         ))}
       </ol>
 
-      {status?.currentStep === "admin" ? (
+      {blocked ? (
+        <Card>
+          <header>
+            <h2>Enter the setup code</h2>
+          </header>
+          <p className="field-note">
+            {status?.setupCodeExpired
+              ? `This setup code expired after ${SETUP_CODE_TTL_MINUTES} minutes. On the host, print a new one and enter it here.`
+              : `This instance was started so the dashboard can be reached beyond this computer. Use the setup code printed when Riddlr first started. It expires after ${SETUP_CODE_TTL_MINUTES} minutes if unused, and stops working after you finish first-run.`}
+          </p>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(async () => {
+                await api("/api/v1/setup/unlock", {
+                  method: "POST",
+                  body: JSON.stringify({ code: setupCode }),
+                });
+                setSetupCode("");
+                await refreshStatus();
+              });
+            }}
+          >
+            <Field label="Setup code">
+              <input
+                id="setup-code"
+                name="setup-code"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={setupCode}
+                onChange={(e) => setSetupCode(e.target.value)}
+                required
+                minLength={8}
+              />
+            </Field>
+            <p className="ui-actions">
+              <Button type="submit" busy={busy}>
+                Continue
+              </Button>
+            </p>
+          </form>
+        </Card>
+      ) : null}
+
+      {!blocked && status?.currentStep === "admin" ? (
         <Card>
           <header>
             <p className="step-count">Step {stepNumber} of 4</p>
@@ -166,7 +227,7 @@ function SetupPage() {
         </Card>
       ) : null}
 
-      {status?.currentStep === "security" || (codes.length > 0 && !savedCodes) ? (
+      {!blocked && (status?.currentStep === "security" || (codes.length > 0 && !savedCodes)) ? (
         <Card>
           <header>
             <p className="step-count">Step {stepNumber} of 4</p>
@@ -281,7 +342,7 @@ function SetupPage() {
         </Card>
       ) : null}
 
-      {status?.currentStep === "llm" && (savedCodes || codes.length === 0) ? (
+      {!blocked && status?.currentStep === "llm" && (savedCodes || codes.length === 0) ? (
         <Card>
           <header>
             <p className="step-count">Step {stepNumber} of 4</p>
@@ -330,7 +391,10 @@ function SetupPage() {
                 required
               />
             </Field>
-            <Field label="API key" hint="Stored encrypted. Never shown again.">
+            <Field
+              label="API key"
+              hint="Stored encrypted. Never shown again. Riddlr checks that the model answers before saving."
+            >
               <input
                 id="api-key"
                 name="apiKey"
@@ -364,7 +428,7 @@ function SetupPage() {
         </Card>
       ) : null}
 
-      {status?.currentStep === "domains_sources" ? (
+      {!blocked && status?.currentStep === "domains_sources" ? (
         <Card>
           <header>
             <p className="step-count">Step {stepNumber} of 4</p>

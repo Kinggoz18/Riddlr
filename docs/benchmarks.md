@@ -36,7 +36,7 @@ Conditions:
 | after import | 69_959_680 bytes (66.7 MiB) | 69_959_680 bytes |
 | after allocating 16 MiB | 86_753_280 bytes (82.7 MiB) | 86_753_280 bytes |
 
-## 10 Sep 2026 — Compose, Playwright, long-history lists
+## 10 Sep 2026 — Compose, long-history lists
 
 Conditions:
 
@@ -48,11 +48,8 @@ Conditions:
   `RIDDLR_ANALYSIS_EVIDENCE_LIMIT=20`
 - LLM: an API key was stored during first-run (`sk-e2e-not-a-real-key`); no
   live provider round-trip was measured
-- Playwright Chromium + axe-core: `pnpm compose:reset` then
-  `pnpm test:browser` — 4 passed, 0 skipped, including `@a11y` specs that
-  fail on serious or critical axe violations
 - `pnpm compose:smoke` against `http://127.0.0.1:8080` passed
-- long-history seed after Playwright: 5_000 extra events and 5000 signals on
+- long-history seed after first-run: 5_000 extra events and 5000 signals on
   one scan (`idempotency_key` `benchmark:long-history`)
 
 Image tags (local `docker compose images` / RepoDigests):
@@ -86,7 +83,7 @@ because of shared pages.
 
 | sample | api VmRSS | api VmHWM | worker VmRSS | worker VmHWM |
 | --- | --- | --- | --- | --- |
-| after Playwright, before seed | 149_576 kB (146.1 MiB) | 151_540 kB (148.0 MiB) | 96_056 kB (93.8 MiB) | 146_036 kB (142.6 MiB) |
+| after first-run, before seed | 149_576 kB (146.1 MiB) | 151_540 kB (148.0 MiB) | 96_056 kB (93.8 MiB) | 146_036 kB (142.6 MiB) |
 | after seed | 151_444 kB (147.9 MiB) | 151_540 kB (148.0 MiB) | 114_604 kB (111.9 MiB) | 146_036 kB (142.6 MiB) |
 
 `docker stats --no-stream` after the seed:

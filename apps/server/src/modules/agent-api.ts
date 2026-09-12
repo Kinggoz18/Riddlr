@@ -28,6 +28,7 @@ import {
   InvalidWatchlistItemError,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
+  resolveDailyTokenBudget,
   shippedSkillCapability,
   skillOperatorCopy,
   takeBounded,
@@ -375,7 +376,10 @@ export function registerAgentRoutes(
         objectives: body.objectives ?? [],
         schedule: body.schedule,
         customIntervalMs: body.customIntervalMs,
-        tokenBudget: body.tokenBudget ?? ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET,
+        tokenBudget: resolveDailyTokenBudget(
+          body.tokenBudget,
+          ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET,
+        ),
         notificationPolicy: body.notificationPolicy ?? {
           minRisk: "moderate",
           cooldownMinutes: 30,
@@ -483,7 +487,7 @@ export function registerAgentRoutes(
         schedule: body.schedule ?? agent.schedule,
         customIntervalMs: body.customIntervalMs ?? agent.customIntervalMs,
         enabled: body.enabled ?? agent.enabled,
-        tokenBudget: body.tokenBudget ?? agent.tokenBudget,
+        tokenBudget: resolveDailyTokenBudget(body.tokenBudget, agent.tokenBudget),
         objectives: body.objectives ?? agent.objectives,
         notificationPolicy: body.notificationPolicy ?? agent.notificationPolicy,
       })

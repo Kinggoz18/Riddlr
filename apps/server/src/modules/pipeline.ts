@@ -30,6 +30,7 @@ import {
 } from "@riddlr/db";
 import {
   absorbMarketDataClusters,
+  analysisReservationTokens,
   buildEventFacts,
   classifyReprint,
   clusterEventTitle,
@@ -51,13 +52,17 @@ import {
   nextEventStatus,
   normalizeEvidence,
   observationsFromMarketPayload,
+  resolveDailyTokenBudget,
   SIGNAL_JSON_SCHEMA,
   selectApplicableSkills,
+  shouldSkipForDailyTokenBudget,
   skippedSkillNotice,
   sourceHostname,
   takeBounded,
   textOpposes,
   uniqueIndependentHosts,
+  utcDayRange,
+  utcDayStamp,
   validateSignalOutput,
   watchlistSearchQuery,
 } from "@riddlr/domain";
@@ -75,7 +80,7 @@ import {
   createXAdapter,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { maybeNotify } from "./notify.js";
 
@@ -682,6 +687,107 @@ function fallbackFacts(
   });
 }
 
+async function dailyTokenCommitment(
+  ctx: AppContext,
+  agentId: string,
+  dayUtc: string,
+): Promise<{ recordedUsage: number; openReservations: number }> {
+  const { start, endExclusive } = utcDayRange(dayUtc);
+  const [usage] = await ctx.db
+    .select({
+      tokens: sql<number>`coalesce(sum(
+        case
+          when ${aiUsageEvents.cacheHit} then 0
+          else coalesce(
+            ${aiUsageEvents.completionTotal},
+            coalesce(${aiUsageEvents.promptTokens}, 0) + coalesce(${aiUsageEvents.completionTokens}, 0)
+          )
+        end
+      ), 0)`,
+    })
+    .from(aiUsageEvents)
+    .where(
+      and(
+        eq(aiUsageEvents.agentId, agentId),
+        gte(aiUsageEvents.createdAt, start),
+        lt(aiUsageEvents.createdAt, endExclusive),
+      ),
+    );
+  const [open] = await ctx.db
+    .select({
+      tokens: sql<number>`coalesce(sum(${tokenBudgetReservations.reservedTokens}), 0)`,
+    })
+    .from(tokenBudgetReservations)
+    .where(
+      and(
+        eq(tokenBudgetReservations.agentId, agentId),
+        eq(tokenBudgetReservations.dayUtc, dayUtc),
+        eq(tokenBudgetReservations.status, "open"),
+      ),
+    );
+  return {
+    recordedUsage: Number(usage?.tokens ?? 0),
+    openReservations: Number(open?.tokens ?? 0),
+  };
+}
+
+async function reserveDailyAnalysisTokens(
+  ctx: AppContext,
+  input: { agentId: string; budget: number | null; promptChars: number },
+): Promise<{ id: string } | "skip" | undefined> {
+  if (input.budget === null) {
+    return undefined;
+  }
+  const dayUtc = utcDayStamp();
+  const nextReservation = analysisReservationTokens(input.promptChars);
+  const before = await dailyTokenCommitment(ctx, input.agentId, dayUtc);
+  if (
+    shouldSkipForDailyTokenBudget({
+      budget: input.budget,
+      recordedUsageTokens: before.recordedUsage,
+      openReservationTokens: before.openReservations,
+      nextReservationTokens: nextReservation,
+    })
+  ) {
+    ctx.logger.info(
+      { agentId: input.agentId, budget: input.budget },
+      "token budget exhausted; analysis skipped",
+    );
+    return "skip";
+  }
+  const [row] = await ctx.db
+    .insert(tokenBudgetReservations)
+    .values({
+      agentId: input.agentId,
+      dayUtc,
+      reservedTokens: nextReservation,
+      status: "open",
+    })
+    .returning();
+  const after = await dailyTokenCommitment(ctx, input.agentId, dayUtc);
+  if (
+    shouldSkipForDailyTokenBudget({
+      budget: input.budget,
+      recordedUsageTokens: after.recordedUsage,
+      openReservationTokens: after.openReservations,
+      nextReservationTokens: 0,
+    })
+  ) {
+    if (row) {
+      await ctx.db
+        .update(tokenBudgetReservations)
+        .set({ status: "abandoned" })
+        .where(eq(tokenBudgetReservations.id, row.id));
+    }
+    ctx.logger.info(
+      { agentId: input.agentId, budget: input.budget },
+      "token budget exhausted; analysis skipped",
+    );
+    return "skip";
+  }
+  return row;
+}
+
 async function maybeAnalyze(
   ctx: AppContext,
   eventId: string,
@@ -703,8 +809,10 @@ async function maybeAnalyze(
     title: string;
   },
 ) {
-  const budget = agentContext.agent?.tokenBudget ?? ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET;
-  const dayUtc = new Date().toISOString().slice(0, 10);
+  const budget = resolveDailyTokenBudget(
+    agentContext.agent?.tokenBudget,
+    ctx.config.RIDDLR_DEFAULT_TOKEN_BUDGET,
+  );
   const providers = await ctx.db.select().from(providerConfigs).limit(8);
   const llm = providers.find(
     (item) =>
@@ -800,38 +908,15 @@ async function maybeAnalyze(
     .limit(1);
   let reservation: { id: string } | undefined;
   if (!cached) {
-    const [row] = await ctx.db
-      .insert(tokenBudgetReservations)
-      .values({
-        agentId,
-        dayUtc,
-        reservedTokens: Math.min(4000, budget),
-        status: "open",
-      })
-      .returning();
-    reservation = row;
-    const [used] = await ctx.db
-      .select({
-        tokens: sql<number>`coalesce(sum(${tokenBudgetReservations.reservedTokens}), 0)`,
-      })
-      .from(tokenBudgetReservations)
-      .where(
-        and(
-          eq(tokenBudgetReservations.agentId, agentId),
-          eq(tokenBudgetReservations.dayUtc, dayUtc),
-          sql`${tokenBudgetReservations.status} <> 'abandoned'`,
-        ),
-      );
-    if (Number(used?.tokens ?? 0) > budget) {
-      if (reservation) {
-        await ctx.db
-          .update(tokenBudgetReservations)
-          .set({ status: "abandoned" })
-          .where(eq(tokenBudgetReservations.id, reservation.id));
-      }
-      ctx.logger.info({ agentId, budget }, "token budget exhausted; analysis skipped");
+    const reserved = await reserveDailyAnalysisTokens(ctx, {
+      agentId,
+      budget,
+      promptChars: prompt.system.length + prompt.user.length,
+    });
+    if (reserved === "skip") {
       return;
     }
+    reservation = reserved;
   }
   try {
     const allowed = new Set(evidenceRows.map((row) => row.id));

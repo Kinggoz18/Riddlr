@@ -19,15 +19,14 @@
     "test": "pnpm test:unit && pnpm test:integration",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "test:e2e": "pnpm test:browser",
-    "test:browser": "playwright test",
-    "test:a11y": "playwright test --grep @a11y",
     "db:generate": "pnpm --filter @riddlr/db generate",
     "db:migrate": "pnpm --filter @riddlr/db migrate",
     "db:check": "pnpm --filter @riddlr/db check",
-    "docker:up": "docker compose up --build",
+    "docker:up": "bash scripts/riddlr-up.sh",
     "docker:down": "docker compose down",
-    "compose:reset": "docker compose down -v --remove-orphans && docker compose up --build",
+    "up": "bash scripts/riddlr-up.sh",
+    "onboard": "pnpm --filter @riddlr/server exec node dist/cmd/onboard.js",
+    "compose:reset": "docker compose down -v --remove-orphans && bash scripts/riddlr-up.sh",
     "licenses:check": "node scripts/check-licenses.mjs",
     "compose:smoke": "node scripts/compose-smoke.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm licenses:check"
@@ -37,8 +36,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
-    "@playwright/test": "^1.55.0",
-    "@axe-core/playwright": "^4.10.2",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

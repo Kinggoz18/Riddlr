@@ -14,9 +14,10 @@ Source → Evidence → Entity / Asset / Instrument → Event
 
 ## Process split
 
-- `apps/web` — Vite React dashboard
+- `apps/web` — Vite React dashboard with a side navigation and light/dark appearance
 - `apps/server` `cmd/api` — Fastify HTTP
 - `apps/server` `cmd/worker` — BullMQ processors
+- `apps/server` `cmd/onboard` — host first-run (same four steps as the browser)
 
 The API does not run scans in-process.
 
@@ -32,8 +33,9 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0017](adr/0017-event-clustering.md),
 [ADR 0018](adr/0018-whatsapp-cloud-api.md),
 [ADR 0019](adr/0019-read-only-portfolios.md),
-[ADR 0020](adr/0020-skill-composition.md), and
-[ADR 0021](adr/0021-discovery-candidates.md).
+[ADR 0020](adr/0020-skill-composition.md),
+[ADR 0021](adr/0021-discovery-candidates.md), and
+[ADR 0022](adr/0022-first-run-access.md).
 
 ## Trust boundaries
 
@@ -57,8 +59,8 @@ Forex, Commodities, and Macro are coming soon.
 
 ## Agents
 
-Operators create Crypto agents with a schedule, token budget, skills, and a
-watchlist. Coming-soon domains cannot execute. See
+Operators create Crypto agents with a schedule, token budget (default 100000,
+or unlimited), skills, and a watchlist. Coming-soon domains cannot execute. See
 [agents-and-skills.md](agents-and-skills.md) and
 [watchlists.md](watchlists.md).
 

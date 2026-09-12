@@ -37,6 +37,7 @@ describe("parseEnv", () => {
     });
     expect(config.cookieSecret.length).toBeGreaterThan(16);
     expect(config.encryptionMasterKey.length).toBeGreaterThan(16);
+    expect(config.RIDDLR_SETUP_ACCESS).toBe("loopback");
   });
 
   it("generates local secrets into the secrets directory", () => {

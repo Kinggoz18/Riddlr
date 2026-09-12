@@ -1,6 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateMasterKey, randomToken } from "@riddlr/crypto";
+import {
+  DEFAULT_DAILY_TOKEN_BUDGET,
+  MAX_DAILY_TOKEN_BUDGET,
+  MIN_DAILY_TOKEN_BUDGET,
+} from "@riddlr/domain";
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -8,6 +13,7 @@ const envSchema = z.object({
   RIDDLR_HTTP_HOST: z.string().default("127.0.0.1"),
   RIDDLR_HTTP_PORT: z.coerce.number().default(3001),
   RIDDLR_PUBLIC_URL: z.string().url().default("http://localhost:8080"),
+  RIDDLR_SETUP_ACCESS: z.enum(["loopback", "public"]).default("loopback"),
   RIDDLR_DATABASE_URL: z.string().min(1),
   RIDDLR_REDIS_URL: z.string().min(1),
   RIDDLR_COOKIE_SECRET: z.string().optional().default(""),
@@ -35,7 +41,12 @@ const envSchema = z.object({
   RIDDLR_SCHEDULER_ENABLED: z.enum(["true", "false"]).optional().default("true"),
   RIDDLR_SCHEDULER_AGENT_LIMIT: z.coerce.number().int().min(1).max(50).default(16),
   RIDDLR_MAX_AGENTS: z.coerce.number().int().min(1).max(32).default(16),
-  RIDDLR_DEFAULT_TOKEN_BUDGET: z.coerce.number().int().min(500).max(200_000).default(8000),
+  RIDDLR_DEFAULT_TOKEN_BUDGET: z.coerce
+    .number()
+    .int()
+    .min(MIN_DAILY_TOKEN_BUDGET)
+    .max(MAX_DAILY_TOKEN_BUDGET)
+    .default(DEFAULT_DAILY_TOKEN_BUDGET),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & {

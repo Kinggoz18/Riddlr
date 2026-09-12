@@ -8,4 +8,4 @@ alwaysApply: false
 
 Visible focus, labeled fields, `aria-invalid`, live regions for setup errors,
 keyboard-complete onboarding, `prefers-reduced-motion`. Color is not the only
-status encoding. Axe: no serious/critical on Setup and Overview.
+status encoding. WCAG 2.2 AA on setup, login, and overview.

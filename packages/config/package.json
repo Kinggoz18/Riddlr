@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@riddlr/crypto": "workspace:*",
+    "@riddlr/domain": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

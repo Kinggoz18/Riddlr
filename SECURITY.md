@@ -23,6 +23,11 @@ Riddlr encrypts provider credentials with AES-256-GCM before durable storage.
 The encryption master key is supplied via `RIDDLR_ENCRYPTION_MASTER_KEY` or
 generated into a local volume on first development boot.
 
+By default the dashboard is only at http://127.0.0.1:8080 on the machine that
+runs Docker. Opening it from other devices without SSH requires `--public` and
+the setup code from that start. Unfinished setup on a URL others can open is
+unsafe. Unused setup codes expire after 15 minutes.
+
 Never commit:
 
 - `.env`

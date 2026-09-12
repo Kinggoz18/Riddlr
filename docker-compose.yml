@@ -43,6 +43,7 @@ services:
     restart: unless-stopped
 
   api:
+    image: ${RIDDLR_SERVER_IMAGE:-ghcr.io/kinggoz18/riddlr-server:latest}
     build:
       context: .
       dockerfile: docker/server.Dockerfile
@@ -62,6 +63,7 @@ services:
       RIDDLR_LOG_FORMAT: json
       RIDDLR_LOCAL_COMPOSE: "true"
       RIDDLR_GENERATE_DEV_SECRETS: "false"
+      RIDDLR_SETUP_ACCESS: "${RIDDLR_SETUP_ACCESS:-loopback}"
       RIDDLR_PAGE_SIZE: "50"
       RIDDLR_MAX_SESSIONS: "8"
       RIDDLR_SESSION_IDLE_MINUTES: "60"
@@ -80,6 +82,7 @@ services:
     restart: unless-stopped
 
   worker:
+    image: ${RIDDLR_SERVER_IMAGE:-ghcr.io/kinggoz18/riddlr-server:latest}
     build:
       context: .
       dockerfile: docker/server.Dockerfile
@@ -114,6 +117,7 @@ services:
     restart: unless-stopped
 
   web:
+    image: ${RIDDLR_WEB_IMAGE:-ghcr.io/kinggoz18/riddlr-web:latest}
     build:
       context: .
       dockerfile: docker/web.Dockerfile
@@ -125,7 +129,7 @@ services:
   proxy:
     image: caddy:2.10-alpine
     ports:
-      - "8080:8080"
+      - "${RIDDLR_HTTP_PUBLISH:-127.0.0.1:8080}:8080"
     volumes:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:

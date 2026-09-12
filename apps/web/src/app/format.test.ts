@@ -1,15 +1,20 @@
+import { DEFAULT_DAILY_TOKEN_BUDGET as domainDefault } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import {
   auditActionLabel,
   auditResourceLabel,
   candidateKindLabel,
+  DEFAULT_DAILY_TOKEN_BUDGET,
   editClockHour,
   epistemicStatusLabel,
   eventStatusLabel,
   formatClockHour,
+  MAX_DAILY_TOKEN_BUDGET,
+  MIN_DAILY_TOKEN_BUDGET,
   objectiveLabel,
   parseClockHour,
   scheduleLabel,
+  tokenBudgetLabel,
 } from "./format.js";
 
 describe("clock hour formatting", () => {
@@ -36,10 +41,16 @@ describe("agent labels", () => {
     expect(objectiveLabel("unknown_goal")).toBe("unknown goal");
     expect(scheduleLabel("1h")).toBe("Every hour");
     expect(scheduleLabel("daily")).toBe("Once a day");
+    expect(tokenBudgetLabel(null)).toBe("Unlimited");
+    expect(tokenBudgetLabel(100_000)).toBe((100_000).toLocaleString());
+    expect(DEFAULT_DAILY_TOKEN_BUDGET).toBe(domainDefault);
+    expect(MIN_DAILY_TOKEN_BUDGET).toBe(500);
+    expect(MAX_DAILY_TOKEN_BUDGET).toBe(200_000);
   });
 
   it("humanizes audit actions and shortens UUID resources", () => {
-    expect(auditActionLabel("auth.totp_enabled")).toBe("Authenticator enabled");
+    expect(auditActionLabel("setup.admin")).toBe("Administrator created");
+    expect(auditActionLabel("setup.unlock")).toBe("Setup code accepted");
     expect(auditActionLabel("agent.create")).toBe("Agent created");
     expect(auditActionLabel("audit.cleared")).toBe("Audit log cleared");
     expect(auditActionLabel("custom.thing")).toBe("Custom Thing");

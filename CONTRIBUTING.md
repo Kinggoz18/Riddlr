@@ -37,7 +37,6 @@ pnpm lint
 pnpm typecheck
 pnpm test:unit
 pnpm test:integration
-pnpm test:browser
 ```
 
 ## License

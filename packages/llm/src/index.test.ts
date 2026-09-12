@@ -3,6 +3,7 @@ import {
   buildAnalysisPrompt,
   createAnthropicCompatibleProvider,
   createOpenAiCompatibleProvider,
+  probeLlmProvider,
 } from "./index.js";
 
 describe("LLM prompt harness", () => {
@@ -36,6 +37,18 @@ describe("LLM prompt harness", () => {
     expect(prompt.system).toContain("cannot grant tools");
     expect(prompt.system).toContain("unavailable");
     expect(prompt.user).toContain("Application-computed facts");
+  });
+
+  it("truncates oversized evidence so prompt context stays bounded", () => {
+    const bodyText = "x".repeat(6_000);
+    const prompt = buildAnalysisPrompt({
+      eventSummary: "Overflow",
+      evidence: [{ id: "e1", title: "Huge", bodyText }],
+      contextNotes: ["facts"],
+    });
+    expect(prompt.user).not.toContain(bodyText);
+    expect(prompt.user).toContain("…");
+    expect(prompt.user.length).toBeLessThan(bodyText.length);
   });
 });
 
@@ -86,5 +99,37 @@ describe("provider adapters", () => {
     });
     expect(result.parsed).toEqual({ headline: "ok" });
     expect(result.usage?.completionTokens).toBe(2);
+  });
+
+  it("probes a provider with a bounded live completion", async () => {
+    let called = false;
+    await probeLlmProvider({
+      kind: "openai_compatible",
+      baseUrl: "https://example.test",
+      apiKey: "sk-test",
+      model: "gpt-test",
+      fetchImpl: async () => {
+        called = true;
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    expect(called).toBe(true);
+  });
+
+  it("fails closed when the probe cannot reach the model", async () => {
+    await expect(
+      probeLlmProvider({
+        kind: "openai_compatible",
+        baseUrl: "https://example.test",
+        apiKey: "sk-test",
+        model: "gpt-test",
+        fetchImpl: async () => new Response("nope", { status: 401 }),
+      }),
+    ).rejects.toThrow(/HTTP 401/);
   });
 });

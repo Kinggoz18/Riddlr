@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "../api.js";
 import { dateTime, eventStatusLabel } from "../format.js";
+import { WatchlistAssets } from "../WatchlistAssets.js";
+import { WATCHLIST_PREVIEW_LIMIT, type WatchlistSummary } from "../watchlist-view.js";
 
 function OverviewPage() {
   const [data, setData] = useState<{
@@ -14,13 +16,20 @@ function OverviewPage() {
     aiUsage: Array<{ promptTokens?: number | null }>;
     llmConfigured?: boolean;
     totpEnabled?: boolean;
+    workerHealthy?: boolean;
     nextSteps?: Array<{ id: string; title: string; body: string; href: string; done: boolean }>;
   }>();
   const [error, setError] = useState<string>();
+  const [watchlists, setWatchlists] = useState<WatchlistSummary[]>();
   useEffect(() => {
     void api<NonNullable<typeof data>>("/api/v1/overview")
       .then(setData)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
+  }, []);
+  useEffect(() => {
+    void api<{ watchlists: WatchlistSummary[] }>("/api/v1/watchlists")
+      .then((body) => setWatchlists(body.watchlists))
+      .catch(() => setWatchlists([]));
   }, []);
   if (error) {
     return <EmptyState title="Unable to load overview" body={error} />;
@@ -34,6 +43,10 @@ function OverviewPage() {
   const lastScan = data.scans[0];
   const tokens = data.aiUsage.reduce((sum, row) => sum + (row.promptTokens ?? 0), 0);
   const remainingSteps = (data.nextSteps ?? []).filter((item) => !item.done);
+  const scanActive = lastScan?.status === "queued" || lastScan?.status === "running";
+  const deskNeedsAttention = remainingSteps.some((item) => item.id === "llm" || item.id === "scan");
+  const featuredWatchlist =
+    watchlists?.find((list) => list.agentId === defaultAgent?.id) ?? watchlists?.[0];
   return (
     <>
       <PageHeader
@@ -41,7 +54,7 @@ function OverviewPage() {
         description="Current Crypto desk: latest validated signal, recent evidence clusters, and source health."
       />
       {remainingSteps.length ? (
-        <details className="desk-checklist" open>
+        <details className="desk-checklist" open={deskNeedsAttention}>
           <summary>
             <span>
               <h2>Finish the desk</h2>
@@ -84,6 +97,15 @@ function OverviewPage() {
               <span>{latestSignal.headline}</span>
               <StatusBadge label={latestSignal.risk} tone="risk" />
             </NavLink>
+          ) : scanActive ? (
+            <div className="quiet-state">
+              <p>{lastScan?.status === "running" ? "Scanning…" : "First scan queued"}</p>
+              <p>
+                {data.workerHealthy === false
+                  ? "The worker is not running yet. Evidence collection starts when it is."
+                  : "Signals appear after a material event is analyzed."}
+              </p>
+            </div>
           ) : (
             <div className="quiet-state">
               <p>No signals yet</p>
@@ -181,10 +203,28 @@ function OverviewPage() {
         </Card>
         <Card>
           <div className="panel-heading">
-            <h2>Default agent</h2>
-            <NavLink to="/agents">Manage</NavLink>
+            <h2>Watchlist</h2>
+            <NavLink to={featuredWatchlist ? `/watchlists/${featuredWatchlist.id}` : "/watchlists"}>
+              View all
+            </NavLink>
           </div>
-          <p className="stat-value">{defaultAgent?.name ?? "Not configured"}</p>
+          {featuredWatchlist ? (
+            <>
+              <p className="field-note">
+                {featuredWatchlist.agentName} · {featuredWatchlist.items?.length ?? 0} assets
+              </p>
+              <WatchlistAssets
+                items={featuredWatchlist.items ?? []}
+                limit={WATCHLIST_PREVIEW_LIMIT}
+                moreHref={`/watchlists/${featuredWatchlist.id}`}
+                empty="No assets on this watcher"
+              />
+            </>
+          ) : watchlists ? (
+            <p className="quiet-state">No watchlist yet</p>
+          ) : (
+            <p className="quiet-state">Loading watchlist…</p>
+          )}
         </Card>
       </section>
     </>

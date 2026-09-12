@@ -11,10 +11,9 @@
       "!**/dist",
       "!**/node_modules",
       "!**/coverage",
-      "!**/playwright-report",
-      "!**/test-results",
       "!**/packages/db/drizzle",
-      "!**/pnpm-lock.yaml"
+      "!**/pnpm-lock.yaml",
+      "!**/.pnpm-store"
     ]
   },
   "formatter": {

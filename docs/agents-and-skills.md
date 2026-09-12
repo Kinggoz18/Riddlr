@@ -12,8 +12,8 @@ Each agent has:
 - an operator description (shown in the dashboard, not sent to the model)
 - objectives (what the watcher is for)
 - a schedule (`30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `daily`)
-- a daily token budget; when exhausted, analysis is skipped and the event stays
-  `needs_analysis`
+- a daily token budget (default 100000, or unlimited); when a finite budget is
+  exhausted, analysis is skipped and the event stays `needs_analysis`
 - attached markdown skills
 - a watchlist of canonical asset IDs
 
@@ -68,7 +68,8 @@ confirmed from evidence. Inferred is interpretation. Signal is set only after
 a validated signal is persisted.
 
 LLM analysis still runs on material events only. Candidates remain visible on
-the dashboard without spending the daily token budget.
+the dashboard without spending the daily token budget. Unlimited daily usage
+still records tokens and still bounds prompt context.
 
 ## Core validation skills
 

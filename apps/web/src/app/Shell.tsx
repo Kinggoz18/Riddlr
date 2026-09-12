@@ -4,6 +4,29 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "./api.js";
 import { BrandMark, PageNavLink } from "./Brand.js";
+import { ThemeToggle } from "./ThemeToggle.js";
+
+const NAV_CLUSTERS: Array<Array<{ to: string; label: string; end?: boolean }>> = [
+  [
+    { to: "/", label: "Overview", end: true },
+    { to: "/signals", label: "Signals" },
+    { to: "/events", label: "Events" },
+  ],
+  [
+    { to: "/agents", label: "Agents" },
+    { to: "/skills", label: "Skills" },
+    { to: "/sources", label: "Sources" },
+    { to: "/watchlists", label: "Watchlists" },
+    { to: "/portfolios", label: "Portfolios" },
+  ],
+  [
+    { to: "/notifications", label: "Notifications" },
+    { to: "/scans", label: "Scans" },
+    { to: "/usage", label: "Usage" },
+    { to: "/health", label: "Health" },
+  ],
+  [{ to: "/settings", label: "Settings" }],
+];
 
 export function Shell(props: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -11,6 +34,18 @@ export function Shell(props: { children: ReactNode }) {
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -47,32 +82,29 @@ export function Shell(props: { children: ReactNode }) {
           aria-label="Primary"
         >
           <div className="nav-links">
-            <PageNavLink to="/" end>
-              Overview
-            </PageNavLink>
-            <PageNavLink to="/signals">Signals</PageNavLink>
-            <PageNavLink to="/events">Events</PageNavLink>
-            <PageNavLink to="/agents">Agents</PageNavLink>
-            <PageNavLink to="/skills">Skills</PageNavLink>
-            <PageNavLink to="/sources">Sources</PageNavLink>
-            <PageNavLink to="/watchlists">Watchlists</PageNavLink>
-            <PageNavLink to="/portfolios">Portfolios</PageNavLink>
-            <PageNavLink to="/notifications">Notifications</PageNavLink>
-            <PageNavLink to="/scans">Scans</PageNavLink>
-            <PageNavLink to="/usage">Usage</PageNavLink>
-            <PageNavLink to="/health">Health</PageNavLink>
-            <PageNavLink to="/settings">Settings</PageNavLink>
+            {NAV_CLUSTERS.map((cluster) => (
+              <div className="nav-cluster" key={cluster.map((item) => item.to).join("-")}>
+                {cluster.map((item) => (
+                  <PageNavLink key={item.to} to={item.to} end={item.end}>
+                    {item.label}
+                  </PageNavLink>
+                ))}
+              </div>
+            ))}
           </div>
-          <Button
-            variant="ghost"
-            className="signout-button"
-            onClick={async () => {
-              await api("/api/v1/auth/logout", { method: "POST" });
-              window.location.assign("/login");
-            }}
-          >
-            Sign out
-          </Button>
+          <div className="nav-footer">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              className="signout-button"
+              onClick={async () => {
+                await api("/api/v1/auth/logout", { method: "POST" });
+                window.location.assign("/login");
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
         </nav>
       </header>
       <main id="main" className="page-frame">

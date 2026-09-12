@@ -9,6 +9,10 @@ The Crypto module resolves the asset class. Unknown IDs still require the
 The dashboard watchlist picker uses named assets (Bitcoin, Ethereum). Canonical
 IDs are stored underneath.
 
+Overview and agent boards show the first eight named assets, then a View more
+link. **Watchlists** lists every agent watchlist; open a list to see the full
+set. Edit assets on the agent.
+
 Scan search queries use watchlist symbols and names when the list is not empty.
 The default agent is seeded with Bitcoin, Ethereum, and Tether. Context notes
 include the watchlist. Watchlists do not invent market metrics.

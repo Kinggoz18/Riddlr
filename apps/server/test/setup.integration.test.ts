@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseEnv } from "@riddlr/config";
 import {
   currentTotp,
@@ -108,7 +111,7 @@ describe("setup, auth, and domain persistence", () => {
       RIDDLR_LOG_FORMAT: "json",
       RIDDLR_SEARXNG_URL: "http://searxng:8080",
       RIDDLR_EMAIL_FROM: "Riddlr <noreply@localhost>",
-      RIDDLR_SECRETS_DIR: "/tmp",
+      RIDDLR_SECRETS_DIR: mkdtempSync(join(tmpdir(), "riddlr-setup-")),
       RIDDLR_GENERATE_DEV_SECRETS: "false",
       RIDDLR_PROCESS_ROLE: "api",
       RIDDLR_METRICS_PUBLIC: "false",
@@ -217,6 +220,7 @@ describe("setup, auth, and domain persistence", () => {
       payload: { marketDomainIds: ["crypto"] },
     });
     expect(complete.statusCode).toBe(200);
+    expect(complete.json().firstScanQueued).toBe(true);
 
     const secondComplete = await app.inject({
       method: "POST",
@@ -272,6 +276,7 @@ describe("setup, auth, and domain persistence", () => {
     const agent = agentsResponse.json().agents[0];
     expect(agent.name).toBe("Riddlr Intelligence Agent");
     expect(agent.domains).toEqual(["crypto"]);
+    expect(agent.tokenBudget).toBe(100_000);
     expect(agent.description).toMatch(/Crypto watcher/);
     expect(agent.objectives).toEqual(
       expect.arrayContaining(["general_crypto_intelligence", "risk_signals"]),
@@ -917,6 +922,7 @@ describe("setup, auth, and domain persistence", () => {
     };
     expect(agent.kind).toBe("user");
     expect(agent.schedule).toBe("30m");
+    expect(created.json().agent.tokenBudget).toBe(4000);
     expect(agent.watchlist.items.map((item) => item.canonicalId)).toEqual(["coingecko:tether"]);
     expect(agent.watchlist.items[0]?.assetClass).toBe("stablecoin");
 
@@ -953,6 +959,52 @@ describe("setup, auth, and domain persistence", () => {
       "depeg-watch",
     );
 
+    const unlimited = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/agents/${agent.id}`,
+      headers: { cookie },
+      payload: { tokenBudget: null },
+    });
+    expect(unlimited.statusCode).toBe(200);
+    expect(unlimited.json().agent.tokenBudget).toBeNull();
+
+    const finiteAgain = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/agents/${agent.id}`,
+      headers: { cookie },
+      payload: { tokenBudget: 100_000 },
+    });
+    expect(finiteAgain.statusCode).toBe(200);
+    expect(finiteAgain.json().agent.tokenBudget).toBe(100_000);
+
+    const createdUnlimited = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "Unlimited desk",
+        marketDomainIds: ["crypto"],
+        schedule: "1h",
+        tokenBudget: null,
+        watchlistItems: [{ canonicalId: "coingecko:bitcoin" }],
+      },
+    });
+    expect(createdUnlimited.statusCode).toBe(200);
+    expect(createdUnlimited.json().agent.tokenBudget).toBeNull();
+
+    const tooLarge = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "Oversize budget",
+        marketDomainIds: ["crypto"],
+        tokenBudget: 200_001,
+        watchlistItems: [{ canonicalId: "coingecko:bitcoin" }],
+      },
+    });
+    expect(tooLarge.statusCode).toBe(400);
+
     const defaultAgent = (
       await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"))
     )[0];
@@ -976,11 +1028,15 @@ describe("setup, auth, and domain persistence", () => {
   it("skips analysis when the agent daily token budget is exhausted", async () => {
     const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
     expect(agent?.id).toBeDefined();
+    await ctx.db
+      .update(agents)
+      .set({ tokenBudget: 4_000 })
+      .where(eq(agents.id, agent?.id as string));
     await ctx.db.insert(aiUsageEvents).values({
       agentId: agent?.id,
       provider: "openai_compatible",
       model: "fixture",
-      promptTokens: 8000,
+      promptTokens: 4_000,
       completionTokens: 1,
     });
     const [scan] = await ctx.db
@@ -993,6 +1049,7 @@ describe("setup, auth, and domain persistence", () => {
       })
       .returning();
     const before = (await ctx.db.select().from(signals)).length;
+    let llmCalled = false;
     const fetchImpl: typeof fetch = async (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.includes("api.coingecko.com")) {
@@ -1016,9 +1073,14 @@ describe("setup, auth, and domain persistence", () => {
           ],
         });
       }
-      throw new Error("LLM must not be called when the token budget is exhausted");
+      if (url.includes("/v1/chat/completions") || url.includes("/v1/messages")) {
+        llmCalled = true;
+        throw new Error("LLM must not be called when the token budget is exhausted");
+      }
+      return new Response("unexpected fetch", { status: 404 });
     };
     await runScan(ctx, scan?.id as string, { fetchImpl });
+    expect(llmCalled).toBe(false);
     const after = (await ctx.db.select().from(signals)).length;
     expect(after).toBe(before);
     const eventRows = await ctx.db
@@ -1026,6 +1088,106 @@ describe("setup, auth, and domain persistence", () => {
       .from(events)
       .where(eq(events.scanId, scan?.id as string));
     expect(eventRows.some((row) => row.status === "needs_analysis")).toBe(true);
+    await ctx.db.delete(aiUsageEvents).where(eq(aiUsageEvents.agentId, agent?.id as string));
+    await ctx.db
+      .update(agents)
+      .set({ tokenBudget: 100_000 })
+      .where(eq(agents.id, agent?.id as string));
+  });
+
+  it("analyzes when the agent daily token budget is unlimited even after heavy usage", async () => {
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    expect(agent?.id).toBeDefined();
+    await ctx.db
+      .update(agents)
+      .set({ tokenBudget: null })
+      .where(eq(agents.id, agent?.id as string));
+    await ctx.db.insert(aiUsageEvents).values({
+      agentId: agent?.id,
+      provider: "openai_compatible",
+      model: "fixture",
+      promptTokens: 900_000,
+      completionTokens: 1,
+    });
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-03-01T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:budget-unlimited",
+      })
+      .returning();
+    let llmCalled = false;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      if (url.includes("/search")) {
+        return Response.json({
+          results: [
+            {
+              url: "https://example.com/budget-unlimited",
+              title: "Bitcoin ETF inflows accelerate",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
+              engine: "fixture",
+            },
+            {
+              url: "https://news.example.com/budget-unlimited",
+              title: "Bitcoin ETF inflows rose after latest issuer filing",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
+              engine: "fixture",
+            },
+          ],
+        });
+      }
+      if (url.includes("/v1/chat/completions")) {
+        llmCalled = true;
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          messages?: Array<{ role?: string; content?: string }>;
+        };
+        const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
+        const ids = [...user.matchAll(/ID=([0-9a-f-]{36})/gi)].map((match) => match[1] as string);
+        return Response.json({
+          id: "chatcmpl-unlimited",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  headline: "Unlimited budget still analyzes material events",
+                  whyItMatters:
+                    "Independent search results describe the same Bitcoin demand shift.",
+                  proof: {
+                    evidenceIds: ids.slice(0, 1),
+                    summary: "SearXNG titles independently describe Bitcoin ETF inflows.",
+                  },
+                  action: "Watch ETF flow reporting; do not trade.",
+                  risk: "moderate",
+                  confidence: 0.62,
+                  assets: ["coingecko:bitcoin"],
+                  eventType: "narrative",
+                  marketContext: "Crypto domain context from extracted Bitcoin mentions.",
+                  contradictoryEvidence: "No contradictory evidence in this fixture.",
+                  invalidationConditions: "Inflows reverse or coverage is retracted.",
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 120, completion_tokens: 80 },
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    expect(llmCalled).toBe(true);
+    await ctx.db.delete(aiUsageEvents).where(eq(aiUsageEvents.agentId, agent?.id as string));
+    await ctx.db
+      .update(agents)
+      .set({ tokenBudget: 100_000 })
+      .where(eq(agents.id, agent?.id as string));
   });
 
   it("stores an encrypted Discord source, redacts the token, and polls official REST messages", async () => {

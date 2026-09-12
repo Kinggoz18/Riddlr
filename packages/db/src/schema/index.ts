@@ -137,7 +137,7 @@ export const agents = pgTable("agents", {
   objectives: jsonb("objectives").$type<string[]>().notNull().default([]),
   schedule: text("schedule").notNull().default("1h"),
   customIntervalMs: integer("custom_interval_ms"),
-  tokenBudget: integer("token_budget").notNull().default(8000),
+  tokenBudget: integer("token_budget").default(100_000),
   notificationPolicy: jsonb("notification_policy")
     .$type<{
       minRisk: "low" | "moderate" | "high" | "critical";

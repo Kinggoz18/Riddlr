@@ -1,14 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#050807" />
+    <meta name="theme-color" content="#070b0a" />
     <meta
       name="description"
       content="Riddlr is a local-first intelligence engine. Crypto is the supported market domain."
     />
     <title>Riddlr</title>
+    <script>
+      (() => {
+        const stored = localStorage.getItem("riddlr-theme");
+        const theme = stored === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute("content", theme === "light" ? "#eef3f0" : "#070b0a");
+        }
+      })();
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />

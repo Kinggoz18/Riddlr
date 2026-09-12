@@ -1,3 +1,7 @@
+export const DEFAULT_DAILY_TOKEN_BUDGET = 100_000;
+export const MIN_DAILY_TOKEN_BUDGET = 500;
+export const MAX_DAILY_TOKEN_BUDGET = 200_000;
+
 export const dateTime = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -42,6 +46,43 @@ export function assetLabel(canonicalId: string) {
   return local ? local.replace(/-/g, " ") : canonicalId;
 }
 
+export function assetTicker(canonicalId: string, item?: { symbol?: string | null }) {
+  if (item?.symbol?.trim()) {
+    return item.symbol.trim().toUpperCase();
+  }
+  const known = ASSET_CATALOG.find((entry) => entry.canonicalId === canonicalId);
+  if (known) {
+    return known.symbol;
+  }
+  const local = canonicalId.split(":")[1];
+  return (local ?? canonicalId).replace(/-/g, "").slice(0, 6).toUpperCase();
+}
+
+export function assetDisplayName(canonicalId: string, item?: { name?: string | null }) {
+  if (item?.name?.trim()) {
+    return item.name.trim();
+  }
+  const known = ASSET_CATALOG.find((entry) => entry.canonicalId === canonicalId);
+  if (known) {
+    return known.name;
+  }
+  const local = canonicalId.split(":")[1];
+  return local ? local.replace(/-/g, " ") : canonicalId;
+}
+
+export function assetClassLabel(assetClass?: string | null) {
+  switch (assetClass) {
+    case "cryptocurrency":
+      return "Cryptocurrency";
+    case "meme_coin":
+      return "Meme coin";
+    case "stablecoin":
+      return "Stablecoin";
+    default:
+      return assetClass ? assetClass.replaceAll("_", " ") : undefined;
+  }
+}
+
 export function resolveAssetInput(raw: string): string | undefined {
   const value = raw.trim().toLowerCase().replace(/^\$/, "");
   if (!value) {
@@ -61,6 +102,10 @@ export function resolveAssetInput(raw: string): string | undefined {
     return value;
   }
   return undefined;
+}
+
+export function tokenBudgetLabel(budget: number | null | undefined) {
+  return budget === null ? "Unlimited" : (budget ?? DEFAULT_DAILY_TOKEN_BUDGET).toLocaleString();
 }
 
 export function eventStatusLabel(status: string) {
@@ -174,6 +219,8 @@ export function auditActionLabel(action: string) {
   switch (action) {
     case "setup.admin":
       return "Administrator created";
+    case "setup.unlock":
+      return "Setup code accepted";
     case "setup.totp_skipped":
       return "Authenticator skipped";
     case "setup.llm_skipped":

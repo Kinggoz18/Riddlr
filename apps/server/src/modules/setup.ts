@@ -28,6 +28,7 @@ import {
   DEFAULT_CRYPTO_WATCHLIST,
   mergeShippedCryptoObjectives,
 } from "@riddlr/domain-crypto";
+import { probeLlmProvider } from "@riddlr/llm";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 
@@ -230,6 +231,30 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       .onConflictDoNothing();
   }
   return agent;
+}
+
+export async function assertLlmReachable(
+  ctx: AppContext,
+  body: { provider: string; baseUrl: string; model: string; apiKey: string },
+) {
+  if (ctx.config.RIDDLR_ENV === "test") {
+    return;
+  }
+  try {
+    await probeLlmProvider({
+      kind: body.provider === "anthropic_compatible" ? "anthropic_compatible" : "openai_compatible",
+      baseUrl: body.baseUrl,
+      apiKey: body.apiKey,
+      model: body.model,
+    });
+  } catch {
+    const error = new Error(
+      "Could not reach that model. Check the base URL, model name, and API key.",
+    );
+    (error as Error & { statusCode?: number; code?: string }).statusCode = 400;
+    (error as Error & { code?: string }).code = "llm_unreachable";
+    throw error;
+  }
 }
 
 export async function saveLlmProvider(

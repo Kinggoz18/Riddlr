@@ -124,6 +124,26 @@ export {
   scanWindowStart,
 } from "./setup.js";
 export {
+  dashboardPublish,
+  formatSetupCode,
+  isLoopbackAddress,
+  needsSetupCode,
+  normalizeSetupCode,
+  publishRequiresSetupCode,
+  SETUP_ACCESS_MODES,
+  SETUP_ACCESS_VIEWS,
+  SETUP_CODE_BYTES,
+  SETUP_CODE_HEX_LENGTH,
+  SETUP_CODE_TTL_MINUTES,
+  SETUP_CODE_TTL_MS,
+  type SetupAccessMode,
+  type SetupAccessView,
+  setupAccessView,
+  setupCanContinue,
+  setupCodeIsExpired,
+  sshTunnelCommand,
+} from "./setup-access.js";
+export {
   INSTRUCTION_HIERARCHY,
   InvalidSignalError,
   RISK_LEVELS,
@@ -167,6 +187,23 @@ export {
   skillPurposeLine,
   UnsafeSkillError,
 } from "./skills.js";
+export {
+  ANALYSIS_COMPLETION_TOKEN_RESERVE,
+  analysisReservationTokens,
+  boundPromptText,
+  type DailyTokenBudget,
+  DEFAULT_DAILY_TOKEN_BUDGET,
+  isUnlimitedDailyTokenBudget,
+  MAX_ANALYSIS_EVIDENCE_PROMPT_ITEMS,
+  MAX_DAILY_TOKEN_BUDGET,
+  MAX_EVIDENCE_PROMPT_CHARS,
+  MIN_DAILY_TOKEN_BUDGET,
+  resolveDailyTokenBudget,
+  shouldSkipForDailyTokenBudget,
+  tokensFromUsageEvent,
+  utcDayRange,
+  utcDayStamp,
+} from "./token-budget.js";
 export {
   assertCanonicalAssetId,
   CANONICAL_ASSET_ID_RE,

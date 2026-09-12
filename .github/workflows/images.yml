@@ -1,0 +1,63 @@
+name: images
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lowercase image owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image tags
+        id: tags
+        run: |
+          owner="${{ env.OWNER }}"
+          ref="${GITHUB_REF_NAME}"
+          {
+            echo "ghcr.io/${owner}/riddlr-server:latest"
+            echo "ghcr.io/${owner}/riddlr-server:${ref}"
+            if [[ "${ref}" == v* ]]; then
+              echo "ghcr.io/${owner}/riddlr-server:${ref#v}"
+            fi
+          } > /tmp/server-tags
+          {
+            echo "ghcr.io/${owner}/riddlr-web:latest"
+            echo "ghcr.io/${owner}/riddlr-web:${ref}"
+            if [[ "${ref}" == v* ]]; then
+              echo "ghcr.io/${owner}/riddlr-web:${ref#v}"
+            fi
+          } > /tmp/web-tags
+          {
+            echo "server<<EOF"
+            cat /tmp/server-tags
+            echo "EOF"
+            echo "web<<EOF"
+            cat /tmp/web-tags
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/server.Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.server }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.web }}

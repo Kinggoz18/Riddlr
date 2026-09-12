@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/cmd/api.ts",
     "dev:worker": "tsx watch src/cmd/worker.ts",
+    "onboard": "tsx src/cmd/onboard.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

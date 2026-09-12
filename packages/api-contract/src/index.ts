@@ -1,5 +1,18 @@
-import { AGENT_SCHEDULES, MARKET_DOMAIN_IDS, SETUP_STEPS } from "@riddlr/domain";
+import {
+  AGENT_SCHEDULES,
+  MARKET_DOMAIN_IDS,
+  MAX_DAILY_TOKEN_BUDGET,
+  MIN_DAILY_TOKEN_BUDGET,
+  SETUP_STEPS,
+} from "@riddlr/domain";
 import { z } from "zod";
+
+export const dailyTokenBudgetSchema = z
+  .number()
+  .int()
+  .min(MIN_DAILY_TOKEN_BUDGET)
+  .max(MAX_DAILY_TOKEN_BUDGET)
+  .nullable();
 
 export const errorEnvelopeSchema = z.object({
   error: z.object({
@@ -16,6 +29,10 @@ export const setupAdminSchema = z.object({
 
 export const totpVerifySchema = z.object({
   token: z.string().min(6).max(8),
+});
+
+export const setupUnlockSchema = z.object({
+  code: z.string().min(8).max(128),
 });
 
 export const loginSchema = z.object({
@@ -74,6 +91,9 @@ export const setupStatusSchema = z.object({
   completed: z.boolean(),
   currentStep: z.enum([...SETUP_STEPS, "complete"]),
   stepCount: z.literal(4),
+  setupAccess: z.enum(["local", "code"]),
+  canContinue: z.boolean(),
+  setupCodeExpired: z.boolean(),
 });
 
 export const watchlistItemSchema = z.object({
@@ -111,7 +131,7 @@ export const agentUpdateSchema = z.object({
     .optional(),
   skillIds: z.array(z.string().uuid()).max(8).optional(),
   enabled: z.boolean().optional(),
-  tokenBudget: z.number().int().min(500).max(200_000).optional(),
+  tokenBudget: dailyTokenBudgetSchema.optional(),
   objectives: z.array(z.string().min(3).max(80)).max(16).optional(),
   sourceIds: z.array(z.string().uuid()).max(32).optional(),
   portfolioIds: z.array(z.string().uuid()).max(16).optional(),
@@ -231,7 +251,7 @@ export const agentCreateSchema = z.object({
     .optional(),
   skillIds: z.array(z.string().uuid()).max(8).optional(),
   enabled: z.boolean().optional(),
-  tokenBudget: z.number().int().min(500).max(200_000).optional(),
+  tokenBudget: dailyTokenBudgetSchema.optional(),
   objectives: z.array(z.string().min(3).max(80)).max(16).optional(),
   sourceIds: z.array(z.string().uuid()).max(32).optional(),
   portfolioIds: z.array(z.string().uuid()).max(16).optional(),

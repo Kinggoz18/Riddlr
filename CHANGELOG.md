@@ -2,6 +2,25 @@
 
 All notable changes to Riddlr are documented in this file.
 
+## Unreleased
+
+- By default the dashboard is only at `127.0.0.1:8080` on the machine that
+  runs Docker. A remote server uses the SSH command printed by
+  `./scripts/riddlr-up.sh`. Other devices without SSH require `--public` and a
+  one-time setup code that expires after 15 minutes if unused. The onboard
+  command on that machine runs the same four wizard steps.
+- `./scripts/riddlr-up.sh` can install or start Docker when it is missing (Linux
+  Engine, or Docker Desktop via Homebrew on a Mac) after you confirm, or with
+  `--install-docker`. Windows uses `scripts/riddlr-up.ps1` (winget or
+  Chocolatey for Docker Desktop).
+- `scripts/install.sh` / `scripts/install.ps1` clone into `~/riddlr` and start
+  Compose. They do not replace Docker.
+- The start script pulls published GHCR images (`:latest`) when they exist and
+  are public, otherwise it builds from the clone. Docker is still required.
+- Finish starts the default Crypto scan. Saving a model checks that it
+  answers (skipped in the test environment).
+- See [install.md](docs/install.md).
+
 ## 0.6.0
 
 - Shipped Crypto skills are composed per event. The application computes
@@ -11,6 +30,10 @@ All notable changes to Riddlr are documented in this file.
   discovery, catalyst, market regime, price reaction, materiality, and risk
   assessment. The `whale-activity` slug is preserved and shown as large holder
   activity.
+- Daily token budget defaults to 100000. Agents may set unlimited daily usage;
+  analysis is then not skipped for a cap. Recorded usage and in-flight
+  reservations still enforce finite caps, and evidence in the analysis prompt
+  stays bounded.
 - Discovery persists independent-evidence clusters as candidates without an
   LLM call. Reprints stay immaterial. Analysis still runs on material events
   only. A candidate is not a recommendation to buy, sell, or trade.
@@ -18,6 +41,8 @@ All notable changes to Riddlr are documented in this file.
   the dashboard. Notification policy still decides delivery.
 - Event and signal pages show which analysis dimensions ran and which were
   skipped for missing data.
+- Watchlists page lists every agent watchlist. Overview and agent boards show
+  eight named assets, then View more for the rest.
 
 ## 0.5.0
 

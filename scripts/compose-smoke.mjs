@@ -8,7 +8,7 @@ while (Date.now() < deadline) {
     const response = await fetch(`${origin}/api/v1/setup/status`);
     if (response.ok) {
       const body = await response.json();
-      if (body.stepCount === 4 && Array.isArray(body.domains) && body.domains.length === 5) {
+      if (body.stepCount === 4 && Array.isArray(body.domains) && body.domains.length === 5 && body.setupAccess === "local") {
         console.log("Compose smoke passed:", origin);
         process.exit(0);
       }

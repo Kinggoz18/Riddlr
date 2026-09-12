@@ -79,6 +79,13 @@ test("first-run onboarding is four steps with crypto supported and other domains
 test("dashboard surfaces, settings, health, and responsive layout @a11y", async ({ page }) => {
   test.setTimeout(60_000);
   await signIn(page);
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Appearance" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Dark" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("link", { name: "Agents" }).click();
   await expect(page.getByText("Domains: crypto").first()).toBeVisible();
   await page.getByRole("link", { name: "Riddlr Intelligence Agent" }).click();
@@ -151,6 +158,9 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
   await page.getByRole("link", { name: "Watchlists" }).click();
   await expect(page.getByRole("heading", { name: /Watchlists/i })).toBeVisible();
+  await page.getByRole("link", { name: /Default watchlist/i }).click();
+  await expect(page.getByRole("heading", { name: /Default watchlist/i })).toBeVisible();
+  await expect(page.getByText("Bitcoin")).toBeVisible();
   await page.getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: /Notifications/i })).toBeVisible();
   await page.goto("/signals/does-not-exist");
@@ -167,6 +177,7 @@ test("login after sign out returns to overview", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Appearance" })).toHaveCount(0);
   await page.getByLabel(/Email/).fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Continue" }).click();

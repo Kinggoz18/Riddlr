@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 build/
 coverage/
@@ -11,10 +12,6 @@ coverage/
 *.log
 npm-debug.log*
 pnpm-debug.log*
-playwright-report/
-test-results/
-blob-report/
-.playwright/
 docker/data/
 *.sqlite
 *.sqlite-journal
@@ -29,3 +26,6 @@ agent-transcripts/
 # Generated local secrets
 .secrets/
 data/secrets/
+
+# Operator private notes (never commit)
+SETUP-ACCESS.local.md

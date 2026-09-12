@@ -48,6 +48,7 @@ const analyzeWorker = new Worker(
   workerOptions,
 );
 
+void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
 const heartbeat = setInterval(() => {
   void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
   const memory = snapshotProcessMemory();
