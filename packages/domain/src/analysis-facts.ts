@@ -123,6 +123,55 @@ export function observationsFromMarketPayload(
   return takeBounded(out, 8);
 }
 
+export function observationsFromDetectorPayload(
+  payload: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  fallbackObservedAt: Date,
+): MarketObservation[] {
+  if (!payload || typeof payload.detector !== "string") {
+    return [];
+  }
+  const metric = typeof payload.metric === "string" ? payload.metric : "";
+  const series = Array.isArray(payload.series) ? payload.series : [];
+  const last = series.at(-1);
+  if (!last || typeof last !== "object") {
+    return [];
+  }
+  const row = last as { observedAt?: unknown; value?: unknown };
+  const value = typeof row.value === "number" ? row.value : Number(row.value);
+  if (!Number.isFinite(value)) {
+    return [];
+  }
+  const observedAt =
+    typeof row.observedAt === "string" || row.observedAt instanceof Date
+      ? new Date(row.observedAt)
+      : fallbackObservedAt;
+  if (Number.isNaN(observedAt.getTime())) {
+    return [];
+  }
+  const kind =
+    metric === "spot_price"
+      ? "quoted_price"
+      : metric === "quoted_volume"
+        ? "quoted_volume"
+        : metric;
+  if (!kind) {
+    return [];
+  }
+  const assetCanonicalId =
+    typeof payload.subjectCanonicalId === "string" ? payload.subjectCanonicalId : undefined;
+  return [
+    {
+      kind,
+      value,
+      unit: typeof payload.unit === "string" ? payload.unit : "usd",
+      observedAt,
+      sourceId,
+      assetCanonicalId,
+    },
+  ];
+}
+
 export function buildEventFacts(input: {
   evidence: Array<{
     hostname?: string;

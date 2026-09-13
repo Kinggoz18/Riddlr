@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildEventFacts } from "./analysis-facts.js";
 import {
   absorbMarketDataClusters,
+  absorbObservationClusters,
   characterShingles,
   clusterEventTitle,
   clusterEvidence,
@@ -158,6 +159,29 @@ describe("near-duplicate clustering", () => {
     expect(merged[0]?.map((item) => item.id).sort()).toEqual(["news", "px"]);
   });
 
+  it("merges observation findings on the same asset into one cluster", () => {
+    const merged = absorbObservationClusters([
+      [
+        {
+          id: "shock",
+          assetCanonicalIds: ["coingecko:bitcoin"],
+          text: "return_shock.v1 on coingecko:bitcoin: z=4.25 over 20 spot_price samples",
+          sourceFamily: "observation",
+        },
+      ],
+      [
+        {
+          id: "volume",
+          assetCanonicalIds: ["coingecko:bitcoin"],
+          text: "volume_anomaly.v1 on coingecko:bitcoin: z=4.25 over 20 quoted_volume samples",
+          sourceFamily: "observation",
+        },
+      ],
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.map((item) => item.id).sort()).toEqual(["shock", "volume"]);
+  });
+
   it("does not treat an absorbed market snapshot as a second origin", () => {
     const facts = buildEventFacts({
       evidence: [
@@ -205,11 +229,12 @@ describe("near-duplicate clustering", () => {
     expect(
       clusterEventTitle({
         assets: [{ canonicalId: "coingecko:bitcoin", displayName: "Bitcoin" }],
-        evidenceTitles: ["Bitcoin"],
-        hostnames: ["www.coinbase.com"],
-        reliabilityStatus: "mention",
+        evidenceTitles: ["return_shock.v1 coingecko:bitcoin"],
+        hostnames: ["unknown-host"],
+        principalClaimTitle: "bitcoin 4.25σ spot price return shock (v1, threshold 3σ)",
+        reliabilityStatus: "observed",
       }),
-    ).toBe("Search mention · www.coinbase.com");
+    ).toBe("bitcoin 4.25σ spot price return shock (v1, threshold 3σ)");
   });
 
   it("titles clusters from assets and hosts instead of homepage copy", () => {
@@ -261,6 +286,21 @@ describe("near-duplicate clustering", () => {
       windowDay: "2026-09-13",
     });
     expect(first).toBe(second);
+    expect(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        claimFingerprints: [],
+        contentHashes: [],
+        assetCanonicalIds: ["coingecko:bitcoin"],
+        windowDay: "2026-09-13",
+      }),
+    ).toBe(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        assetCanonicalIds: ["coingecko:bitcoin"],
+        windowDay: "2026-09-13",
+      }),
+    );
     expect(first).not.toBe(
       eventClusterFingerprint({
         marketDomainId: "crypto",

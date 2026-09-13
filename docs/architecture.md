@@ -11,7 +11,7 @@ Source → Evidence mention → Document (eligible web) → Claims
   → Analysis (material events) → Validated signal or unverified early warning
   → Dashboard / notification policy
 
-ObservationProvider → observation_series → detectors → observation evidence
+ObservationProvider → observation_series → detectors → observation evidence → event
 ```
 
 ## Process split
@@ -77,7 +77,9 @@ bounded `next_token`), and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
 seed fills `assets` for watchlist search and text extraction. The observe worker
 polls CoinGecko `/simple/price` into `observation_series` for watched, held, and
-pinned assets. On-chain scanning is not implemented.
+pinned assets. Return-shock and volume detectors open material events with
+reliability `observed` when a watched asset trips the threshold. On-chain scanning
+is not implemented.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

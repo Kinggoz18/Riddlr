@@ -29,6 +29,13 @@ evidence with `sourceFamily: observation` and a claim
 `crypto:observed_<metric>_anomaly`. The same detector, subject, and polarity
 fingerprint to one evidence row per UTC day.
 
+Findings cluster into events without a web article. A watched (or pinned) asset
+with a detector claim is material (`observed_anomaly`). Reliability is `observed`,
+a sourced fact, not `single_source`. The event title is the detector claim. Per-event
+`observations` store the last series point the detector used. The same subject on
+the same UTC day is one event; a reversed polarity or a second detector adds claims
+to that event. `observed` reliability does not persist a signal.
+
 ## Operator surfaces
 
 Health shows last poll, subject count, series count, and freshness gap. Watchlist

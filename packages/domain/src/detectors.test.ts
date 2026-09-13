@@ -4,6 +4,7 @@ import {
   detectReturnShock,
   detectReturnShockForSubject,
   detectVolumeAnomaly,
+  isObservedAnomalyKind,
   RETURN_SHOCK_V1,
   VOLUME_ANOMALY_V1,
 } from "./detectors.js";
@@ -28,6 +29,7 @@ describe("return-shock detector", () => {
     expect(hit?.zScore).toBeCloseTo(19 / Math.sqrt(20), 10);
     expect(hit?.unit).toBe("sigma");
     expect(hit?.bodyText).toContain("coingecko:bitcoin");
+    expect(hit?.claimTitle).toBe("bitcoin 4.25σ spot price return shock (v1, threshold 3σ)");
     if (!hit) {
       throw new Error("expected a return-shock finding");
     }
@@ -58,6 +60,29 @@ describe("return-shock detector", () => {
   it("does not divide when a non-positive price appears", () => {
     const points = prices([...Array.from({ length: 20 }, () => 100), 0]);
     expect(detectReturnShock(points)).toBeUndefined();
+  });
+
+  it("does not treat a reversed polarity as the same evidence fingerprint", () => {
+    const up = detectReturnShockForSubject(
+      "coingecko:bitcoin",
+      prices([...Array.from({ length: 20 }, () => 100), 110]),
+    );
+    const down = detectReturnShockForSubject(
+      "coingecko:bitcoin",
+      prices([...Array.from({ length: 20 }, () => 100), 90]),
+    );
+    expect(up?.polarity).toBe("up");
+    expect(down?.polarity).toBe("down");
+    if (!up || !down) {
+      throw new Error("expected both polarities");
+    }
+    expect(detectorEvidenceFingerprint(up)).not.toBe(detectorEvidenceFingerprint(down));
+  });
+
+  it("recognises observed-anomaly claim kinds", () => {
+    expect(isObservedAnomalyKind("crypto:observed_spot_price_anomaly")).toBe(true);
+    expect(isObservedAnomalyKind("generic:observed_quoted_volume_anomaly")).toBe(true);
+    expect(isObservedAnomalyKind("crypto:market_move")).toBe(false);
   });
 });
 

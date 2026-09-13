@@ -21,7 +21,8 @@ uses a tmpfs data directory so the suite can start when the Docker VM disk is
 exhausted. They cover four-step onboarding, first-run access, default-agent Crypto association,
 coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
-backfill, observation poll to series and detectors, token-budget skip, Discord token encryption and official REST
+backfill, observation poll to series, detectors, and observed events without an
+article, token-budget skip, Discord token encryption and official REST
 polling, X bearer encryption and recent search, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
@@ -52,7 +53,8 @@ fixture with a shared outbound Reuters URL is not treated as independent
 corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
-search against a running Compose stack, and the Health Observations card.
+search against a running Compose stack, the Health Observations card, and opening
+an observed quantitative event on Events.
 First-run credentials default to `ops@example.com`. On an already-set-up
 instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
 `RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips

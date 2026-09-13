@@ -174,4 +174,40 @@ describe("discovery candidates", () => {
     expect(notes).toContain("not a recommendation to buy, sell, or trade");
     expect(notes).not.toMatch(/\b(buy now|sell now|enter a (long|short)|place an order)\b/);
   });
+
+  it("classifies a detector finding as an observed anomaly, not a search mention", () => {
+    const event = facts({
+      evidence: [
+        {
+          hostname: "unknown-host",
+          sourceFamily: "observation",
+          text: "return_shock.v1 on coingecko:bitcoin: z=4.25 over 20 spot_price samples (threshold 3).",
+          role: "primary",
+          contentCompleteness: "native_complete",
+          hasValidatedClaim: true,
+        },
+      ],
+      assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+    });
+    const discovery = discoverCandidate({
+      facts: event,
+      objectives: OBJECTIVES,
+      text: "return_shock.v1 on coingecko:bitcoin",
+      material: { material: true, reason: "observed_anomaly" },
+    });
+    expect(discovery.candidate).toBe(true);
+    expect(discovery.kind).toBe("anomaly");
+    expect(discovery.epistemicStatus).toBe("observed");
+    expect(discovery.epistemicStatus).not.toBe("signal");
+    expect(
+      nextEventStatus({
+        evidenceCount: 1,
+        discovery,
+        material: { material: true, reason: "observed_anomaly" },
+      }),
+    ).toBe("needs_analysis");
+  });
 });

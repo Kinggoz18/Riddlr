@@ -157,6 +157,21 @@ export function epistemicStatusLabel(status: string) {
   }
 }
 
+export function reliabilityStatusLabel(status: string) {
+  switch (status) {
+    case "observed":
+      return "Observed";
+    case "single_source":
+      return "Single source";
+    case "primary_confirmed":
+      return "Primary confirmed";
+    case "legacy_unassessed":
+      return "Unassessed";
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
+
 export function candidateKindLabel(kind: string) {
   switch (kind) {
     case "potential_opportunity":

@@ -66,6 +66,32 @@ describe("reliability", () => {
     ).toBe("primary_confirmed");
   });
 
+  it("marks a native-complete detector finding as observed, not single-source", () => {
+    expect(
+      assessReliability({
+        contentCompleteness: "native_complete",
+        independentOriginCount: 1,
+        supportingCount: 1,
+        contradictingCount: 0,
+        retractingCount: 0,
+        hasTrustedFirsthand: false,
+        hasValidatedClaim: true,
+        observedAnomaly: true,
+      }).status,
+    ).toBe("observed");
+    expect(
+      assessReliability({
+        contentCompleteness: "native_complete",
+        independentOriginCount: 1,
+        supportingCount: 1,
+        contradictingCount: 0,
+        retractingCount: 0,
+        hasTrustedFirsthand: false,
+        hasValidatedClaim: true,
+      }).status,
+    ).toBe("single_source");
+  });
+
   it("records dispute and retraction", () => {
     expect(
       assessReliability({
@@ -93,6 +119,7 @@ describe("reliability", () => {
 
   it("caps confidence by reliability and keys origin by actor not hostname", () => {
     expect(capConfidence("single_source", 0.9)).toBe(0.5);
+    expect(capConfidence("observed", 0.9)).toBe(0.5);
     expect(capConfidence("primary_confirmed", 0.9)).toBe(0.55);
     expect(originKey({ platform: "x", externalId: "42" })).toBe("x:42");
     expect(originKey({ platform: "search", hostname: "News.Example.com" })).toBe(

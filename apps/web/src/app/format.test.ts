@@ -16,6 +16,7 @@ import {
   MIN_DAILY_TOKEN_BUDGET,
   objectiveLabel,
   parseClockHour,
+  reliabilityStatusLabel,
   scheduleLabel,
   tokenBudgetLabel,
 } from "./format.js";
@@ -67,6 +68,8 @@ describe("agent labels", () => {
     expect(epistemicStatusLabel("discovered")).toBe("Discovered");
     expect(epistemicStatusLabel("observed")).toBe("Observed");
     expect(epistemicStatusLabel("confirmed")).toBe("Confirmed");
+    expect(reliabilityStatusLabel("observed")).toBe("Observed");
+    expect(reliabilityStatusLabel("single_source")).toBe("Single source");
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
   });
 });

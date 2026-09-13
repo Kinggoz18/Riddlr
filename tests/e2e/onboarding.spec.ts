@@ -175,6 +175,22 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await page.getByRole("link", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
   await expect(page.getByText(/Clusters of related evidence/i)).toBeVisible();
+  const eventsResponse = await page.request.get("/api/v1/events?limit=50");
+  expect(eventsResponse.ok()).toBeTruthy();
+  const eventsBody = (await eventsResponse.json()) as {
+    events: Array<{ id: string; title: string; reliabilityStatus?: string | null }>;
+  };
+  const observed = eventsBody.events.find((row) => row.reliabilityStatus === "observed");
+  if (observed) {
+    await page.getByRole("link", { name: observed.title }).click();
+    await expect(page.getByRole("heading", { name: observed.title })).toBeVisible();
+    await expect(page.getByText("Observed", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sourced observations" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Claims" })).toBeVisible();
+    await expect(page.getByText(/https?:\/\//i)).toHaveCount(0);
+  } else {
+    throw new Error("Expected an observed quantitative event on Events.");
+  }
   await page.getByRole("link", { name: "Watchlists" }).click();
   await expect(page.getByRole("heading", { name: /Watchlists/i })).toBeVisible();
   await page.getByRole("link", { name: /Default watchlist/i }).click();

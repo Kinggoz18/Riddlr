@@ -175,6 +175,30 @@ export function absorbMarketDataClusters<T extends ClusterableEvidence>(clusters
   return news;
 }
 
+export function absorbObservationClusters<T extends ClusterableEvidence>(clusters: T[][]): T[][] {
+  const rest: T[][] = [];
+  const byAssets = new Map<string, T[]>();
+  for (const cluster of clusters) {
+    const observationOnly =
+      cluster.length > 0 && cluster.every((item) => item.sourceFamily === "observation");
+    const assets = [...new Set(cluster.flatMap((item) => item.assetCanonicalIds))]
+      .filter(Boolean)
+      .sort();
+    if (!observationOnly || assets.length === 0) {
+      rest.push(cluster);
+      continue;
+    }
+    const key = assets.join(",");
+    const host = byAssets.get(key);
+    if (host) {
+      host.push(...cluster);
+    } else {
+      byAssets.set(key, [...cluster]);
+    }
+  }
+  return [...rest, ...byAssets.values()];
+}
+
 function syntheticClaimTitle(title: string): boolean {
   return /^[\w .-]+: [a-z]+_[a-z0-9_]+/i.test(title.trim());
 }

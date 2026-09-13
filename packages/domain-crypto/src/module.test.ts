@@ -286,6 +286,29 @@ describe("crypto domain module", () => {
         retracted: false,
       }).level,
     ).toBe("critical");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [
+          {
+            marketDomainId: "crypto",
+            kind: "crypto:observed_spot_price_anomaly",
+            predicate: "return_shock",
+            polarity: "asserted",
+            modality: "asserted",
+            fingerprint: "obs",
+            title: "bitcoin 4.25σ spot price return shock (v1, threshold 3σ)",
+          },
+        ],
+        assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: false,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("moderate");
   });
 
   it("keeps crypto search fallbacks on the domain module", () => {

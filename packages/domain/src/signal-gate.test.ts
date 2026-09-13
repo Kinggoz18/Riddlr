@@ -85,4 +85,34 @@ describe("signal gate confirmation and shadow", () => {
     expect(gate.persist).toBe(true);
     expect(gate.notifyEligible).toBe(false);
   });
+
+  it("does not persist a detector observation as a signal", () => {
+    const facts = buildEventFacts({
+      evidence: [
+        {
+          hostname: "unknown-host",
+          sourceFamily: "observation",
+          text: "return_shock.v1 on coingecko:bitcoin: z=4.25 over 20 spot_price samples (threshold 3).",
+          role: "primary",
+          contentCompleteness: "native_complete",
+          hasValidatedClaim: true,
+        },
+      ],
+      assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+    });
+    const gate = decideSignalGate({
+      facts,
+      risk: "moderate",
+      confidence: 0.9,
+      material: { material: true, reason: "observed_anomaly" },
+      reliability: "observed",
+      impact: "moderate",
+    });
+    expect(gate.persist).toBe(false);
+    expect(gate.notifyEligible).toBe(false);
+    expect(gate.reason).toBe("observed_fact_not_signal");
+  });
 });

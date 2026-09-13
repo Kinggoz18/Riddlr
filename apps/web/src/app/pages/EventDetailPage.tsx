@@ -8,6 +8,7 @@ import {
   epistemicStatusLabel,
   eventStatusLabel,
   independenceCopy,
+  reliabilityStatusLabel,
 } from "../format.js";
 
 function EventDetailPage() {
@@ -99,7 +100,7 @@ function EventDetailPage() {
           <span>{epistemicStatusLabel(data.event.epistemicStatus)}</span>
         ) : null}
         {data.event.reliabilityStatus ? (
-          <span>{data.event.reliabilityStatus.replaceAll("_", " ")}</span>
+          <span>{reliabilityStatusLabel(data.event.reliabilityStatus)}</span>
         ) : null}
         {data.event.impactLevel ? <span>Impact {data.event.impactLevel}</span> : null}
         {data.event.contentCompleteness ? (
@@ -117,7 +118,7 @@ function EventDetailPage() {
       ) : null}
       {data.assessment ? (
         <p className="field-note">
-          Reliability {data.assessment.reliabilityStatus.replaceAll("_", " ")} · Impact{" "}
+          Reliability {reliabilityStatusLabel(data.assessment.reliabilityStatus)} · Impact{" "}
           {data.assessment.impactLevel} · {data.assessment.independentOriginCount} independent
           origins
         </p>
@@ -129,8 +130,8 @@ function EventDetailPage() {
             {data.assessments.map((item) => (
               <li key={item.revision}>
                 <span>
-                  Revision {item.revision}: {item.reliabilityStatus.replaceAll("_", " ")} · Impact{" "}
-                  {item.impactLevel}
+                  Revision {item.revision}: {reliabilityStatusLabel(item.reliabilityStatus)} ·
+                  Impact {item.impactLevel}
                 </span>
                 <small>
                   {item.independentOriginCount} independent origins
@@ -251,7 +252,7 @@ function EventDetailPage() {
           {data.evidence.map((item) => (
             <li key={item.id}>
               <span>
-                {item.canonicalUrl ? (
+                {item.canonicalUrl && /^https?:\/\//i.test(item.canonicalUrl) ? (
                   <ExternalLink href={item.canonicalUrl}>{item.title ?? item.id}</ExternalLink>
                 ) : (
                   (item.title ?? item.id)

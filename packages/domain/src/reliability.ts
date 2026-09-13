@@ -21,6 +21,7 @@ export type TrustUse = (typeof TRUST_USES)[number];
 
 export const RELIABILITY_STATUSES = [
   "mention",
+  "observed",
   "single_source",
   "corroborated",
   "primary_confirmed",
@@ -116,7 +117,7 @@ export function capConfidence(status: ReliabilityStatus, confidence: number): nu
       ? 1
       : status === "primary_confirmed"
         ? 0.55
-        : status === "single_source"
+        : status === "single_source" || status === "observed"
           ? 0.5
           : status === "disputed"
             ? 0.4
@@ -134,6 +135,7 @@ export function assessReliability(input: {
   hasTrustedFirsthand: boolean;
   hasValidatedClaim: boolean;
   headlineMismatch?: boolean;
+  observedAnomaly?: boolean;
 }): { status: ReliabilityStatus; reason: string } {
   if (input.retractingCount > 0 && input.supportingCount === 0) {
     return { status: "retracted", reason: "origin_retracted" };
@@ -156,8 +158,15 @@ export function assessReliability(input: {
   if (input.hasTrustedFirsthand) {
     return { status: "primary_confirmed", reason: "trusted_firsthand" };
   }
+  if (input.observedAnomaly && completeObservation(input.contentCompleteness)) {
+    return { status: "observed", reason: "sourced_observation" };
+  }
   if (input.independentOriginCount === 1) {
     return { status: "single_source", reason: "single_complete_source" };
   }
   return { status: "mention", reason: "below_reliability" };
+}
+
+function completeObservation(completeness: ContentCompleteness): boolean {
+  return completeness === "native_complete" || completeness === "full_document";
 }

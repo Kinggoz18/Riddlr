@@ -122,6 +122,17 @@ export function decideSignalGate(input: {
       cappedConfidence,
     };
   }
+  if (reliability === "observed") {
+    return {
+      persist: false,
+      notifyEligible: false,
+      disposition: "low_priority",
+      reason: "observed_fact_not_signal",
+      outputKind: "signal",
+      notifyKind: "signal",
+      cappedConfidence,
+    };
+  }
   if (reliability === "primary_confirmed") {
     const highImpact = IMPACT_RANK[impact] >= IMPACT_RANK.high;
     const notify = Boolean(input.earlyWarningsEnabled) && highImpact;

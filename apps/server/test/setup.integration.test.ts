@@ -19,13 +19,17 @@ import {
   aiUsageEvents,
   assets,
   claimEvidence,
+  claims,
   createDb,
   encryptedSecrets,
+  eventClaims,
+  eventEvidence,
   events,
   evidenceItems,
   migrate,
   notificationDeliveries,
   observationSeries,
+  observations,
   passwordResetTokens,
   portfolios,
   scans,
@@ -1985,6 +1989,12 @@ describe("setup, auth, and domain persistence", () => {
     expect(health.json().observations?.provider).toBe(COINGECKO_SPOT_PROVIDER_ID);
     expect(health.json().observations?.seriesCount).toBeGreaterThan(0);
 
+    const beforeShock = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.reliabilityStatus, "observed"));
+    expect(beforeShock).toHaveLength(0);
+
     const unknownPin = await app.inject({
       method: "POST",
       url: "/api/v1/observations/pins",
@@ -2010,6 +2020,17 @@ describe("setup, auth, and domain persistence", () => {
         subjectCanonicalId: "coingecko:bitcoin",
         observedAt: new Date(origin + index * 60_000),
         value: 100,
+        unit: "usd",
+        resolution: "raw",
+      })),
+    );
+    await ctx.db.insert(observationSeries).values(
+      Array.from({ length: 20 }, (_, index) => ({
+        provider: COINGECKO_SPOT_PROVIDER_ID,
+        metric: "quoted_volume",
+        subjectCanonicalId: "coingecko:bitcoin",
+        observedAt: new Date(origin + index * 60_000),
+        value: index === 19 ? 100 : 10,
         unit: "usd",
         resolution: "raw",
       })),
@@ -2042,6 +2063,141 @@ describe("setup, auth, and domain persistence", () => {
       .from(evidenceItems)
       .where(eq(evidenceItems.sourceFamily, "observation"));
     expect(detectorEvidence.some((row) => row.bodyText?.includes("return_shock"))).toBe(true);
+    expect(
+      detectorEvidence.every(
+        (row) => !row.canonicalUrl || row.canonicalUrl.startsWith("riddlr:observation/"),
+      ),
+    ).toBe(true);
+
+    const observedEvents = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.reliabilityStatus, "observed"));
+    expect(observedEvents).toHaveLength(1);
+    const observed = observedEvents[0];
+    expect(observed?.materialityReason).toBe("observed_anomaly");
+    expect(observed?.title).toBe("bitcoin 4.25σ spot price return shock (v1, threshold 3σ)");
+    expect(observed?.status).toBe("needs_analysis");
+    expect(observed?.epistemicStatus).toBe("observed");
+
+    const linkedEvidence = await ctx.db
+      .select({
+        sourceFamily: evidenceItems.sourceFamily,
+        canonicalUrl: evidenceItems.canonicalUrl,
+        adapterId: evidenceItems.adapterId,
+      })
+      .from(eventEvidence)
+      .innerJoin(evidenceItems, eq(eventEvidence.evidenceId, evidenceItems.id))
+      .where(eq(eventEvidence.eventId, observed?.id as string));
+    expect(linkedEvidence.length).toBeGreaterThan(0);
+    expect(linkedEvidence.every((row) => row.sourceFamily === "observation")).toBe(true);
+    expect(linkedEvidence.some((row) => row.canonicalUrl?.includes("https://"))).toBe(false);
+
+    const eventClaimRows = await ctx.db
+      .select({ kind: claims.kind, objectText: claims.objectText, title: claims.title })
+      .from(eventClaims)
+      .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+      .where(eq(eventClaims.eventId, observed?.id as string));
+    expect(eventClaimRows.some((row) => row.kind === "crypto:observed_spot_price_anomaly")).toBe(
+      true,
+    );
+    expect(eventClaimRows.some((row) => row.kind === "crypto:observed_quoted_volume_anomaly")).toBe(
+      true,
+    );
+
+    const snapshot = await ctx.db
+      .select()
+      .from(observations)
+      .where(eq(observations.eventId, observed?.id as string));
+    expect(snapshot.some((row) => row.kind === "quoted_price" && row.value === 110)).toBe(true);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/events?limit=50",
+      headers: { cookie },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(
+      (listed.json().events as Array<{ reliabilityStatus: string }>).some(
+        (row) => row.reliabilityStatus === "observed",
+      ),
+    ).toBe(true);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/v1/events/${observed?.id}`,
+      headers: { cookie },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().event.reliabilityStatus).toBe("observed");
+    expect(detail.json().event.materialityReason).toBe("observed_anomaly");
+    expect((detail.json().observations as unknown[]).length).toBeGreaterThan(0);
+
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+    const again = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID);
+    expect(again.error).toBeUndefined();
+    const stillOne = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.reliabilityStatus, "observed"));
+    expect(stillOne).toHaveLength(1);
+
+    await ctx.db
+      .delete(observationSeries)
+      .where(
+        and(
+          eq(observationSeries.subjectCanonicalId, "coingecko:bitcoin"),
+          eq(observationSeries.metric, "spot_price"),
+          eq(observationSeries.resolution, "raw"),
+        ),
+      );
+    const downOrigin = 1_789_322_000 * 1000 + 2 * 60_000;
+    await ctx.db.insert(observationSeries).values(
+      Array.from({ length: 20 }, (_, index) => ({
+        provider: COINGECKO_SPOT_PROVIDER_ID,
+        metric: "spot_price",
+        subjectCanonicalId: "coingecko:bitcoin",
+        observedAt: new Date(downOrigin + index * 60_000),
+        value: 110,
+        unit: "usd",
+        resolution: "raw",
+      })),
+    );
+    ctx.observationProviders = new ObservationProviderRegistry();
+    ctx.observationProviders.register(
+      createScriptedObservationProvider({
+        id: COINGECKO_SPOT_PROVIDER_ID,
+        observe: () => ({
+          observations: [
+            {
+              provider: COINGECKO_SPOT_PROVIDER_ID,
+              metric: "spot_price",
+              subjectCanonicalId: "coingecko:bitcoin",
+              value: 90,
+              unit: "usd",
+              observedAt: new Date(downOrigin + 20 * 60_000),
+            },
+          ],
+          partial: false,
+          errors: [],
+        }),
+      }),
+    );
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+    const reversed = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID);
+    expect(reversed.error).toBeUndefined();
+    const afterReverse = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.reliabilityStatus, "observed"));
+    expect(afterReverse).toHaveLength(1);
+    const polarities = await ctx.db
+      .select({ objectText: claims.objectText })
+      .from(eventClaims)
+      .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+      .where(eq(eventClaims.eventId, observed?.id as string));
+    expect(polarities.some((row) => row.objectText?.startsWith("up "))).toBe(true);
+    expect(polarities.some((row) => row.objectText?.startsWith("down "))).toBe(true);
 
     await ctx.db.insert(observationSeries).values({
       provider: COINGECKO_SPOT_PROVIDER_ID,

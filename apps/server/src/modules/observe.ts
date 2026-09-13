@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { observationLatestQuerySchema, observationPinSchema } from "@riddlr/api-contract";
 import { decryptSecretWithKeys } from "@riddlr/crypto";
 import {
+  agentPortfolios,
   agents,
   claimEvidence,
   claims,
@@ -10,12 +11,14 @@ import {
   evidenceOccurrences,
   observationPins,
   observationSeries,
+  portfolioHoldings,
   scans,
   sourceFetchRequests,
   sources,
+  watchlistItems,
+  watchlists,
 } from "@riddlr/db";
 import {
-  claimTitle,
   detectorEvidenceFingerprint,
   detectReturnShockForSubject,
   detectVolumeAnomalyForSubject,
@@ -26,6 +29,7 @@ import {
   MAX_RETENTION_LOOPS,
   MAX_SERIES_WINDOW,
   normalizeEvidence,
+  OBSERVATION_SERIES_ORIGIN_KEY,
   takeBounded,
 } from "@riddlr/domain";
 import { CRYPTO_DETECTOR_SPECS } from "@riddlr/domain-crypto";
@@ -36,9 +40,10 @@ import {
   ObservationProviderRegistry,
   redactRequestUrl,
 } from "@riddlr/source-adapters";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { findRegistryAsset, listWatchedCanonicalIds } from "./asset-registry.js";
+import { clusterScanEvents } from "./pipeline.js";
 
 const OBSERVE_LAST = "riddlr:observe:last:";
 const OBSERVE_RESULT = "riddlr:observe:result:";
@@ -254,13 +259,53 @@ async function seriesWindow(
   return rows.map((row) => ({ observedAt: row.observedAt, value: row.value })).reverse();
 }
 
+async function selectObserveAgent(ctx: AppContext, subjectCanonicalId: string) {
+  const [fromWatchlist] = await ctx.db
+    .select({ agent: agents })
+    .from(agents)
+    .innerJoin(watchlists, eq(watchlists.agentId, agents.id))
+    .innerJoin(watchlistItems, eq(watchlistItems.watchlistId, watchlists.id))
+    .where(and(eq(agents.enabled, true), eq(watchlistItems.canonicalId, subjectCanonicalId)))
+    .orderBy(asc(agents.createdAt))
+    .limit(1);
+  if (fromWatchlist?.agent) {
+    return fromWatchlist.agent;
+  }
+  const [fromHolding] = await ctx.db
+    .select({ agent: agents })
+    .from(agents)
+    .innerJoin(agentPortfolios, eq(agentPortfolios.agentId, agents.id))
+    .innerJoin(portfolioHoldings, eq(portfolioHoldings.portfolioId, agentPortfolios.portfolioId))
+    .where(and(eq(agents.enabled, true), eq(portfolioHoldings.canonicalId, subjectCanonicalId)))
+    .orderBy(asc(agents.createdAt))
+    .limit(1);
+  if (fromHolding?.agent) {
+    return fromHolding.agent;
+  }
+  const [pin] = await ctx.db
+    .select({ id: observationPins.id })
+    .from(observationPins)
+    .where(eq(observationPins.subjectCanonicalId, subjectCanonicalId))
+    .limit(1);
+  if (!pin) {
+    return undefined;
+  }
+  const [fallback] = await ctx.db
+    .select()
+    .from(agents)
+    .where(eq(agents.enabled, true))
+    .orderBy(asc(agents.createdAt))
+    .limit(1);
+  return fallback;
+}
+
 async function persistDetectorFinding(
   ctx: AppContext,
   sourceId: string,
   fetchRequestId: string | undefined,
   finding: NonNullable<ReturnType<typeof detectReturnShockForSubject>>,
 ) {
-  const [agent] = await ctx.db.select().from(agents).where(eq(agents.enabled, true)).limit(1);
+  const agent = await selectObserveAgent(ctx, finding.subjectCanonicalId);
   if (!agent) {
     return { persisted: false, reason: "no_agent" as const };
   }
@@ -270,15 +315,18 @@ async function persistDetectorFinding(
     adapterId: finding.detectorId,
     externalId: fingerprintKey,
     url: `riddlr:observation/${finding.detectorId}/${finding.version}/${finding.subjectCanonicalId}/${finding.polarity}`,
-    title: `${finding.detectorId}.${finding.version} ${finding.subjectCanonicalId}`,
+    title: finding.claimTitle,
     bodyText: finding.bodyText,
     fetchedAt: finding.windowEnd,
     publishedAt: finding.windowEnd,
     contentCompleteness: "native_complete" as const,
+    originKey: OBSERVATION_SERIES_ORIGIN_KEY,
     adapterPayload: {
       detector: finding.detectorId,
       version: finding.version,
       metric: finding.metric,
+      subjectCanonicalId: finding.subjectCanonicalId,
+      unit: "usd",
       zScore: finding.zScore,
       thresholdAbsZ: finding.thresholdAbsZ,
       sampleCount: finding.sampleCount,
@@ -292,14 +340,14 @@ async function persistDetectorFinding(
     },
   };
   const normalized = normalizeEvidence(raw);
-  const minute = Math.floor(finding.windowEnd.getTime() / 60_000);
+  const day = finding.windowEnd.toISOString().slice(0, 10);
   const [scan] = await ctx.db
     .insert(scans)
     .values({
       agentId: agent.id,
       status: "observe",
       windowStart: finding.windowStart,
-      idempotencyKey: `observe:${finding.detectorId}:${finding.subjectCanonicalId}:${finding.polarity}:${minute}`,
+      idempotencyKey: `observe:${agent.id}:${day}`,
     })
     .onConflictDoNothing()
     .returning();
@@ -309,12 +357,7 @@ async function persistDetectorFinding(
       await ctx.db
         .select()
         .from(scans)
-        .where(
-          eq(
-            scans.idempotencyKey,
-            `observe:${finding.detectorId}:${finding.subjectCanonicalId}:${finding.polarity}:${minute}`,
-          ),
-        )
+        .where(eq(scans.idempotencyKey, `observe:${agent.id}:${day}`))
         .limit(1)
     )[0];
   if (!scanRow) {
@@ -338,6 +381,7 @@ async function persistDetectorFinding(
       externalId: fingerprintKey,
       fetchRequestId,
       contentCompleteness: "native_complete",
+      originKey: OBSERVATION_SERIES_ORIGIN_KEY,
     })
     .onConflictDoNothing()
     .returning();
@@ -363,7 +407,6 @@ async function persistDetectorFinding(
       observedAt: finding.windowEnd,
     })
     .onConflictDoNothing();
-  const day = finding.windowEnd.toISOString().slice(0, 10);
   const claim = {
     marketDomainId: "crypto" as const,
     kind: finding.claimKind,
@@ -383,23 +426,22 @@ async function persistDetectorFinding(
       value: finding.polarity,
       timeBucket: day,
     }),
-    title: "",
+    title: finding.claimTitle,
   };
-  const titled = { ...claim, title: claimTitle(claim) };
   const [savedClaim] = await ctx.db
     .insert(claims)
     .values({
-      marketDomainId: titled.marketDomainId,
-      kind: titled.kind,
-      subjectCanonicalId: titled.subjectCanonicalId,
-      predicate: titled.predicate,
-      objectText: titled.objectText,
-      value: titled.value,
-      unit: titled.unit,
-      polarity: titled.polarity,
-      modality: titled.modality,
-      fingerprint: titled.fingerprint,
-      title: titled.title,
+      marketDomainId: claim.marketDomainId,
+      kind: claim.kind,
+      subjectCanonicalId: claim.subjectCanonicalId,
+      predicate: claim.predicate,
+      objectText: claim.objectText,
+      value: claim.value,
+      unit: claim.unit,
+      polarity: claim.polarity,
+      modality: claim.modality,
+      fingerprint: claim.fingerprint,
+      title: claim.title,
       policyVersion: finding.version,
       extractionVersion: `detector-${finding.detectorId}.${finding.version}`,
       effectiveStart: finding.windowEnd,
@@ -409,7 +451,7 @@ async function persistDetectorFinding(
   const persistedClaim =
     savedClaim ??
     (
-      await ctx.db.select().from(claims).where(eq(claims.fingerprint, titled.fingerprint)).limit(1)
+      await ctx.db.select().from(claims).where(eq(claims.fingerprint, claim.fingerprint)).limit(1)
     )[0];
   if (persistedClaim) {
     const excerpt = finding.bodyText.slice(0, 180);
@@ -424,7 +466,12 @@ async function persistDetectorFinding(
       })
       .onConflictDoNothing();
   }
-  return { persisted: true, reason: "ok" as const };
+  return {
+    persisted: true,
+    reason: "ok" as const,
+    scan: scanRow,
+    evidenceId: evidenceRow.id,
+  };
 }
 
 async function runDetectors(
@@ -434,6 +481,10 @@ async function runDetectors(
   fetchRequestId: string | undefined,
   subjects: readonly string[],
 ) {
+  const clustered = new Map<
+    string,
+    { scan: NonNullable<Awaited<ReturnType<typeof persistDetectorFinding>>["scan"]>; ids: string[] }
+  >();
   for (const subject of takeBounded(subjects, ctx.config.RIDDLR_OBSERVE_MAX_SUBJECTS)) {
     for (const spec of CRYPTO_DETECTOR_SPECS) {
       const points = await seriesWindow(ctx, providerId, spec.metric, subject);
@@ -452,7 +503,18 @@ async function runDetectors(
         detector: spec.id,
         result: saved.persisted ? "fired" : "skipped",
       });
+      if (!saved.persisted || !saved.scan || !saved.evidenceId) {
+        continue;
+      }
+      const current = clustered.get(saved.scan.id) ?? { scan: saved.scan, ids: [] };
+      if (!current.ids.includes(saved.evidenceId)) {
+        current.ids.push(saved.evidenceId);
+      }
+      clustered.set(saved.scan.id, current);
     }
+  }
+  for (const item of clustered.values()) {
+    await clusterScanEvents(ctx, item.scan, item.ids);
   }
 }
 

@@ -96,4 +96,37 @@ describe("materiality", () => {
     ).toBe(false);
     expect(isMaterial({ independentSourceCount: 0, evidenceCount: 4 })).toBe(false);
   });
+
+  it("accepts a watched detector claim as an observed anomaly without sourced quotes", () => {
+    expect(
+      isMaterialEvent({
+        independentHostCount: 1,
+        independentFamilyCount: 1,
+        evidenceCount: 1,
+        derivedCount: 0,
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        sourcedObservationCount: 0,
+        hasAuthoritativePrimary: false,
+        contentCompleteness: "native_complete",
+        hasValidatedClaim: true,
+        observedAnomaly: true,
+      }).reason,
+    ).toBe("observed_anomaly");
+    expect(
+      isMaterialEvent({
+        independentHostCount: 1,
+        independentFamilyCount: 1,
+        evidenceCount: 1,
+        derivedCount: 0,
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        sourcedObservationCount: 0,
+        hasAuthoritativePrimary: false,
+        contentCompleteness: "native_complete",
+        hasValidatedClaim: true,
+        observedAnomaly: true,
+      }).material,
+    ).toBe(false);
+  });
 });

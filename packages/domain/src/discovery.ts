@@ -119,7 +119,11 @@ export function epistemicFromFacts(
   if (facts.independentHostCount >= 2 && facts.contentCompleteness !== "snippet") {
     return "confirmed";
   }
-  if (facts.priceChangePct !== undefined || facts.volumeUsd !== undefined) {
+  if (
+    facts.sourceFamilies.includes("observation") ||
+    facts.priceChangePct !== undefined ||
+    facts.volumeUsd !== undefined
+  ) {
     return "observed";
   }
   return "discovered";
@@ -176,7 +180,9 @@ function kindFlags(
       facts.regulatoryPrimary ||
       RISK_TEXT.test(text) ||
       (facts.holderClaim && /\b(exploit|hack|insolvent)\b/i.test(text)),
-    anomaly: facts.contradictingCount > 0,
+    anomaly:
+      facts.contradictingCount > 0 ||
+      (facts.sourceFamilies.includes("observation") && facts.hasValidatedClaim),
     unusual_market_behaviour: facts.marketReaction === "strong",
     emerging_narrative:
       facts.firstIndependentMention &&

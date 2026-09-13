@@ -5,6 +5,7 @@ export {
   factsToApplicability,
   formatAnalysisFacts,
   type MarketReaction,
+  observationsFromDetectorPayload,
   observationsFromMarketPayload,
   textOpposes,
 } from "./analysis-facts.js";
@@ -29,6 +30,7 @@ export {
 } from "./claims.js";
 export {
   absorbMarketDataClusters,
+  absorbObservationClusters,
   CLUSTER_SIMILARITY_THRESHOLD,
   CLUSTER_WINDOW_MS,
   type ClusterableEvidence,
@@ -54,6 +56,8 @@ export {
   detectReturnShockForSubject,
   detectVolumeAnomaly,
   detectVolumeAnomalyForSubject,
+  isObservedAnomalyKind,
+  OBSERVATION_SERIES_ORIGIN_KEY,
   RETURN_SHOCK_V1,
   type SeriesPoint,
   seriesPointsFromObservations,

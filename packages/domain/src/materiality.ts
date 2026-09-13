@@ -13,6 +13,7 @@ export type MaterialityInput = {
   hasTrustedFirsthand?: boolean;
   contentCompleteness?: ContentCompleteness;
   hasValidatedClaim?: boolean;
+  observedAnomaly?: boolean;
 };
 
 export type MaterialityDecision = {
@@ -42,6 +43,14 @@ export function isMaterialEvent(input: MaterialityInput): MaterialityDecision {
   }
   if ((input.hasTrustedFirsthand || input.hasAuthoritativePrimary) && complete(input)) {
     return { material: true, reason: "early_warning_candidate" };
+  }
+  if (
+    input.watchlistOverlap &&
+    input.observedAnomaly &&
+    complete(input) &&
+    input.hasValidatedClaim
+  ) {
+    return { material: true, reason: "observed_anomaly" };
   }
   if (input.watchlistOverlap && input.sourcedObservationCount > 0 && complete(input)) {
     if (input.hasValidatedClaim) {

@@ -22,6 +22,7 @@ import {
   evidenceOccurrences,
   evidenceRelations,
   instanceSettings,
+  observationPins,
   observations,
   portfolioHoldings,
   providerConfigs,
@@ -38,6 +39,7 @@ import {
 } from "@riddlr/db";
 import {
   absorbMarketDataClusters,
+  absorbObservationClusters,
   analysisReservationTokens,
   assessReliability,
   buildEventFacts,
@@ -56,15 +58,19 @@ import {
   independenceCounts,
   isMaterialEvent,
   isNearDuplicate,
+  isObservedAnomalyKind,
   lineageOriginKey,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
+  MAX_OBSERVE_PINS,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
   nextEventStatus,
   normalizeEvidence,
+  observationsFromDetectorPayload,
   observationsFromMarketPayload,
   overlappingOutbound,
+  type ReliabilityStatus,
   resolveDailyTokenBudget,
   SIGNAL_JSON_SCHEMA,
   selectApplicableSkills,
@@ -502,6 +508,11 @@ export async function clusterScanEvents(
       : [];
   const holdings = await ctx.db.select().from(portfolioHoldings).limit(50);
   const holdingIds = new Set(holdings.map((item) => item.canonicalId));
+  const pinRows = await ctx.db
+    .select({ subjectCanonicalId: observationPins.subjectCanonicalId })
+    .from(observationPins)
+    .limit(MAX_OBSERVE_PINS);
+  const pinIds = new Set(pinRows.map((item) => item.subjectCanonicalId));
   const registry = await listRegistryAssets(ctx);
   const trustMaps = await loadTrustMaps(ctx);
   const claimLinks =
@@ -576,9 +587,14 @@ export async function clusterScanEvents(
         }),
       ),
       marketDomainId: module.id,
-      assetCanonicalIds: module
-        .extractAssets([normalized], registry)
-        .map((item) => item.canonicalId),
+      assetCanonicalIds: [
+        ...new Set([
+          ...module.extractAssets([normalized], registry).map((item) => item.canonicalId),
+          ...linked
+            .map((item) => item.subjectCanonicalId)
+            .filter((id): id is string => Boolean(id)),
+        ]),
+      ],
       text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
     };
   });
@@ -614,7 +630,7 @@ export async function clusterScanEvents(
     prepared.length > 0
       ? clusterEvidence(prepared, MAX_EVENTS_PER_SCAN)
       : { clusters: [] as (typeof prepared)[], remainder: [] as typeof prepared };
-  const clusters = absorbMarketDataClusters(clustered.clusters);
+  const clusters = absorbObservationClusters(absorbMarketDataClusters(clustered.clusters));
   const windowDay = utcDayStamp(scan.windowStart);
 
   if (clustered.remainder && clustered.remainder.length > 0) {
@@ -695,10 +711,31 @@ export async function clusterScanEvents(
     const clusterRows = cluster.map((item) => item.row);
     const clusterNorm = cluster.map((item) => item.normalized);
     const extracted = module.extractAssets(clusterNorm, registry);
+    for (const id of cluster.flatMap((item) => item.assetCanonicalIds)) {
+      if (extracted.some((asset) => asset.canonicalId === id)) {
+        continue;
+      }
+      const row = registry.find((asset) => asset.canonicalId === id);
+      if (row) {
+        extracted.push({
+          assetClass: row.assetClass,
+          canonicalId: row.canonicalId,
+          symbol: row.symbol ?? undefined,
+          displayName: row.name ?? undefined,
+        });
+      }
+    }
     const sourced = takeBounded(
       [
         ...cluster.flatMap((item) =>
           observationsFromMarketPayload(
+            item.row.adapterPayload,
+            item.row.adapterId ?? item.id,
+            item.publishedAt ?? item.row.fetchedAt,
+          ),
+        ),
+        ...cluster.flatMap((item) =>
+          observationsFromDetectorPayload(
             item.row.adapterPayload,
             item.row.adapterId ?? item.id,
             item.publishedAt ?? item.row.fetchedAt,
@@ -711,6 +748,9 @@ export async function clusterScanEvents(
     const roles = cluster.map((item, index) => {
       if (item.sourceFamily === "market_data") {
         return "supporting" as const;
+      }
+      if (item.sourceFamily === "observation") {
+        return "primary" as const;
       }
       const currentOrigin = lineageOriginKey({
         originKey: item.originKey,
@@ -760,7 +800,9 @@ export async function clusterScanEvents(
     });
     const counts = independenceCounts(roles);
     const watchlistIds = new Set(agentContext.watchlist.map((item) => item.canonicalId));
-    const watchlistOverlap = extracted.some((item) => watchlistIds.has(item.canonicalId));
+    const watchlistOverlap =
+      extracted.some((item) => watchlistIds.has(item.canonicalId)) ||
+      extracted.some((item) => pinIds.has(item.canonicalId));
     const overlap = extracted.filter((item) => holdingIds.has(item.canonicalId));
     const hostCount = uniqueIndependentHosts(
       cluster.flatMap((item, index) =>
@@ -769,10 +811,12 @@ export async function clusterScanEvents(
           : [{ hostname: item.hostname, role: roles[index] ?? "primary" }],
       ),
     );
+    const observationOnly =
+      cluster.length > 0 && cluster.every((item) => item.sourceFamily === "observation");
     const fingerprint = eventClusterFingerprint({
       marketDomainId: module.id,
-      claimFingerprints: cluster.flatMap((item) => item.claimFingerprints),
-      contentHashes: cluster.map((item) => item.row.contentHash),
+      claimFingerprints: observationOnly ? [] : cluster.flatMap((item) => item.claimFingerprints),
+      contentHashes: observationOnly ? [] : cluster.map((item) => item.row.contentHash),
       assetCanonicalIds: cluster.flatMap((item) => item.assetCanonicalIds),
       windowDay,
     });
@@ -783,6 +827,7 @@ export async function clusterScanEvents(
       watchlist: agentContext.watchlist,
     });
     const clusterClaims = cluster.flatMap((item) => claimsByEvidence.get(item.id) ?? []);
+    const observedAnomaly = clusterClaims.some((item) => isObservedAnomalyKind(item.kind));
     const retractingCount = clusterClaims.filter((item) => item.stance === "retracts").length;
     const contradictingFromClaims = clusterClaims.filter(
       (item) => item.stance === "contradicts",
@@ -830,6 +875,7 @@ export async function clusterScanEvents(
       hasTrustedFirsthand: facts.hasTrustedFirsthand,
       hasValidatedClaim: facts.hasValidatedClaim,
       headlineMismatch: facts.headlineMismatch,
+      observedAnomaly,
     });
     const uniqueClaims = new Map<string, (typeof clusterClaims)[number]>();
     for (const link of clusterClaims) {
@@ -872,6 +918,7 @@ export async function clusterScanEvents(
       hasTrustedFirsthand: facts.hasTrustedFirsthand,
       contentCompleteness: facts.contentCompleteness,
       hasValidatedClaim: facts.hasValidatedClaim,
+      observedAnomaly,
     });
     const discovery = discoverCandidate({
       facts,
@@ -908,15 +955,7 @@ export async function clusterScanEvents(
           .limit(1)
       : [];
     let event = existingEvents[0];
-    const previousReliability = event?.reliabilityStatus as
-      | "mention"
-      | "single_source"
-      | "corroborated"
-      | "primary_confirmed"
-      | "disputed"
-      | "retracted"
-      | "legacy_unassessed"
-      | undefined;
+    const previousReliability = event?.reliabilityStatus as ReliabilityStatus | undefined;
     if (event) {
       await ctx.db
         .update(events)
@@ -997,6 +1036,9 @@ export async function clusterScanEvents(
           .values({ eventId: event.id, assetId: persisted.id })
           .onConflictDoNothing();
       }
+    }
+    if (observationOnly) {
+      await ctx.db.delete(observations).where(eq(observations.eventId, event.id));
     }
     for (const observation of sourced) {
       await ctx.db.insert(observations).values({
@@ -1084,7 +1126,7 @@ export async function clusterScanEvents(
             backoff: { type: "exponential", delay: 5_000 },
           },
         );
-      } else {
+      } else if (!observationOnly) {
         await maybeAnalyze(
           ctx,
           event.id,
@@ -1316,25 +1358,11 @@ async function maybeAnalyze(
     facts: ReturnType<typeof buildEventFacts>;
     material: ReturnType<typeof isMaterialEvent>;
     title: string;
-    reliability?:
-      | "mention"
-      | "single_source"
-      | "corroborated"
-      | "primary_confirmed"
-      | "disputed"
-      | "retracted"
-      | "legacy_unassessed";
+    reliability?: ReliabilityStatus;
     impact?: "informational" | "low" | "moderate" | "high" | "critical";
     claimIds?: string[];
     earlyWarningsEnabled?: boolean;
-    previousReliability?:
-      | "mention"
-      | "single_source"
-      | "corroborated"
-      | "primary_confirmed"
-      | "disputed"
-      | "retracted"
-      | "legacy_unassessed";
+    previousReliability?: ReliabilityStatus;
     shadowAssessments?: boolean;
     marketDomainId?: string;
     earlyWarningAllowed?: boolean;
@@ -1737,6 +1765,13 @@ export async function analyzeQueuedEvent(
       ...linked.flatMap((row) =>
         observationsFromMarketPayload(row.adapterPayload, row.id, row.publishedAt ?? row.fetchedAt),
       ),
+      ...linked.flatMap((row) =>
+        observationsFromDetectorPayload(
+          row.adapterPayload,
+          row.id,
+          row.publishedAt ?? row.fetchedAt,
+        ),
+      ),
       ...observationRows.map((row) => ({
         kind: row.kind,
         value: row.value,
@@ -1762,6 +1797,7 @@ export async function analyzeQueuedEvent(
     hasTrustedFirsthand: facts.hasTrustedFirsthand,
     contentCompleteness: facts.contentCompleteness,
     hasValidatedClaim: facts.hasValidatedClaim,
+    observedAnomaly: linked.some((row) => row.sourceFamily === "observation"),
   });
   const discovery = discoverCandidate({
     facts,
@@ -1785,15 +1821,7 @@ export async function analyzeQueuedEvent(
       facts,
       material,
       title: event.title,
-      reliability: event.reliabilityStatus as
-        | "mention"
-        | "single_source"
-        | "corroborated"
-        | "primary_confirmed"
-        | "disputed"
-        | "retracted"
-        | "legacy_unassessed"
-        | undefined,
+      reliability: event.reliabilityStatus as ReliabilityStatus | undefined,
       impact: event.impactLevel as
         | "informational"
         | "low"
@@ -1803,15 +1831,7 @@ export async function analyzeQueuedEvent(
         | undefined,
       claimIds: claimRows.map((item) => item.claimId),
       earlyWarningsEnabled: await instanceEarlyWarningsEnabled(ctx),
-      previousReliability: event.reliabilityStatus as
-        | "mention"
-        | "single_source"
-        | "corroborated"
-        | "primary_confirmed"
-        | "disputed"
-        | "retracted"
-        | "legacy_unassessed"
-        | undefined,
+      previousReliability: event.reliabilityStatus as ReliabilityStatus | undefined,
       shadowAssessments: await instanceShadowAssessments(ctx),
       marketDomainId: event.marketDomainId ?? agentContext.marketDomainId,
       earlyWarningAllowed: linked.some((row) =>

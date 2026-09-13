@@ -31,6 +31,7 @@ export type DetectorFinding = {
   windowStart: Date;
   windowEnd: Date;
   bodyText: string;
+  claimTitle: string;
   series: SeriesPoint[];
 };
 
@@ -128,6 +129,10 @@ function finding(input: {
     return undefined;
   }
   const zText = input.z.toFixed(2);
+  const subjectLocal =
+    input.subjectCanonicalId.split(":")[1]?.replace(/-/g, " ") ?? input.subjectCanonicalId;
+  const metricLabel = input.spec.metric.replaceAll("_", " ");
+  const detectorLabel = input.spec.id.replaceAll("_", " ");
   return {
     detectorId: input.spec.id,
     version: input.spec.version,
@@ -143,6 +148,7 @@ function finding(input: {
     windowStart,
     windowEnd,
     bodyText: `${input.spec.id}.${input.spec.version} on ${input.subjectCanonicalId}: z=${zText} over ${input.sampleCount} ${input.spec.metric} samples (threshold ${input.spec.absZ}). Last ${input.spec.metric} ${input.lastValue} ${input.unit}.`,
+    claimTitle: `${subjectLocal} ${zText}σ ${metricLabel} ${detectorLabel} (${input.spec.version}, threshold ${input.spec.absZ}σ)`,
     series: input.series,
   };
 }
@@ -264,3 +270,9 @@ export function detectorEvidenceFingerprint(finding: DetectorFinding): string {
     finding.polarity,
   ].join("|");
 }
+
+export function isObservedAnomalyKind(kind: string): boolean {
+  return /:observed_[a-z0-9_]+_anomaly$/.test(kind);
+}
+
+export const OBSERVATION_SERIES_ORIGIN_KEY = "observation:polled_series";

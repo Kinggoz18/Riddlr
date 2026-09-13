@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Detector findings on a watched asset form a material event with reliability
+  `observed` and no web article. The title is the detector claim. Per-event
+  observations keep the series point the detector used. See
+  [docs/observations.md](docs/observations.md).
+
 - Observation series: the worker polls CoinGecko `/simple/price` for watched,
   held, and pinned assets on an interval independent of scans. Rows land in
   `observation_series` with retention and daily downsample. Return-shock and

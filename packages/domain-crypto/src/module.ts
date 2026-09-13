@@ -408,6 +408,17 @@ export const cryptoDomainModule: DomainModule = {
         reasonCodes: ["crypto:market_move"],
       };
     }
+    if (
+      (kinds.has("crypto:observed_spot_price_anomaly") ||
+        kinds.has("crypto:observed_quoted_volume_anomaly")) &&
+      (input.watchlistOverlap || input.portfolioOverlap)
+    ) {
+      return {
+        level: "moderate",
+        reason: "observed_anomaly",
+        reasonCodes: ["crypto:observed_anomaly"],
+      };
+    }
     if (input.hasTrustedFirsthand && kinds.size > 0 && !kinds.has("crypto:general_report")) {
       return {
         level: "high",

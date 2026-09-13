@@ -8,6 +8,7 @@ import {
   epistemicStatusLabel,
   eventStatusLabel,
   independenceCopy,
+  reliabilityStatusLabel,
 } from "../format.js";
 
 type EventRow = {
@@ -55,7 +56,7 @@ function EventsPage() {
       {rows.length === 0 ? (
         <EmptyState
           title="No events"
-          body="An event is a cluster of evidence from a scan — not a single search hit. Run a scan from Agents."
+          body="An event is a cluster of evidence — a web article or a quantitative anomaly on a watched asset. Independent origins are not reprints. Run a scan from Agents, or wait for the observation poll."
         />
       ) : (
         <>
@@ -68,7 +69,7 @@ function EventsPage() {
                   <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
                   {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
                   {row.reliabilityStatus ? (
-                    <span>{row.reliabilityStatus.replaceAll("_", " ")}</span>
+                    <span>{reliabilityStatusLabel(row.reliabilityStatus)}</span>
                   ) : null}
                   {row.impactLevel ? <span>Impact {row.impactLevel}</span> : null}
                   {row.contentCompleteness ? (
