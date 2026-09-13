@@ -53,3 +53,11 @@ corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
 search against a running Compose stack, and the Health Observations card.
+First-run credentials default to `ops@example.com`. On an already-set-up
+instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
+`RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips
+when setup is already complete.
+
+```bash
+pnpm exec playwright test
+```

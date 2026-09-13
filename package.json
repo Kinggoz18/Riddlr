@@ -19,6 +19,7 @@
     "test": "pnpm test:unit && pnpm test:integration",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
     "db:generate": "pnpm --filter @riddlr/db generate",
     "db:migrate": "pnpm --filter @riddlr/db migrate",
     "db:check": "pnpm --filter @riddlr/db check",
@@ -36,7 +37,9 @@
     "tsx": "^4.20.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@biomejs/biome": "catalog:",
+    "@playwright/test": "1.55.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

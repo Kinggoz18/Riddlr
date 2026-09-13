@@ -4,9 +4,9 @@ import { totpFromOtpauth } from "./totp.js";
 
 test.describe.configure({ mode: "serial" });
 
-const password = "correct horse battery";
-const email = "ops@example.com";
-const otpauth = "";
+const password = process.env.RIDDLR_E2E_PASSWORD ?? "correct horse battery";
+const email = process.env.RIDDLR_E2E_EMAIL ?? "ops@example.com";
+const otpauth = process.env.RIDDLR_E2E_OTPAUTH ?? "";
 
 async function signIn(page: Page) {
   await page.goto("/");
@@ -21,6 +21,9 @@ async function signIn(page: Page) {
   await page.getByRole("button", { name: "Continue" }).click();
   const totp = page.getByLabel("Authenticator or recovery code");
   if (await totp.isVisible()) {
+    if (!otpauth) {
+      throw new Error("Authenticator is enabled; set RIDDLR_E2E_OTPAUTH.");
+    }
     await totp.fill(totpFromOtpauth(otpauth));
     await page.getByRole("button", { name: "Verify" }).click();
   }
@@ -39,7 +42,13 @@ test("first-run onboarding is four steps with crypto supported and other domains
 }) => {
   await page.goto("/");
   const setupHeading = page.getByRole("heading", { name: "Set up Riddlr" });
-  await expect(setupHeading).toBeVisible({ timeout: 15_000 });
+  const alreadySetUp = page
+    .getByRole("heading", { name: "Welcome back" })
+    .or(page.getByRole("heading", { name: "Overview" }));
+  await expect(setupHeading.or(alreadySetUp)).toBeVisible({ timeout: 15_000 });
+  if (!(await setupHeading.isVisible())) {
+    test.skip(true, "Compose stack is already set up");
+  }
   await expect(page.getByRole("list", { name: "Setup steps" })).toBeVisible();
   await expect(page.getByRole("listitem").filter({ hasText: "Security" })).toBeVisible();
   await expect(page.getByText("Model")).toBeVisible();
@@ -100,7 +109,7 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
     await page.getByLabel("Agent name").fill("Watchlist agent");
     await page.getByLabel("Description").fill("Watches Bitcoin for material events.");
     await page.getByLabel("Watchlist").fill("Bitcoin");
-    await page.getByRole("option", { name: /Bitcoin/ }).click();
+    await page.getByRole("option", { name: "Bitcoin · BTC", exact: true }).click();
     await page.getByRole("button", { name: "Create agent" }).click();
   }
   await expect(
@@ -121,7 +130,7 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Add source" }).click();
   await page.getByRole("link", { name: "Configure X" }).click();
   await expect(page.getByRole("heading", { name: "Add X source" })).toBeVisible();
-  await expect(page.getByText(/Recent search only/)).toBeVisible();
+  await expect(page.getByText("Recent search only", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Portfolios" }).click();
   await expect(page.getByText(/Never enter a seed phrase/i)).toBeVisible();
   await page.getByRole("link", { name: "Signals" }).click();
@@ -165,12 +174,12 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await signIn(page);
   await page.getByRole("link", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
-  await expect(page.getByText(/independent origins/i)).toBeVisible();
+  await expect(page.getByText(/Clusters of related evidence/i)).toBeVisible();
   await page.getByRole("link", { name: "Watchlists" }).click();
   await expect(page.getByRole("heading", { name: /Watchlists/i })).toBeVisible();
   await page.getByRole("link", { name: /Default watchlist/i }).click();
-  await expect(page.getByRole("heading", { name: /Default watchlist/i })).toBeVisible();
-  await expect(page.getByText("Bitcoin")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Assets" })).toBeVisible();
+  await expect(page.locator(".asset-list strong").filter({ hasText: /^Bitcoin$/ })).toBeVisible();
   await page.getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: /Notifications/i })).toBeVisible();
   await page.goto("/signals/does-not-exist");
