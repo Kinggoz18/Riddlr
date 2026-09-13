@@ -57,6 +57,11 @@ const envSchema = z.object({
     .default(DEFAULT_DAILY_TOKEN_BUDGET),
   RIDDLR_REGISTRY_TOP_N: z.coerce.number().int().min(1).max(2000).default(1000),
   RIDDLR_REGISTRY_SEED_INTERVAL_HOURS: z.coerce.number().int().min(6).max(168).default(24),
+  RIDDLR_OBSERVE_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(2),
+  RIDDLR_OBSERVE_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(100),
+  RIDDLR_OBSERVE_MAX_SUBJECTS: z.coerce.number().int().min(1).max(4000).default(1000),
+  RIDDLR_OBSERVE_RETENTION_DAYS: z.coerce.number().int().min(14).max(365).default(90),
+  RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS: z.coerce.number().int().min(60).max(300).default(60),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & {

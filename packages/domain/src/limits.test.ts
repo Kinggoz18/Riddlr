@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   clampPageSize,
   clampPositiveInt,
+  DEFAULT_DETECTOR_ABS_Z,
+  DEFAULT_DETECTOR_WINDOW,
+  DEFAULT_OBSERVE_PRICE_INTERVAL_SECONDS,
   DEFAULT_PAGE_SIZE,
   DEFAULT_REGISTRY_TOP_N,
   MAX_ASSETS_PER_DOCUMENT,
+  MAX_OBSERVE_SUBJECTS,
   MAX_PAGE_SIZE,
   MAX_REGISTRY_TOP_N,
   parsePageCursor,
@@ -43,5 +47,9 @@ describe("bounded resource limits", () => {
     expect(MAX_REGISTRY_TOP_N).toBe(2_000);
     expect(MAX_ASSETS_PER_DOCUMENT).toBe(12);
     expect(clampPositiveInt(5_000, DEFAULT_REGISTRY_TOP_N, MAX_REGISTRY_TOP_N)).toBe(2_000);
+    expect(DEFAULT_OBSERVE_PRICE_INTERVAL_SECONDS).toBe(60);
+    expect(MAX_OBSERVE_SUBJECTS).toBe(4_000);
+    expect(DEFAULT_DETECTOR_WINDOW).toBe(20);
+    expect(DEFAULT_DETECTOR_ABS_Z).toBe(3);
   });
 });

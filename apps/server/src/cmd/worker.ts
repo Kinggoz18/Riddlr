@@ -8,6 +8,7 @@ import { createContext } from "../context.js";
 import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
+import { enqueueObserveIfDue, pollObservationProvider } from "../modules/observe.js";
 import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
 import { enqueueAgentScan } from "../modules/scans.js";
 
@@ -109,6 +110,18 @@ const clusterWorker = new Worker(
   workerOptions,
 );
 
+const observeWorker = new Worker(
+  QUEUE_NAMES.observePoll,
+  async (job) => {
+    const providerId = String((job.data as { providerId?: string }).providerId ?? "");
+    if (!providerId) {
+      return;
+    }
+    await pollObservationProvider(ctx, providerId);
+  },
+  { ...workerOptions, concurrency: ctx.config.RIDDLR_OBSERVE_CONCURRENCY },
+);
+
 void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
 const heartbeat = setInterval(() => {
   void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
@@ -147,6 +160,9 @@ const scheduler = setInterval(() => {
   void seedAssetRegistryIfDue(ctx).catch((error) => {
     ctx.logger.warn({ err: error }, "registry seed tick failed");
   });
+  void enqueueObserveIfDue(ctx).catch((error) => {
+    ctx.logger.warn({ err: error }, "observe enqueue tick failed");
+  });
 }, 60_000);
 
 const shutdown = async () => {
@@ -158,6 +174,7 @@ const shutdown = async () => {
   await enrichWorker.close();
   await understandWorker.close();
   await clusterWorker.close();
+  await observeWorker.close();
   await ctx.scanQueue.close();
   await ctx.ingestQueue?.close();
   await ctx.enrichQueue?.close();
@@ -165,6 +182,7 @@ const shutdown = async () => {
   await ctx.clusterQueue?.close();
   await ctx.analyzeQueue?.close();
   await ctx.notifyQueue?.close();
+  await ctx.observeQueue?.close();
   await ctx.redis.quit();
   process.exit(0);
 };
@@ -177,10 +195,14 @@ void enqueueDueScans().catch((error) => {
 void seedAssetRegistryIfDue(ctx).catch((error) => {
   ctx.logger.warn({ err: error }, "registry seed start failed");
 });
+void enqueueObserveIfDue(ctx).catch((error) => {
+  ctx.logger.warn({ err: error }, "observe enqueue start failed");
+});
 
 ctx.logger.info(
   {
     concurrency: ctx.config.RIDDLR_WORKER_CONCURRENCY,
+    observeConcurrency: ctx.config.RIDDLR_OBSERVE_CONCURRENCY,
     evidenceLimit: ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT,
     scheduler: ctx.config.RIDDLR_SCHEDULER_ENABLED,
   },

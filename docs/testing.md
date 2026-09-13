@@ -11,7 +11,8 @@ Unit tests cover domain registry, fingerprints, clustering, encryption, schema v
 materiality, schedules, prompt wrapping, provider adapters, Discord REST
 fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
-eligibility, registry-driven asset resolution, CoinGecko registry fixtures, and coming-soon rejection. Architecture tests keep generic packages from importing
+eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
+CoinGecko simple/price observations, return-shock and volume detectors, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -20,7 +21,7 @@ uses a tmpfs data directory so the suite can start when the Docker VM disk is
 exhausted. They cover four-step onboarding, first-run access, default-agent Crypto association,
 coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
-backfill, token-budget skip, Discord token encryption and official REST
+backfill, observation poll to series and detectors, token-budget skip, Discord token encryption and official REST
 polling, X bearer encryption and recent search, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
@@ -51,4 +52,4 @@ fixture with a shared outbound Reuters URL is not treated as independent
 corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
-search against a running Compose stack.
+search against a running Compose stack, and the Health Observations card.

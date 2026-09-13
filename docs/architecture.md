@@ -10,6 +10,8 @@ Source → Evidence mention → Document (eligible web) → Claims
   → Event (claim-aware cluster) → Reliability + domain impact
   → Analysis (material events) → Validated signal or unverified early warning
   → Dashboard / notification policy
+
+ObservationProvider → observation_series → detectors → observation evidence
 ```
 
 ## Process split
@@ -39,7 +41,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0021](adr/0021-discovery-candidates.md), and
 [ADR 0022](adr/0022-first-run-access.md),
 [ADR 0023](adr/0023-claim-corroboration.md), and
-[ADR 0024](adr/0024-registry-driven-resolution.md).
+[ADR 0024](adr/0024-registry-driven-resolution.md), and
+[ADR 0025](adr/0025-observation-layer.md).
 
 ## Trust boundaries
 
@@ -72,8 +75,9 @@ Live sources are SearXNG (bundled), Discord (operator-configured bot; more
 than one Discord source is allowed), X (operator-configured recent search with
 bounded `next_token`), and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
-seed fills `assets` for watchlist search and text extraction. On-chain scanning
-is not implemented.
+seed fills `assets` for watchlist search and text extraction. The observe worker
+polls CoinGecko `/simple/price` into `observation_series` for watched, held, and
+pinned assets. On-chain scanning is not implemented.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

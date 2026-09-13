@@ -146,6 +146,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByRole("button", { name: "Clear audit log" })).toBeVisible();
   await page.getByRole("link", { name: "Health" }).click();
   await expect(page.getByRole("heading", { name: "PostgreSQL" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Observations" })).toBeVisible();
+  await expect(page.getByText("Price data by CoinGecko")).toBeVisible();
   await expect(page.getByText("Concurrency")).toBeVisible();
   await expect(page.getByText("Enrichment backlog")).toBeVisible();
   await expect(page.getByText("Stale assessments")).toBeVisible();

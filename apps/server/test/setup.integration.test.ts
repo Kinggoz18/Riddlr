@@ -25,6 +25,7 @@ import {
   evidenceItems,
   migrate,
   notificationDeliveries,
+  observationSeries,
   passwordResetTokens,
   portfolios,
   scans,
@@ -42,6 +43,11 @@ import { DomainModuleRegistry, normalizeEvidence } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
 import { createLogger, createMetrics, snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
+import {
+  COINGECKO_SPOT_PROVIDER_ID,
+  createScriptedObservationProvider,
+  ObservationProviderRegistry,
+} from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Redis } from "ioredis";
@@ -55,6 +61,7 @@ import {
   listRegistryAssets,
   seedAssetRegistry,
 } from "../src/modules/asset-registry.js";
+import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
 import { runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
 
@@ -1914,6 +1921,144 @@ describe("setup, auth, and domain persistence", () => {
       registry,
     );
     expect(extracted.map((item) => item.canonicalId)).toEqual(["coingecko:zcash"]);
+  });
+
+  it("polls observation series from fixtures, refuses zeros on 429, and fires return-shock", async () => {
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/coingecko");
+    const simple = JSON.parse(readFileSync(join(fixtures, "simple-price.json"), "utf8")) as unknown;
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+
+    const unauth = await app.inject({ method: "GET", url: "/api/v1/observations/latest" });
+    expect(unauth.statusCode).toBe(401);
+
+    const first = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID, async (input) => {
+      const href = String(input);
+      if (href.includes("/simple/price")) {
+        return Response.json(simple);
+      }
+      return new Response("not found", { status: 404 });
+    });
+    expect(first.error).toBeUndefined();
+    expect(first.observations).toBeGreaterThan(0);
+
+    const locked = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID, async () =>
+      Response.json(simple),
+    );
+    expect(locked.error).toBe("lock_held");
+
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+    const duplicate = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID, async () =>
+      Response.json(simple),
+    );
+    expect(duplicate.observations).toBe(0);
+
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+    const limited = await pollObservationProvider(
+      ctx,
+      COINGECKO_SPOT_PROVIDER_ID,
+      async () => new Response("rate limited", { status: 429 }),
+    );
+    expect(limited.error).toBe("rate_limited");
+    const after429 = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.subjectCanonicalId, "coingecko:bitcoin"));
+    expect(after429.some((row) => row.value === 0)).toBe(false);
+
+    const quotes = await app.inject({
+      method: "GET",
+      url: "/api/v1/watchlists",
+      headers: { cookie },
+    });
+    expect(quotes.statusCode).toBe(200);
+    const items = (
+      quotes.json().watchlists as Array<{ items: Array<{ lastQuote?: { value: number } }> }>
+    ).flatMap((list) => list.items ?? []);
+    expect(items.some((item) => item.lastQuote?.value === 77333)).toBe(true);
+
+    const health = await app.inject({
+      method: "GET",
+      url: "/api/v1/health",
+      headers: { cookie },
+    });
+    expect(health.statusCode).toBe(200);
+    expect(health.json().observations?.provider).toBe(COINGECKO_SPOT_PROVIDER_ID);
+    expect(health.json().observations?.seriesCount).toBeGreaterThan(0);
+
+    const unknownPin = await app.inject({
+      method: "POST",
+      url: "/api/v1/observations/pins",
+      headers: { cookie },
+      payload: { subjectCanonicalId: "coingecko:does-not-exist" },
+    });
+    expect(unknownPin.statusCode).toBe(400);
+
+    await ctx.db
+      .delete(observationSeries)
+      .where(
+        and(
+          eq(observationSeries.subjectCanonicalId, "coingecko:bitcoin"),
+          eq(observationSeries.metric, "spot_price"),
+          eq(observationSeries.resolution, "raw"),
+        ),
+      );
+    const origin = 1_789_322_000 * 1000 - 20 * 60_000;
+    await ctx.db.insert(observationSeries).values(
+      Array.from({ length: 20 }, (_, index) => ({
+        provider: COINGECKO_SPOT_PROVIDER_ID,
+        metric: "spot_price",
+        subjectCanonicalId: "coingecko:bitcoin",
+        observedAt: new Date(origin + index * 60_000),
+        value: 100,
+        unit: "usd",
+        resolution: "raw",
+      })),
+    );
+    ctx.observationProviders = new ObservationProviderRegistry();
+    ctx.observationProviders.register(
+      createScriptedObservationProvider({
+        id: COINGECKO_SPOT_PROVIDER_ID,
+        observe: () => ({
+          observations: [
+            {
+              provider: COINGECKO_SPOT_PROVIDER_ID,
+              metric: "spot_price",
+              subjectCanonicalId: "coingecko:bitcoin",
+              value: 110,
+              unit: "usd",
+              observedAt: new Date(1_789_322_000 * 1000 + 60_000),
+            },
+          ],
+          partial: false,
+          errors: [],
+        }),
+      }),
+    );
+    await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);
+    const shocked = await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID);
+    expect(shocked.error).toBeUndefined();
+    const detectorEvidence = await ctx.db
+      .select()
+      .from(evidenceItems)
+      .where(eq(evidenceItems.sourceFamily, "observation"));
+    expect(detectorEvidence.some((row) => row.bodyText?.includes("return_shock"))).toBe(true);
+
+    await ctx.db.insert(observationSeries).values({
+      provider: COINGECKO_SPOT_PROVIDER_ID,
+      metric: "spot_price",
+      subjectCanonicalId: "coingecko:bitcoin",
+      observedAt: new Date("2025-01-01T00:00:00.000Z"),
+      value: 90,
+      unit: "usd",
+      resolution: "raw",
+    });
+    const retained = await retainObservationSeries(ctx);
+    expect(retained.deleted).toBeGreaterThan(0);
+    const daily = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.resolution, "daily"));
+    expect(daily.some((row) => row.value === 90)).toBe(true);
   });
 
   it("invalidates unused sibling password-reset tokens", async () => {

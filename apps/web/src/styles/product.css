@@ -1785,3 +1785,9 @@ a.ui-button {
   border-color: var(--mint);
   color: var(--mint-bright);
 }
+
+.data-attribution {
+  margin: 1.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}

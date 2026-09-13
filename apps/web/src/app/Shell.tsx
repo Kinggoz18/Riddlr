@@ -109,6 +109,7 @@ export function Shell(props: { children: ReactNode }) {
       </header>
       <main id="main" className="page-frame">
         {props.children}
+        <p className="data-attribution">Price data by CoinGecko</p>
       </main>
     </div>
   );

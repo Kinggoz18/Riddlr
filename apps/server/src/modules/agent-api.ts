@@ -41,6 +41,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { AppContext } from "../context.js";
 import { findRegistryAsset, searchAssets } from "./asset-registry.js";
+import { latestSpotQuotes } from "./observe.js";
 import { enqueueAgentScan } from "./scans.js";
 
 const DEFAULT_SEARCH_NAME = "Watchlist";
@@ -257,6 +258,10 @@ async function listAgentsPayload(ctx: AppContext) {
           .where(inArray(sources.id, [...new Set(sourceRows.map((item) => item.sourceId))]))
           .limit(32)
       : [];
+  const quotes = await latestSpotQuotes(
+    ctx,
+    itemRows.map((item) => item.canonicalId),
+  );
   return {
     agents: rows.map((agent) => {
       const watchlist = watchlistRows.find((row) => row.agentId === agent.id);
@@ -316,6 +321,7 @@ async function listAgentsPayload(ctx: AppContext) {
                     | undefined,
                   symbol: item.symbol ?? undefined,
                   name: item.name ?? undefined,
+                  lastQuote: quotes[item.canonicalId],
                 })),
             }
           : null,

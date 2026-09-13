@@ -5,11 +5,13 @@ import {
   auditActionLabel,
   auditResourceLabel,
   candidateKindLabel,
+  compactMoney,
   DEFAULT_DAILY_TOKEN_BUDGET,
   editClockHour,
   epistemicStatusLabel,
   eventStatusLabel,
   formatClockHour,
+  formatSpotQuote,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
   objectiveLabel,
@@ -73,5 +75,11 @@ describe("asset display fallback", () => {
   it("labels catalog ids and falls back to the slug for unknown registry ids", () => {
     expect(assetLabel("coingecko:bitcoin")).toBe("Bitcoin · BTC");
     expect(assetLabel("coingecko:zcash")).toBe("zcash");
+  });
+
+  it("formats a USD spot quote without inventing a price", () => {
+    expect(formatSpotQuote(undefined)).toBeUndefined();
+    expect(formatSpotQuote(Number.NaN)).toBeUndefined();
+    expect(formatSpotQuote(77333, "usd")).toBe(compactMoney.format(77333));
   });
 });

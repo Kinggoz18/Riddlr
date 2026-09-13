@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { assetClassLabel, assetDisplayName, assetTicker } from "./format.js";
+import { assetClassLabel, assetDisplayName, assetTicker, formatSpotQuote } from "./format.js";
 import { previewWatchlist, type WatchlistAsset } from "./watchlist-view.js";
 
 export function WatchlistAssets(props: {
@@ -29,7 +29,13 @@ export function WatchlistAssets(props: {
               </span>
               <span className="asset-copy">
                 <strong>{name}</strong>
-                <small>{klass ? `${ticker} · ${klass}` : ticker}</small>
+                <small>
+                  {item.lastQuote
+                    ? `${ticker} · ${formatSpotQuote(item.lastQuote.value, item.lastQuote.unit)}`
+                    : klass
+                      ? `${ticker} · ${klass}`
+                      : ticker}
+                </small>
               </span>
             </li>
           );

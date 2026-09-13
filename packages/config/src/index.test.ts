@@ -51,5 +51,7 @@ describe("parseEnv", () => {
     });
     expect(config.cookieSecret.length).toBeGreaterThan(16);
     expect(config.encryptionMasterKey.length).toBeGreaterThan(16);
+    expect(config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS).toBe(60);
+    expect(config.RIDDLR_OBSERVE_RETENTION_DAYS).toBe(90);
   });
 });

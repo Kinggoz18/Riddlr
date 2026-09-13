@@ -1,7 +1,8 @@
 # CoinGecko
 
-CoinGecko is used in two ways: a read-only `/coins/markets` source adapter
-for watchlist quotes, and a daily registry seed that fills the `assets` table.
+CoinGecko is used in three ways: a read-only `/coins/markets` source adapter
+for watchlist quotes during scans, a daily registry seed that fills the `assets`
+table, and a one-minute `/simple/price` observation poll into `observation_series`.
 
 ## Setup
 
@@ -28,11 +29,24 @@ injected fetch client is used in integration tests.
 Agents resolve watchlist items and extract text mentions only from this
 registry. Search is `GET /api/v1/assets?q=`.
 
+## Spot observations
+
+The observe worker polls `GET /simple/price?ids=<up to 100>&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true&include_last_updated_at=true` for watched, held, and pinned `coingecko:*` ids. Interval `RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` (default 60). `RIDDLR_ENV=test` skips enqueue. Demo attribution: the dashboard footer shows "Price data by CoinGecko".
+
+| Item | Value |
+| --- | --- |
+| Path | `GET https://api.coingecko.com/api/v3/simple/price` |
+| Metrics | `spot_price`, `quoted_volume`, `quoted_market_cap`, `price_change_24h` |
+| Observed at | `last_updated_at` when present; host time if that timestamp is more than five minutes in the future |
+| Unique key | `(provider, metric, subject, observed_at, resolution)` |
+
+See [observations.md](../observations.md).
+
 ## Failure classes
 
 | Class | What you see | Fix |
 | --- | --- | --- |
-| `rate_limited` | HTTP 429. Seed writes nothing. Metric `riddlr_registry_seeds_total{result="error"}`. | Wait; add a demo key if you have one. A 429 body was not captured; classification uses status. |
+| `rate_limited` | HTTP 429. Seed and observe polls write nothing. Metrics `riddlr_registry_seeds_total` and `riddlr_observe_polls_total`. | Wait; add a demo key if you have one. A 429 body was not captured; classification uses status. |
 | `unavailable` | 5xx, timeout, or a redirect (`redirect=manual`, not followed) | Check CoinGecko status; seed retries on the next due interval |
 | `malformed` | HTML 200, oversized body, or a non-array JSON object | Captured 400 `invalid vs_currency` is this class |
 | `lock_held` | A second seed while the 600s NX lock is held | Wait; the in-flight seed owns the write |

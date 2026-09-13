@@ -10,5 +10,6 @@ describe("queue contracts", () => {
     expect(QUEUE_NAMES.clusterEvents).toBe("riddlr.cluster.events");
     expect(QUEUE_NAMES.analyzeEvent).toBe("riddlr.analyze.event");
     expect(QUEUE_NAMES.notifyDeliver).toBe("riddlr.notify.deliver");
+    expect(QUEUE_NAMES.observePoll).toBe("riddlr.observe.poll");
   });
 });

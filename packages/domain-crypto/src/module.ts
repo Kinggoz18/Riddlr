@@ -4,15 +4,18 @@ import {
   classifyPageHeuristic,
   DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
+  type DetectorSpec,
   type DomainModule,
   type ExtractedAsset,
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
   type MarketObservation,
   type NormalizedEvidence,
+  RETURN_SHOCK_V1,
   type RegistryAsset,
   resolveEvidenceAssets,
   takeBounded,
+  VOLUME_ANOMALY_V1,
   watchlistSearchQuery,
   weakClaimObject,
 } from "@riddlr/domain";
@@ -73,9 +76,16 @@ export const CRYPTO_CLAIM_KINDS = [
   "crypto:service_outage",
   "crypto:market_move",
   "crypto:general_report",
+  "crypto:observed_spot_price_anomaly",
+  "crypto:observed_quoted_volume_anomaly",
 ] as const;
 
 export const CRYPTO_IMPACT_POLICY_VERSION = "crypto-impact-1";
+
+export const CRYPTO_DETECTOR_SPECS: readonly DetectorSpec[] = [
+  { ...RETURN_SHOCK_V1, claimKind: "crypto:observed_spot_price_anomaly" },
+  { ...VOLUME_ANOMALY_V1, claimKind: "crypto:observed_quoted_volume_anomaly" },
+];
 
 const CLAIM_PATTERNS: Array<{
   kind: (typeof CRYPTO_CLAIM_KINDS)[number];
@@ -294,6 +304,12 @@ export const cryptoDomainModule: DomainModule = {
       return undefined;
     }
     if (candidate.kind === "crypto:general_report") {
+      return undefined;
+    }
+    if (
+      candidate.kind === "crypto:observed_spot_price_anomaly" ||
+      candidate.kind === "crypto:observed_quoted_volume_anomaly"
+    ) {
       return undefined;
     }
     if (weakClaimObject(candidate.objectText ?? candidate.excerpt)) {

@@ -108,6 +108,19 @@ export const assetSearchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).optional(),
 });
 
+export const observationLatestQuerySchema = z.object({
+  q: z.string().max(4000).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const observationPinSchema = z.object({
+  subjectCanonicalId: z.string().min(3).max(160),
+  metric: z
+    .enum(["spot_price", "quoted_volume", "quoted_market_cap", "price_change_24h"])
+    .optional(),
+  provider: z.string().min(3).max(80).optional(),
+});
+
 export const notificationPolicySchema = z.object({
   minRisk: z.enum(["low", "moderate", "high", "critical"]).default("moderate"),
   cooldownMinutes: z

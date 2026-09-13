@@ -22,7 +22,14 @@ export const DEFAULT_AGENT_NAME = "Riddlr Intelligence Agent";
 export const DEFAULT_AGENT_DESCRIPTION =
   "The default Crypto watcher. It scans attached sources on a schedule, discovers candidates from evidence, and analyzes material clusters. A candidate is not a trade. It cannot trade.";
 
-export const SCAN_STATUSES = ["queued", "running", "partial", "succeeded", "failed"] as const;
+export const SCAN_STATUSES = [
+  "queued",
+  "running",
+  "partial",
+  "succeeded",
+  "failed",
+  "observe",
+] as const;
 export type ScanStatus = (typeof SCAN_STATUSES)[number];
 
 export function parseScheduleMs(input: string, customIntervalMs?: number): number {

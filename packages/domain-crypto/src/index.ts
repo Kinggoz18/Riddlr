@@ -1,6 +1,7 @@
 export { caip19ForPlatform, caip19FromPlatforms } from "./caip.js";
 export {
   CRYPTO_CLAIM_KINDS,
+  CRYPTO_DETECTOR_SPECS,
   CRYPTO_IMPACT_POLICY_VERSION,
   cryptoDomainModule,
   DEFAULT_CRYPTO_OBJECTIVES,

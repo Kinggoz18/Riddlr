@@ -87,6 +87,18 @@ export function createMetrics() {
     labelNames: ["result"],
     registers: [register],
   });
+  const observePolls = new Counter({
+    name: "riddlr_observe_polls_total",
+    help: "Observation poll outcomes",
+    labelNames: ["provider", "result"],
+    registers: [register],
+  });
+  const detectorFindings = new Counter({
+    name: "riddlr_detector_findings_total",
+    help: "Observation detector outcomes",
+    labelNames: ["detector", "result"],
+    registers: [register],
+  });
   return {
     register,
     httpDuration,
@@ -99,6 +111,8 @@ export function createMetrics() {
     claims,
     notifications,
     registrySeeds,
+    observePolls,
+    detectorFindings,
   };
 }
 

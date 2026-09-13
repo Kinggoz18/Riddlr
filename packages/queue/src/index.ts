@@ -6,6 +6,7 @@ export const QUEUE_NAMES = {
   clusterEvents: "riddlr.cluster.events",
   analyzeEvent: "riddlr.analyze.event",
   notifyDeliver: "riddlr.notify.deliver",
+  observePoll: "riddlr.observe.poll",
   healthPing: "riddlr.health.ping",
 } as const;
 
@@ -54,5 +55,10 @@ export type NotifyJob = {
   signalId: string;
   channelConfigId?: string;
   marketDomainId: string;
+  idempotencyKey: string;
+};
+
+export type ObservePollJob = {
+  providerId: string;
   idempotencyKey: string;
 };

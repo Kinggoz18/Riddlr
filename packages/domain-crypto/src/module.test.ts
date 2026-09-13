@@ -295,6 +295,47 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
   });
 
+  it("rejects observed-anomaly kinds on the document claim path", () => {
+    const evidence = normalizeEvidence({
+      sourceFamily: "search",
+      adapterId: "searxng",
+      title: "Bitcoin jumped",
+      bodyText: "A model said return_shock.v1 fired at z=4.25 over 20 spot_price samples.",
+      fetchedAt: new Date("2026-09-13T00:00:00Z"),
+      url: "https://example.com/model",
+      contentCompleteness: "full_document",
+    });
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "crypto:observed_spot_price_anomaly",
+          predicate: "return_shock",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "z=4.25 over 20 spot_price samples",
+        },
+        evidence,
+      ),
+    ).toBeUndefined();
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "crypto:observed_quoted_volume_anomaly",
+          predicate: "volume_anomaly",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "z=4.25 over 20 quoted_volume samples",
+        },
+        evidence,
+      ),
+    ).toBeUndefined();
+    expect(
+      cryptoDomainModule
+        .extractClaims([evidence])
+        .some((item) => item.kind.startsWith("crypto:observed_")),
+    ).toBe(false);
+  });
+
   it("has no hardcoded token list and extracts a registry-only asset", () => {
     const evidence = [
       normalizeEvidence({

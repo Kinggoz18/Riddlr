@@ -31,3 +31,5 @@ http://127.0.0.1:8080). Windows: `scripts/riddlr-up.ps1`. Host first-run:
 daily budget to unlimited (`null`); analysis is then not skipped for a daily
 cap, and usage is still recorded. `RIDDLR_REGISTRY_TOP_N` defaults to 1000
 (max 2000). `RIDDLR_REGISTRY_SEED_INTERVAL_HOURS` defaults to 24 (max 168).
+`RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` defaults to 60 (max 300).
+`RIDDLR_OBSERVE_RETENTION_DAYS` defaults to 90 (min 14, max 365).

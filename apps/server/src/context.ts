@@ -5,8 +5,10 @@ import { DomainModuleRegistry } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
 import { createLogger, createMetrics } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
+import type { ObservationProviderRegistry } from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+import { createObservationProviders } from "./modules/observe.js";
 
 export type AppContext = {
   config: AppConfig;
@@ -19,6 +21,8 @@ export type AppContext = {
   clusterQueue?: Queue;
   analyzeQueue?: Queue;
   notifyQueue?: Queue;
+  observeQueue?: Queue;
+  observationProviders?: ObservationProviderRegistry;
   logger: ReturnType<typeof createLogger>;
   metrics: ReturnType<typeof createMetrics>;
   masterKey: Buffer;
@@ -39,6 +43,7 @@ export async function createContext(): Promise<AppContext> {
   const clusterQueue = new Queue(QUEUE_NAMES.clusterEvents, queueOptions);
   const analyzeQueue = new Queue(QUEUE_NAMES.analyzeEvent, queueOptions);
   const notifyQueue = new Queue(QUEUE_NAMES.notifyDeliver, queueOptions);
+  const observeQueue = new Queue(QUEUE_NAMES.observePoll, queueOptions);
   const logger = createLogger({
     level: config.RIDDLR_LOG_LEVEL,
     pretty: config.RIDDLR_LOG_FORMAT === "pretty",
@@ -61,6 +66,8 @@ export async function createContext(): Promise<AppContext> {
     clusterQueue,
     analyzeQueue,
     notifyQueue,
+    observeQueue,
+    observationProviders: createObservationProviders(),
     logger,
     metrics: createMetrics(),
     masterKey,

@@ -1,5 +1,7 @@
 import {
   boolean,
+  doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -339,9 +341,7 @@ export const evidenceItems = pgTable(
 
 export const sourceFetchRequests = pgTable("source_fetch_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
-  scanId: uuid("scan_id")
-    .notNull()
-    .references(() => scans.id),
+  scanId: uuid("scan_id").references(() => scans.id),
   sourceId: uuid("source_id")
     .notNull()
     .references(() => sources.id),
@@ -458,6 +458,54 @@ export const observations = pgTable("observations", {
   observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
   sourceId: text("source_id").notNull(),
 });
+
+export const observationSeries = pgTable(
+  "observation_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    metric: text("metric").notNull(),
+    subjectCanonicalId: text("subject_canonical_id").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    value: doublePrecision("value").notNull(),
+    unit: text("unit").notNull(),
+    fetchRequestId: uuid("fetch_request_id").references(() => sourceFetchRequests.id),
+    resolution: text("resolution").notNull().default("raw"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("observation_series_key_idx").on(
+      table.provider,
+      table.metric,
+      table.subjectCanonicalId,
+      table.observedAt,
+      table.resolution,
+    ),
+    index("observation_series_subject_idx").on(
+      table.subjectCanonicalId,
+      table.metric,
+      table.observedAt,
+    ),
+  ],
+);
+
+export const observationPins = pgTable(
+  "observation_pins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    metric: text("metric").notNull(),
+    subjectCanonicalId: text("subject_canonical_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("observation_pins_key_idx").on(
+      table.provider,
+      table.metric,
+      table.subjectCanonicalId,
+    ),
+  ],
+);
 
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),

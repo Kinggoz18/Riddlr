@@ -30,6 +30,17 @@ export {
   snowflakeFromDate,
 } from "./discord.js";
 export { type EnrichmentDocument, enrichPublicDocument } from "./enrich.js";
+export {
+  COINGECKO_SIMPLE_PRICE_PATH,
+  COINGECKO_SPOT_PROVIDER_ID,
+  createCoinGeckoSpotProvider,
+  createScriptedObservationProvider,
+  type ObservationProvider,
+  ObservationProviderRegistry,
+  type ObserveQuery,
+  type ObserveResult,
+  parseCoinGeckoSimplePrice,
+} from "./observations/index.js";
 export { pathDisallowedByRobots, robotsDenied } from "./robots.js";
 export {
   createSearxngAdapter,

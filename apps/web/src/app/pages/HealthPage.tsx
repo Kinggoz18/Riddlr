@@ -1,6 +1,26 @@
-import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
+import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
+import { AssetPicker } from "../AssetPicker.js";
 import { api } from "../api.js";
+import { assetLabel } from "../format.js";
+
+type ObservationHealth = {
+  provider?: string;
+  lastPollAt?: string | null;
+  lastResult?: string | null;
+  subjectCount?: number;
+  seriesCount?: number;
+  freshnessGapSeconds?: number | null;
+  intervalSeconds?: number;
+  retentionDays?: number;
+};
+
+type Pin = {
+  id: string;
+  provider: string;
+  metric: string;
+  subjectCanonicalId: string;
+};
 
 function HealthPage() {
   const [data, setData] = useState<{
@@ -11,12 +31,26 @@ function HealthPage() {
     memory?: { rss: number; peakRss: number };
     enrichmentBacklog?: number;
     staleAssessments?: number;
+    observations?: ObservationHealth;
   }>();
+  const [pins, setPins] = useState<Pin[]>([]);
+  const [pinIds, setPinIds] = useState<string[]>([]);
   const [error, setError] = useState<string>();
+  function refreshPins() {
+    void api<{ pins: Pin[] }>("/api/v1/observations/pins")
+      .then((body) => {
+        setPins(body.pins);
+        setPinIds([]);
+      })
+      .catch(() => {
+        setPins([]);
+      });
+  }
   useEffect(() => {
     void api<NonNullable<typeof data>>("/api/v1/health")
       .then(setData)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
+    refreshPins();
   }, []);
   if (error) {
     return <EmptyState title="Unable to load health" body={error} />;
@@ -24,6 +58,7 @@ function HealthPage() {
   if (!data) {
     return <p>Loading health…</p>;
   }
+  const observations = data.observations;
   return (
     <>
       <PageHeader
@@ -91,7 +126,85 @@ function HealthPage() {
             <strong>{data.staleAssessments ?? 0}</strong>
           </p>
         </Card>
+        <Card>
+          <div className="panel-heading">
+            <h2>Observations</h2>
+            <StatusBadge
+              label={
+                observations?.lastResult === "ok" ? "Polling" : (observations?.lastResult ?? "Idle")
+              }
+              tone={observations?.lastResult === "ok" ? "ok" : "soon"}
+            />
+          </div>
+          <p className="metric-line">
+            <span>Subjects</span>
+            <strong>{observations?.subjectCount ?? 0}</strong>
+          </p>
+          <p className="metric-line">
+            <span>Series rows</span>
+            <strong>{observations?.seriesCount ?? 0}</strong>
+          </p>
+          <p className="metric-line">
+            <span>Freshness gap</span>
+            <strong>
+              {observations?.freshnessGapSeconds == null
+                ? "—"
+                : `${observations.freshnessGapSeconds}s`}
+            </strong>
+          </p>
+          <p className="field-note">
+            Interval {observations?.intervalSeconds ?? 60}s. Retention{" "}
+            {observations?.retentionDays ?? 90} days then daily downsample. Last poll{" "}
+            {observations?.lastPollAt ?? "never"}.
+          </p>
+        </Card>
       </section>
+      <Card>
+        <h2>Pinned series</h2>
+        <p className="field-note">
+          Subjects nobody watches are not polled. Pin a registry asset to keep its series without a
+          watchlist.
+        </p>
+        <ul className="asset-list">
+          {pins.map((pin) => (
+            <li key={pin.id}>
+              <span className="asset-copy">
+                <strong>{assetLabel(pin.subjectCanonicalId)}</strong>
+                <small>
+                  {pin.metric} · {pin.provider}
+                </small>
+              </span>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void api(`/api/v1/observations/pins/${pin.id}`, { method: "DELETE" }).then(
+                    refreshPins,
+                  );
+                }}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+        {pins.length === 0 ? <p className="quiet-state">No pinned series</p> : null}
+        <Field label="Pin an asset">
+          <AssetPicker
+            values={pinIds}
+            onChange={(values) => {
+              const next = values[values.length - 1];
+              if (!next) {
+                setPinIds(values);
+                return;
+              }
+              void api("/api/v1/observations/pins", {
+                method: "POST",
+                body: JSON.stringify({ subjectCanonicalId: next }),
+              }).then(refreshPins);
+            }}
+          />
+        </Field>
+      </Card>
     </>
   );
 }

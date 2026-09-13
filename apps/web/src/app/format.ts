@@ -20,6 +20,19 @@ export const compactMoney = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 1,
 });
 
+export function formatSpotQuote(value?: number | null, unit?: string | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (!unit || unit === "usd") {
+    return compactMoney.format(value);
+  }
+  if (unit === "percent") {
+    return `${value.toFixed(2)}%`;
+  }
+  return `${value} ${unit}`;
+}
+
 export type AssetOption = {
   canonicalId: string;
   symbol: string;

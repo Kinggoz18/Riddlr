@@ -4,6 +4,13 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Observation series: the worker polls CoinGecko `/simple/price` for watched,
+  held, and pinned assets on an interval independent of scans. Rows land in
+  `observation_series` with retention and daily downsample. Return-shock and
+  volume detectors emit observation evidence. Health shows poll freshness;
+  watchlists show the last spot quote. See
+  [docs/observations.md](docs/observations.md).
+
 - Asset identity is the `assets` registry. Watchlist search and text extraction
   use CoinGecko’s top-N list (default 1,000) plus aliases and CAIP-19 contract
   ids. Bare tickers and unknown ids are rejected. See

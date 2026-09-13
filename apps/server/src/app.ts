@@ -92,6 +92,7 @@ import type { AppContext } from "./context.js";
 import { registerAgentRoutes } from "./modules/agent-api.js";
 import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
+import { observationHealth, registerObservationRoutes } from "./modules/observe.js";
 import {
   registerNotificationSettingsRoutes,
   registerPortfolioRoutes,
@@ -640,6 +641,7 @@ export async function buildApp(ctx: AppContext) {
   };
 
   registerAgentRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
+  registerObservationRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerSourceRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerPortfolioRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerNotificationSettingsRoutes(
@@ -1326,6 +1328,7 @@ export async function buildApp(ctx: AppContext) {
       sources: sourceRows.map(publicSource),
       enrichmentBacklog: Number(enrichmentBacklog?.count ?? 0),
       staleAssessments: Number(staleAssessments?.count ?? 0),
+      observations: await observationHealth(ctx),
     };
   });
   app.get("/api/v1/settings", { preHandler: authed }, async (request) => {
