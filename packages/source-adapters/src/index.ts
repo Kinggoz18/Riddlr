@@ -10,14 +10,21 @@ export {
   parseCryptoComTickers,
 } from "./cryptocom.js";
 export {
+  applicationIdFromBotToken,
   createDiscordAdapter,
   DISCORD_BOT_PERMISSIONS,
+  discordBotInviteUrl,
   MAX_DISCORD_CHANNELS,
   MAX_DISCORD_LOOKBACK_HOURS,
   parseDiscordMessages,
   snowflakeFromDate,
 } from "./discord.js";
-export { createSearxngAdapter, parseSearxngPayload } from "./searxng.js";
+export { type EnrichmentDocument, enrichPublicDocument } from "./enrich.js";
+export { pathDisallowedByRobots, robotsDenied } from "./robots.js";
+export {
+  createSearxngAdapter,
+  parseSearxngPayload,
+} from "./searxng.js";
 export {
   assertSafeHttpUrl,
   assertSafeResolvedHttpUrl,
@@ -29,6 +36,7 @@ export {
   isBlockedSsrfHost,
   type LookupFn,
   readBoundedJson,
+  redactRequestUrl,
   type SourceAdapter,
   SourceAdapterRegistry,
   type SourceCapability,

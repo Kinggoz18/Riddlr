@@ -134,6 +134,13 @@ Set `RIDDLR_ADMIN_PASSWORD` in that environment. Non-interactive setup skips
 authenticator; enable it later in Settings. If the start command printed a
 setup code, pass `--setup-code` as well.
 
+If the administrator forgot the password and email is not configured, print a
+one-hour reset URL on the host:
+
+```bash
+docker compose exec -T api node apps/server/dist/cmd/reset-password.js
+```
+
 ## Pre-built images
 
 The start script pulls `ghcr.io/kinggoz18/riddlr-server:latest` and

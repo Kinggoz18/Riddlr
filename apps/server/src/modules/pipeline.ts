@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { decryptSecretWithKeys } from "@riddlr/crypto";
 import {
+  agentMarketDomains,
   agentSkills,
   agentSources,
   agents,
@@ -8,18 +9,25 @@ import {
   analyses,
   analysisCache,
   assets,
+  claimEvidence,
+  claims,
   encryptedSecrets,
+  eventAssessmentReasons,
+  eventAssessments,
   eventAssets,
+  eventClaims,
   eventEvidence,
   events,
   evidenceItems,
   evidenceOccurrences,
   evidenceRelations,
+  instanceSettings,
   observations,
   portfolioHoldings,
   providerConfigs,
   scanSourceRuns,
   scans,
+  signalClaimProofs,
   signals,
   skills,
   sourceFetchRequests,
@@ -31,7 +39,9 @@ import {
 import {
   absorbMarketDataClusters,
   analysisReservationTokens,
+  assessReliability,
   buildEventFacts,
+  claimGroupKey,
   classifyReprint,
   clusterEventTitle,
   clusterEvidence,
@@ -42,9 +52,11 @@ import {
   factsToApplicability,
   formatAnalysisFacts,
   formatDiscoveryNotes,
+  headlineBodyMismatch,
   independenceCounts,
   isMaterialEvent,
   isNearDuplicate,
+  lineageOriginKey,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_SKILLS_PER_AGENT,
@@ -52,6 +64,7 @@ import {
   nextEventStatus,
   normalizeEvidence,
   observationsFromMarketPayload,
+  overlappingOutbound,
   resolveDailyTokenBudget,
   SIGNAL_JSON_SCHEMA,
   selectApplicableSkills,
@@ -64,7 +77,6 @@ import {
   utcDayRange,
   utcDayStamp,
   validateSignalOutput,
-  watchlistSearchQuery,
 } from "@riddlr/domain";
 import {
   buildAnalysisPrompt,
@@ -78,11 +90,61 @@ import {
   createDiscordAdapter,
   createSearxngAdapter,
   createXAdapter,
+  redactRequestUrl,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { enrichAndUnderstandScan, loadTrustMaps, upsertSourceIdentity } from "./intelligence.js";
 import { maybeNotify } from "./notify.js";
+
+async function instanceEarlyWarningsEnabled(ctx: AppContext): Promise<boolean> {
+  if (ctx.config.RIDDLR_EARLY_WARNING === "true") {
+    return true;
+  }
+  const [settings] = await ctx.db.select().from(instanceSettings).limit(1);
+  return settings?.notificationPolicy?.earlyWarnings === true;
+}
+
+async function instanceShadowAssessments(ctx: AppContext): Promise<boolean> {
+  if (ctx.config.RIDDLR_SHADOW_ASSESSMENTS === "true") {
+    return true;
+  }
+  const [settings] = await ctx.db.select().from(instanceSettings).limit(1);
+  return settings?.notificationPolicy?.shadowAssessments === true;
+}
+
+const STALE_MS = 48 * 60 * 60 * 1000;
+
+function payloadUrls(payload?: Record<string, unknown> | null): string[] | undefined {
+  const raw = payload?.outboundUrls;
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  return raw.filter((item): item is string => typeof item === "string");
+}
+
+function payloadText(
+  payload: Record<string, unknown> | null | undefined,
+  key: string,
+): string | undefined {
+  const value = payload?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function strongestStance(stances: string[]): string {
+  const rank: Record<string, number> = {
+    retracts: 4,
+    contradicts: 3,
+    derived_from: 2,
+    updates: 1,
+    quotes: 0,
+    supports: 0,
+  };
+  return (
+    [...stances].sort((left, right) => (rank[right] ?? 0) - (rank[left] ?? 0))[0] ?? "supports"
+  );
+}
 
 export async function runScan(
   ctx: AppContext,
@@ -102,7 +164,12 @@ export async function runScan(
       .innerJoin(sources, eq(agentSources.sourceId, sources.id))
       .where(and(eq(agentSources.agentId, scan.agentId), eq(sources.enabled, true)))
       .limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-    const boundSources = sourceRows.map((row) => row.source);
+    const boundSources = sourceRows
+      .map((row) => row.source)
+      .sort(
+        (left, right) =>
+          left.adapterId.localeCompare(right.adapterId) || left.id.localeCompare(right.id),
+      );
     if (boundSources.length === 0) {
       await ctx.db
         .update(scans)
@@ -121,13 +188,17 @@ export async function runScan(
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
-    const module = ctx.domains.require("crypto");
     const agentContext = await loadAgentScanContext(ctx, scan.agentId);
+    const module = agentContext.module;
     let partial = false;
     let sourceFailures = 0;
     let sourceSuccesses = 0;
     const collected = [];
 
+    const perSourceQuota = Math.max(
+      1,
+      Math.floor(ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT / Math.max(1, boundSources.length)),
+    );
     for (const source of boundSources) {
       const adapter = adapters.get(source.adapterId);
       if (!adapter) {
@@ -140,7 +211,10 @@ export async function runScan(
         });
         continue;
       }
-      const remaining: number = ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT - collected.length;
+      const remaining: number = Math.min(
+        perSourceQuota,
+        ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT - collected.length,
+      );
       if (remaining <= 0) {
         break;
       }
@@ -167,21 +241,10 @@ export async function runScan(
           });
         }
       }
-      const queryText =
-        adapter.family === "market_data"
-          ? agentContext.watchlist.map((item) => item.canonicalId).join(" ")
-          : watchlistSearchQuery(
-              agentContext.watchlist.map((item) => ({
-                canonicalId: item.canonicalId,
-                symbol: item.symbol,
-                name: item.displayName,
-              })),
-              adapter.id === "searxng"
-                ? "cryptocurrency bitcoin ethereum stablecoin news"
-                : adapter.id === "x"
-                  ? "crypto"
-                  : "",
-            );
+      const queryText = module.sourceQuery({
+        adapterId: adapter.id,
+        watchlist: agentContext.watchlist,
+      });
       const requestHash = createHash("sha256")
         .update(
           JSON.stringify({
@@ -198,6 +261,9 @@ export async function runScan(
           sourceId: source.id,
           adapterId: source.adapterId,
           requestHash,
+          requestUrl: redactRequestUrl(
+            `https://adapter.local/${source.adapterId}?q=${encodeURIComponent(queryText)}`,
+          ),
           status: "running",
         })
         .returning();
@@ -214,6 +280,11 @@ export async function runScan(
             errorClass: result.errors[0]?.class,
             finishedAt: new Date(),
             evidenceCount: result.evidence.length,
+            requestUrl: result.requestUrl ? redactRequestUrl(result.requestUrl) : undefined,
+            responseStatus: result.responseStatus,
+            adapterMetadata: result.adapterMetadata,
+            providerRequestId: result.providerRequestId,
+            paginationCursor: result.paginationCursor,
           })
           .where(eq(sourceFetchRequests.id, fetchRequest.id));
       }
@@ -255,9 +326,17 @@ export async function runScan(
 
     const usedIds: string[] = [];
     const byHash = new Map<string, string>();
+    const trustMaps = await loadTrustMaps(ctx);
     for (const item of collected) {
       const existing = byHash.get(item.normalized.contentHash);
       try {
+        const identityId = await upsertSourceIdentity(ctx, item.normalized.sourceIdentity);
+        const hostname = sourceHostname(item.normalized.canonicalUrl);
+        const snap = trustMaps.snapshot(identityId, hostname);
+        const adapterPayload = {
+          ...(item.normalized.adapterPayload ?? {}),
+          ...(item.normalized.outboundUrls ? { outboundUrls: item.normalized.outboundUrls } : {}),
+        };
         const [row] = await ctx.db
           .insert(evidenceItems)
           .values({
@@ -271,12 +350,18 @@ export async function runScan(
             author: item.normalized.author,
             publishedAt: item.normalized.publishedAt,
             fetchedAt: item.normalized.fetchedAt,
-            adapterPayload: item.normalized.adapterPayload,
+            adapterPayload,
             sourceFamily: item.family,
             adapterId: item.adapterId,
             externalId: item.normalized.externalId,
             language: item.normalized.language,
             fetchRequestId: item.fetchRequestId,
+            contentCompleteness: item.normalized.contentCompleteness,
+            originKey: item.normalized.originKey,
+            referencedOriginKey: item.normalized.referencedOriginKey,
+            sourceIdentityId: identityId,
+            sourcePolicyRevision: snap.revision,
+            editedAt: item.normalized.editedAt,
           })
           .onConflictDoNothing()
           .returning();
@@ -291,6 +376,9 @@ export async function runScan(
         if (persisted) {
           usedIds.push(persisted.id);
           byHash.set(item.normalized.contentHash, persisted.id);
+          ctx.metrics.evidenceOutcomes.inc({
+            completeness: item.normalized.contentCompleteness ?? "snippet",
+          });
           await ctx.db
             .insert(evidenceOccurrences)
             .values({
@@ -316,286 +404,63 @@ export async function runScan(
       }
     }
 
-    const evidenceRows =
+    const initialRows =
       usedIds.length > 0
         ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, usedIds))
         : [];
-    const holdings = await ctx.db.select().from(portfolioHoldings).limit(50);
-    const holdingIds = new Set(holdings.map((item) => item.canonicalId));
-
-    const prepared = evidenceRows.map((row) => {
-      const normalized = normalizeEvidence({
-        sourceFamily: row.sourceFamily ?? "collected",
-        adapterId: row.adapterId ?? "pipeline",
-        url: row.canonicalUrl ?? undefined,
-        title: row.title ?? undefined,
-        bodyText: row.bodyText ?? undefined,
-        fetchedAt: row.fetchedAt,
-        publishedAt: row.publishedAt ?? undefined,
-        adapterPayload: row.adapterPayload ?? undefined,
-      });
-      return {
-        id: row.id,
-        row,
-        normalized,
-        hostname: sourceHostname(row.canonicalUrl),
-        publishedAt: row.publishedAt ?? undefined,
-        sourceFamily: row.sourceFamily ?? undefined,
-        assetCanonicalIds: module.extractAssets([normalized]).map((item) => item.canonicalId),
-        text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
-      };
-    });
-
-    for (let index = 0; index < prepared.length; index += 1) {
-      const current = prepared[index];
-      if (!current) {
-        continue;
-      }
-      for (let priorIndex = 0; priorIndex < index; priorIndex += 1) {
-        const prior = prepared[priorIndex];
-        if (!prior) {
-          continue;
-        }
-        if (
-          current.normalized.contentHash !== prior.normalized.contentHash &&
-          isNearDuplicate(current.text, prior.text)
-        ) {
-          await ctx.db
-            .insert(evidenceRelations)
-            .values({
-              fromId: current.id,
-              toId: prior.id,
-              kind: "near_duplicate_of",
-            })
-            .onConflictDoNothing();
-          break;
-        }
+    if (ctx.enrichQueue) {
+      for (const row of takeBounded(initialRows, ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)) {
+        await ctx.enrichQueue.add(
+          "enrich",
+          {
+            scanId,
+            evidenceId: row.id,
+            marketDomainId: module.id,
+            idempotencyKey: `enrich:${row.id}`,
+          },
+          {
+            jobId: `enrich:${scanId}:${row.id}`,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5_000 },
+          },
+        );
       }
     }
-
-    const clustered =
-      prepared.length > 0 ? clusterEvidence(prepared, MAX_EVENTS_PER_SCAN) : { clusters: [] };
-    const clusters = absorbMarketDataClusters(clustered.clusters);
-
-    if (clusters.length === 0) {
-      await ctx.db.insert(events).values({
-        agentId: scan.agentId,
-        scanId,
-        title: "No evidence in this scan window",
-        status: "empty",
+    if (ctx.understandQueue) {
+      for (const row of takeBounded(initialRows, ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)) {
+        await ctx.understandQueue.add(
+          "understand",
+          {
+            scanId,
+            evidenceId: row.id,
+            marketDomainId: module.id,
+            idempotencyKey: `understand:${row.id}`,
+          },
+          {
+            jobId: `understand:${scanId}:${row.id}`,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5_000 },
+          },
+        );
+      }
+    }
+    if (ctx.clusterQueue) {
+      await ctx.clusterQueue.add(
+        "cluster",
+        { scanId, marketDomainId: module.id, idempotencyKey: `cluster:${scanId}` },
+        { jobId: `cluster:${scanId}`, attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+      );
+    }
+    if (initialRows.length > 0) {
+      await enrichAndUnderstandScan({
+        ctx,
+        module,
+        evidenceRows: initialRows,
+        fetchImpl: deps.fetchImpl,
         windowStart: scan.windowStart,
-        independentCount: 0,
-        derivedCount: 0,
       });
     }
-
-    for (const cluster of clusters) {
-      const clusterRows = cluster.map((item) => item.row);
-      const clusterNorm = cluster.map((item) => item.normalized);
-      const extracted = module.extractAssets(clusterNorm);
-      const sourced = takeBounded(
-        [
-          ...cluster.flatMap((item) =>
-            observationsFromMarketPayload(
-              item.row.adapterPayload,
-              item.row.adapterId ?? item.id,
-              item.publishedAt ?? item.row.fetchedAt,
-            ),
-          ),
-          ...module.extractObservations(clusterNorm),
-        ],
-        MAX_OBSERVATIONS_PER_EVENT,
-      );
-      const roles = cluster.map((item, index) => {
-        const sameDayHost = cluster.some((other, otherIndex) => {
-          if (otherIndex >= index) {
-            return false;
-          }
-          const sameHost = item.hostname && item.hostname === other.hostname;
-          const dayLeft = item.publishedAt?.toISOString().slice(0, 10);
-          const dayRight = other.publishedAt?.toISOString().slice(0, 10);
-          return Boolean(sameHost && dayLeft && dayLeft === dayRight);
-        });
-        return classifyReprint({
-          sameCanonicalUrl: clusterRows.some(
-            (other, otherIndex) =>
-              otherIndex < index &&
-              other.canonicalUrl &&
-              other.canonicalUrl === item.row.canonicalUrl,
-          ),
-          sameContentHash: clusterRows.some(
-            (other, otherIndex) => otherIndex < index && other.contentHash === item.row.contentHash,
-          ),
-          nearDuplicate: cluster.some(
-            (other, otherIndex) => otherIndex < index && isNearDuplicate(item.text, other.text),
-          ),
-          sameHostnameSameDay: sameDayHost,
-          opposingClaims: cluster.some(
-            (other, otherIndex) => otherIndex < index && textOpposes(item.text, other.text),
-          ),
-        });
-      });
-      const counts = independenceCounts(roles);
-      const watchlistIds = new Set(agentContext.watchlist.map((item) => item.canonicalId));
-      const watchlistOverlap = extracted.some((item) => watchlistIds.has(item.canonicalId));
-      const overlap = extracted.filter((item) => holdingIds.has(item.canonicalId));
-      const hostCount = uniqueIndependentHosts(
-        cluster.map((item, index) => ({
-          hostname: item.hostname,
-          role: roles[index] ?? "primary",
-        })),
-      );
-      const fingerprint = eventClusterFingerprint(cluster.map((item) => item.id));
-      const context = module.assembleContext({
-        evidence: clusterNorm,
-        assets: extracted,
-        observations: sourced,
-        watchlist: agentContext.watchlist,
-      });
-      const facts = buildEventFacts({
-        evidence: cluster.map((item, index) => ({
-          hostname: item.hostname,
-          sourceFamily: item.sourceFamily ?? item.row.sourceFamily ?? undefined,
-          text: item.text,
-          publishedAt: item.publishedAt,
-          role: roles[index] ?? "primary",
-          adapterPayload: item.row.adapterPayload,
-        })),
-        assets: extracted,
-        observations: sourced,
-        watchlistOverlap,
-        portfolioOverlap: overlap.length > 0,
-      });
-      const material = isMaterialEvent({
-        independentHostCount: hostCount,
-        independentFamilyCount: new Set(clusterRows.map((row) => row.sourceFamily ?? row.sourceId))
-          .size,
-        evidenceCount: clusterRows.length,
-        derivedCount: counts.derivedReprintCount,
-        watchlistOverlap,
-        portfolioOverlap: overlap.length > 0,
-        sourcedObservationCount: sourced.length,
-        hasAuthoritativePrimary: roles.some((role, index) => {
-          const family = clusterRows[index]?.sourceFamily;
-          return role === "primary" && (family === "x" || family === "discord");
-        }),
-      });
-      const discovery = discoverCandidate({
-        facts,
-        objectives: agentContext.agent?.objectives ?? [],
-        text: cluster.map((item) => item.text).join("\n"),
-        material,
-      });
-      const status = nextEventStatus({
-        evidenceCount: clusterRows.length,
-        discovery,
-        material,
-      });
-      const notes = [
-        ...context.notes,
-        ...formatAnalysisFacts(facts),
-        ...formatDiscoveryNotes(discovery),
-        overlap.length > 0
-          ? `Portfolio holdings overlap: ${overlap.map((item) => item.canonicalId).join(", ")}`
-          : "Portfolio holdings overlap: none",
-      ];
-      const [event] = await ctx.db
-        .insert(events)
-        .values({
-          agentId: scan.agentId,
-          scanId,
-          title: clusterEventTitle({
-            assets: extracted,
-            evidenceTitles: clusterRows.map((item) => item.title),
-            hostnames: cluster.map((item) => item.hostname ?? "unknown-host"),
-          }),
-          status,
-          windowStart: scan.windowStart,
-          independentCount: hostCount,
-          derivedCount: counts.derivedReprintCount,
-          clusterFingerprint: fingerprint,
-          materialityReason: material.reason,
-          epistemicStatus: discovery.epistemicStatus,
-          candidateKind: discovery.kind,
-          discoveryReason: discovery.reason,
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (!event) {
-        continue;
-      }
-      for (let index = 0; index < clusterRows.length; index += 1) {
-        const evidence = clusterRows[index];
-        const role = roles[index] ?? "primary";
-        if (evidence) {
-          await ctx.db
-            .insert(eventEvidence)
-            .values({ eventId: event.id, evidenceId: evidence.id, role });
-        }
-      }
-      for (const asset of takeBounded(extracted, 50)) {
-        await ctx.db
-          .insert(assets)
-          .values({
-            assetClass: asset.assetClass,
-            canonicalId: asset.canonicalId,
-            symbol: asset.symbol,
-            name: asset.displayName,
-          })
-          .onConflictDoNothing();
-        const [persisted] = await ctx.db
-          .select()
-          .from(assets)
-          .where(eq(assets.canonicalId, asset.canonicalId))
-          .limit(1);
-        if (persisted) {
-          await ctx.db
-            .insert(eventAssets)
-            .values({ eventId: event.id, assetId: persisted.id })
-            .onConflictDoNothing();
-        }
-      }
-      for (const observation of sourced) {
-        await ctx.db.insert(observations).values({
-          eventId: event.id,
-          kind: observation.kind,
-          assetCanonicalId: observation.assetCanonicalId,
-          value: observation.value,
-          unit: observation.unit,
-          observedAt: observation.observedAt,
-          sourceId: observation.sourceId,
-        });
-      }
-
-      if (material.material) {
-        if (ctx.analyzeQueue) {
-          await ctx.analyzeQueue.add(
-            "analyze",
-            { eventId: event.id, scanId, idempotencyKey: `analyze:${event.id}` },
-            {
-              jobId: `analyze:${event.id}`,
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5_000 },
-            },
-          );
-        } else {
-          await maybeAnalyze(
-            ctx,
-            event.id,
-            scan.agentId,
-            takeBounded(clusterRows, ctx.config.RIDDLR_ANALYSIS_EVIDENCE_LIMIT),
-            notes,
-            agentContext,
-            deps.fetchImpl,
-            {
-              facts,
-              material,
-              title: event.title,
-            },
-          );
-        }
-      }
-    }
+    await clusterScanEvents(ctx, scan, usedIds, deps);
 
     const failed = sourceSuccesses === 0 && (sourceFailures > 0 || collected.length === 0);
     const status = failed ? "failed" : partial ? "partial" : "succeeded";
@@ -622,6 +487,629 @@ export async function runScan(
   }
 }
 
+export async function clusterScanEvents(
+  ctx: AppContext,
+  scan: typeof scans.$inferSelect,
+  usedIds: string[],
+  deps: { fetchImpl?: typeof fetch } = {},
+) {
+  const agentContext = await loadAgentScanContext(ctx, scan.agentId);
+  const module = agentContext.module;
+  const evidenceRows =
+    usedIds.length > 0
+      ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, usedIds))
+      : [];
+  const holdings = await ctx.db.select().from(portfolioHoldings).limit(50);
+  const holdingIds = new Set(holdings.map((item) => item.canonicalId));
+  const trustMaps = await loadTrustMaps(ctx);
+  const claimLinks =
+    usedIds.length > 0
+      ? await ctx.db
+          .select({
+            evidenceId: claimEvidence.evidenceId,
+            stance: claimEvidence.stance,
+            excerpt: claimEvidence.excerpt,
+            fingerprint: claims.fingerprint,
+            claimId: claims.id,
+            title: claims.title,
+            kind: claims.kind,
+            polarity: claims.polarity,
+            modality: claims.modality,
+            objectText: claims.objectText,
+            value: claims.value,
+            unit: claims.unit,
+            predicate: claims.predicate,
+            subjectCanonicalId: claims.subjectCanonicalId,
+            marketDomainId: claims.marketDomainId,
+          })
+          .from(claimEvidence)
+          .innerJoin(claims, eq(claimEvidence.claimId, claims.id))
+          .where(inArray(claimEvidence.evidenceId, usedIds))
+      : [];
+  const claimsByEvidence = new Map<string, typeof claimLinks>();
+  for (const link of claimLinks) {
+    const current = claimsByEvidence.get(link.evidenceId) ?? [];
+    current.push(link);
+    claimsByEvidence.set(link.evidenceId, current);
+  }
+
+  const prepared = evidenceRows.map((row) => {
+    const outboundUrls = payloadUrls(row.adapterPayload);
+    const normalized = normalizeEvidence({
+      sourceFamily: row.sourceFamily ?? "collected",
+      adapterId: row.adapterId ?? "pipeline",
+      url: row.canonicalUrl ?? undefined,
+      title: row.title ?? undefined,
+      bodyText: row.bodyText ?? undefined,
+      fetchedAt: row.fetchedAt,
+      publishedAt: row.publishedAt ?? undefined,
+      adapterPayload: row.adapterPayload ?? undefined,
+      contentCompleteness:
+        (row.contentCompleteness as
+          | "snippet"
+          | "full_document"
+          | "native_complete"
+          | "incomplete"
+          | "unsupported") ?? undefined,
+      originKey: row.originKey ?? undefined,
+      referencedOriginKey: row.referencedOriginKey ?? undefined,
+      outboundUrls,
+    });
+    const linked = claimsByEvidence.get(row.id) ?? [];
+    return {
+      id: row.id,
+      row,
+      normalized,
+      hostname: sourceHostname(row.canonicalUrl),
+      publishedAt: row.publishedAt ?? undefined,
+      sourceFamily: row.sourceFamily ?? undefined,
+      originKey: row.originKey ?? normalized.originKey,
+      referencedOriginKey: row.referencedOriginKey ?? undefined,
+      outboundUrls,
+      claimFingerprints: linked.map((item) => item.fingerprint),
+      claimGroupKeys: linked.map((item) =>
+        claimGroupKey({
+          kind: item.kind,
+          subjectCanonicalId: item.subjectCanonicalId ?? undefined,
+        }),
+      ),
+      marketDomainId: module.id,
+      assetCanonicalIds: module.extractAssets([normalized]).map((item) => item.canonicalId),
+      text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
+    };
+  });
+
+  for (let index = 0; index < prepared.length; index += 1) {
+    const current = prepared[index];
+    if (!current) {
+      continue;
+    }
+    for (let priorIndex = 0; priorIndex < index; priorIndex += 1) {
+      const prior = prepared[priorIndex];
+      if (!prior) {
+        continue;
+      }
+      if (
+        current.normalized.contentHash !== prior.normalized.contentHash &&
+        isNearDuplicate(current.text, prior.text)
+      ) {
+        await ctx.db
+          .insert(evidenceRelations)
+          .values({
+            fromId: current.id,
+            toId: prior.id,
+            kind: "near_duplicate_of",
+          })
+          .onConflictDoNothing();
+        break;
+      }
+    }
+  }
+
+  const clustered =
+    prepared.length > 0
+      ? clusterEvidence(prepared, MAX_EVENTS_PER_SCAN)
+      : { clusters: [] as (typeof prepared)[], remainder: [] as typeof prepared };
+  const clusters = absorbMarketDataClusters(clustered.clusters);
+  const windowDay = utcDayStamp(scan.windowStart);
+
+  if (clustered.remainder && clustered.remainder.length > 0) {
+    const overflowFingerprint = eventClusterFingerprint({
+      marketDomainId: module.id,
+      claimFingerprints: clustered.remainder.flatMap((item) => item.claimFingerprints),
+      contentHashes: clustered.remainder.map((item) => item.row.contentHash),
+      assetCanonicalIds: clustered.remainder.flatMap((item) => item.assetCanonicalIds),
+      windowDay,
+    });
+    const [existingOverflow] = overflowFingerprint
+      ? await ctx.db
+          .select()
+          .from(events)
+          .where(eq(events.clusterFingerprint, overflowFingerprint))
+          .limit(1)
+      : [];
+    const overflow =
+      existingOverflow ??
+      (
+        await ctx.db
+          .insert(events)
+          .values({
+            agentId: scan.agentId,
+            scanId: scan.id,
+            title: "Deferred evidence (cluster overflow)",
+            status: "deferred",
+            windowStart: scan.windowStart,
+            independentCount: 0,
+            derivedCount: 0,
+            marketDomainId: module.id,
+            reliabilityStatus: "mention",
+            clusterFingerprint: overflowFingerprint,
+          })
+          .returning()
+      )[0];
+    if (overflow) {
+      for (const item of clustered.remainder) {
+        await ctx.db
+          .insert(eventEvidence)
+          .values({ eventId: overflow.id, evidenceId: item.id, role: "supporting" })
+          .onConflictDoNothing();
+      }
+    }
+    if (ctx.clusterQueue) {
+      await ctx.clusterQueue.add(
+        "cluster",
+        {
+          scanId: scan.id,
+          marketDomainId: module.id,
+          idempotencyKey: `cluster:${scan.id}:overflow`,
+        },
+        {
+          jobId: `cluster:${scan.id}:overflow`,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5_000 },
+        },
+      );
+    }
+  }
+
+  if (clusters.length === 0 && clustered.remainder.length === 0) {
+    await ctx.db.insert(events).values({
+      agentId: scan.agentId,
+      scanId: scan.id,
+      title: "No evidence in this scan window",
+      status: "empty",
+      windowStart: scan.windowStart,
+      independentCount: 0,
+      derivedCount: 0,
+    });
+  }
+
+  const earlyWarningsEnabled = await instanceEarlyWarningsEnabled(ctx);
+  const shadowAssessments = await instanceShadowAssessments(ctx);
+
+  for (const cluster of clusters) {
+    const clusterRows = cluster.map((item) => item.row);
+    const clusterNorm = cluster.map((item) => item.normalized);
+    const extracted = module.extractAssets(clusterNorm);
+    const sourced = takeBounded(
+      [
+        ...cluster.flatMap((item) =>
+          observationsFromMarketPayload(
+            item.row.adapterPayload,
+            item.row.adapterId ?? item.id,
+            item.publishedAt ?? item.row.fetchedAt,
+          ),
+        ),
+        ...module.extractObservations(clusterNorm),
+      ],
+      MAX_OBSERVATIONS_PER_EVENT,
+    );
+    const roles = cluster.map((item, index) => {
+      if (item.sourceFamily === "market_data") {
+        return "supporting" as const;
+      }
+      const currentOrigin = lineageOriginKey({
+        originKey: item.originKey,
+        referencedOriginKey: item.referencedOriginKey,
+        outboundUrls: item.outboundUrls,
+        attributedOrigin: payloadText(item.row.adapterPayload, "attributedOrigin"),
+        hostname: item.hostname,
+      });
+      const sameOrigin = cluster.some((other, otherIndex) => {
+        if (otherIndex >= index) {
+          return false;
+        }
+        return (
+          currentOrigin ===
+          lineageOriginKey({
+            originKey: other.originKey,
+            referencedOriginKey: other.referencedOriginKey,
+            outboundUrls: other.outboundUrls,
+            attributedOrigin: payloadText(other.row.adapterPayload, "attributedOrigin"),
+            hostname: other.hostname,
+          })
+        );
+      });
+      return classifyReprint({
+        sameCanonicalUrl: clusterRows.some(
+          (other, otherIndex) =>
+            otherIndex < index &&
+            other.canonicalUrl &&
+            other.canonicalUrl === item.row.canonicalUrl,
+        ),
+        sameContentHash: clusterRows.some(
+          (other, otherIndex) => otherIndex < index && other.contentHash === item.row.contentHash,
+        ),
+        nearDuplicate: cluster.some(
+          (other, otherIndex) => otherIndex < index && isNearDuplicate(item.text, other.text),
+        ),
+        sameOrigin,
+        sharedOutbound: cluster.some(
+          (other, otherIndex) =>
+            otherIndex < index && overlappingOutbound(item.outboundUrls, other.outboundUrls),
+        ),
+        snippetOnly: false,
+        opposingClaims: cluster.some(
+          (other, otherIndex) => otherIndex < index && textOpposes(item.text, other.text),
+        ),
+      });
+    });
+    const counts = independenceCounts(roles);
+    const watchlistIds = new Set(agentContext.watchlist.map((item) => item.canonicalId));
+    const watchlistOverlap = extracted.some((item) => watchlistIds.has(item.canonicalId));
+    const overlap = extracted.filter((item) => holdingIds.has(item.canonicalId));
+    const hostCount = uniqueIndependentHosts(
+      cluster.flatMap((item, index) =>
+        item.sourceFamily === "market_data"
+          ? []
+          : [{ hostname: item.hostname, role: roles[index] ?? "primary" }],
+      ),
+    );
+    const fingerprint = eventClusterFingerprint({
+      marketDomainId: module.id,
+      claimFingerprints: cluster.flatMap((item) => item.claimFingerprints),
+      contentHashes: cluster.map((item) => item.row.contentHash),
+      assetCanonicalIds: cluster.flatMap((item) => item.assetCanonicalIds),
+      windowDay,
+    });
+    const context = module.assembleContext({
+      evidence: clusterNorm,
+      assets: extracted,
+      observations: sourced,
+      watchlist: agentContext.watchlist,
+    });
+    const clusterClaims = cluster.flatMap((item) => claimsByEvidence.get(item.id) ?? []);
+    const retractingCount = clusterClaims.filter((item) => item.stance === "retracts").length;
+    const contradictingFromClaims = clusterClaims.filter(
+      (item) => item.stance === "contradicts",
+    ).length;
+    const facts = buildEventFacts({
+      evidence: cluster.map((item, index) => ({
+        hostname: item.hostname,
+        sourceFamily: item.sourceFamily ?? item.row.sourceFamily ?? undefined,
+        text: item.text,
+        publishedAt: item.publishedAt,
+        role: roles[index] ?? "primary",
+        adapterPayload: item.row.adapterPayload,
+        originKey: item.originKey,
+        referencedOriginKey: item.referencedOriginKey,
+        outboundUrls: item.outboundUrls,
+        attributedOrigin: payloadText(item.row.adapterPayload, "attributedOrigin"),
+        contentCompleteness: item.row.contentCompleteness as
+          | "snippet"
+          | "full_document"
+          | "native_complete"
+          | "incomplete"
+          | "unsupported",
+        hasValidatedClaim: (claimsByEvidence.get(item.id) ?? []).length > 0,
+        trustTier: trustMaps.forEvidence(item.row.sourceIdentityId, item.hostname),
+        headlineMismatch: headlineBodyMismatch(item.row.title ?? undefined, item.text),
+        retracting: (claimsByEvidence.get(item.id) ?? []).some(
+          (link) => link.stance === "retracts",
+        ),
+      })),
+      assets: extracted,
+      observations: sourced,
+      watchlistOverlap,
+      portfolioOverlap: overlap.length > 0,
+    });
+    const newest = cluster
+      .map((item) => item.publishedAt ?? item.row.fetchedAt)
+      .reduce((latest, value) => (value > latest ? value : latest), new Date(0));
+    const stale = Date.now() - newest.getTime() > STALE_MS;
+    const reliability = assessReliability({
+      contentCompleteness: facts.contentCompleteness,
+      independentOriginCount: facts.independentOriginCount,
+      supportingCount: facts.primaryCount,
+      contradictingCount: Math.max(facts.contradictingCount, contradictingFromClaims),
+      retractingCount,
+      hasTrustedFirsthand: facts.hasTrustedFirsthand,
+      hasValidatedClaim: facts.hasValidatedClaim,
+      headlineMismatch: facts.headlineMismatch,
+    });
+    const uniqueClaims = new Map<string, (typeof clusterClaims)[number]>();
+    for (const link of clusterClaims) {
+      uniqueClaims.set(link.claimId, link);
+    }
+    const impact = module.assessImpact({
+      claims: [...uniqueClaims.values()].map((item) => ({
+        marketDomainId: (item.marketDomainId as typeof module.id) ?? module.id,
+        kind: item.kind,
+        subjectCanonicalId: item.subjectCanonicalId ?? undefined,
+        predicate: item.predicate,
+        objectText: item.objectText ?? undefined,
+        value: item.value,
+        unit: item.unit ?? undefined,
+        polarity: item.polarity as "asserted" | "negated",
+        modality: item.modality as "asserted" | "alleged" | "forecast" | "denied",
+        fingerprint: item.fingerprint,
+        title: item.title,
+      })),
+      assets: extracted,
+      observations: sourced,
+      watchlistOverlap,
+      portfolioOverlap: overlap.length > 0,
+      hasTrustedFirsthand: facts.hasTrustedFirsthand,
+      stale,
+      contradicted: facts.contradictingCount > 0 || contradictingFromClaims > 0,
+      retracted: reliability.status === "retracted",
+    });
+    const material = isMaterialEvent({
+      independentHostCount: hostCount,
+      independentFamilyCount: new Set(clusterRows.map((row) => row.sourceFamily ?? row.sourceId))
+        .size,
+      independentOriginCount: facts.independentOriginCount,
+      evidenceCount: clusterRows.length,
+      derivedCount: counts.derivedReprintCount,
+      watchlistOverlap,
+      portfolioOverlap: overlap.length > 0,
+      sourcedObservationCount: sourced.length,
+      hasAuthoritativePrimary: facts.hasTrustedFirsthand,
+      hasTrustedFirsthand: facts.hasTrustedFirsthand,
+      contentCompleteness: facts.contentCompleteness,
+      hasValidatedClaim: facts.hasValidatedClaim,
+    });
+    const discovery = discoverCandidate({
+      facts,
+      objectives: agentContext.agent?.objectives ?? [],
+      text: cluster.map((item) => item.text).join("\n"),
+      material,
+    });
+    const status = nextEventStatus({
+      evidenceCount: clusterRows.length,
+      discovery,
+      material,
+    });
+    const notes = [
+      ...context.notes,
+      ...formatAnalysisFacts(facts),
+      ...formatDiscoveryNotes(discovery),
+      overlap.length > 0
+        ? `Portfolio holdings overlap: ${overlap.map((item) => item.canonicalId).join(", ")}`
+        : "Portfolio holdings overlap: none",
+    ];
+    const principal = clusterClaims[0];
+    const title = clusterEventTitle({
+      assets: extracted,
+      evidenceTitles: clusterRows.map((item) => item.title),
+      hostnames: cluster.map((item) => item.hostname ?? "unknown-host"),
+      principalClaimTitle: principal?.title,
+      reliabilityStatus: reliability.status,
+    });
+    const existingEvents = fingerprint
+      ? await ctx.db
+          .select()
+          .from(events)
+          .where(eq(events.clusterFingerprint, fingerprint))
+          .limit(1)
+      : [];
+    let event = existingEvents[0];
+    const previousReliability = event?.reliabilityStatus as
+      | "mention"
+      | "single_source"
+      | "corroborated"
+      | "primary_confirmed"
+      | "disputed"
+      | "retracted"
+      | "legacy_unassessed"
+      | undefined;
+    if (event) {
+      await ctx.db
+        .update(events)
+        .set({
+          scanId: scan.id,
+          title,
+          status,
+          independentCount: facts.independentOriginCount,
+          derivedCount: counts.derivedReprintCount,
+          materialityReason: material.reason,
+          epistemicStatus: discovery.epistemicStatus,
+          candidateKind: discovery.kind,
+          discoveryReason: discovery.reason,
+          marketDomainId: module.id,
+          reliabilityStatus: reliability.status,
+          impactLevel: impact.level,
+          contentCompleteness: facts.contentCompleteness,
+          principalClaimId: principal?.claimId,
+        })
+        .where(eq(events.id, event.id));
+      event = { ...event, status, scanId: scan.id, title };
+    } else {
+      const inserted = await ctx.db
+        .insert(events)
+        .values({
+          agentId: scan.agentId,
+          scanId: scan.id,
+          title,
+          status,
+          windowStart: scan.windowStart,
+          independentCount: facts.independentOriginCount,
+          derivedCount: counts.derivedReprintCount,
+          clusterFingerprint: fingerprint,
+          materialityReason: material.reason,
+          epistemicStatus: discovery.epistemicStatus,
+          candidateKind: discovery.kind,
+          discoveryReason: discovery.reason,
+          marketDomainId: module.id,
+          reliabilityStatus: reliability.status,
+          impactLevel: impact.level,
+          contentCompleteness: facts.contentCompleteness,
+          principalClaimId: principal?.claimId,
+        })
+        .returning();
+      event = inserted[0];
+    }
+    if (!event) {
+      continue;
+    }
+    for (let index = 0; index < clusterRows.length; index += 1) {
+      const evidence = clusterRows[index];
+      const role = roles[index] ?? "primary";
+      if (evidence) {
+        await ctx.db
+          .insert(eventEvidence)
+          .values({ eventId: event.id, evidenceId: evidence.id, role })
+          .onConflictDoNothing();
+      }
+    }
+    for (const asset of takeBounded(extracted, 50)) {
+      await ctx.db
+        .insert(assets)
+        .values({
+          assetClass: asset.assetClass,
+          canonicalId: asset.canonicalId,
+          symbol: asset.symbol,
+          name: asset.displayName,
+        })
+        .onConflictDoNothing();
+      const [persisted] = await ctx.db
+        .select()
+        .from(assets)
+        .where(eq(assets.canonicalId, asset.canonicalId))
+        .limit(1);
+      if (persisted) {
+        await ctx.db
+          .insert(eventAssets)
+          .values({ eventId: event.id, assetId: persisted.id })
+          .onConflictDoNothing();
+      }
+    }
+    for (const observation of sourced) {
+      await ctx.db.insert(observations).values({
+        eventId: event.id,
+        kind: observation.kind,
+        assetCanonicalId: observation.assetCanonicalId,
+        value: observation.value,
+        unit: observation.unit,
+        observedAt: observation.observedAt,
+        sourceId: observation.sourceId,
+      });
+    }
+    const stanceByClaim = new Map<string, string[]>();
+    for (const link of clusterClaims) {
+      const current = stanceByClaim.get(link.claimId) ?? [];
+      current.push(link.stance);
+      stanceByClaim.set(link.claimId, current);
+    }
+    for (const [claimId, stances] of stanceByClaim) {
+      await ctx.db
+        .insert(eventClaims)
+        .values({ eventId: event.id, claimId, stance: strongestStance(stances) })
+        .onConflictDoUpdate({
+          target: [eventClaims.eventId, eventClaims.claimId],
+          set: { stance: strongestStance(stances) },
+        });
+    }
+    const [latestAssessment] = await ctx.db
+      .select()
+      .from(eventAssessments)
+      .where(eq(eventAssessments.eventId, event.id))
+      .orderBy(desc(eventAssessments.revision))
+      .limit(1);
+    const changed =
+      !latestAssessment ||
+      latestAssessment.reliabilityStatus !== reliability.status ||
+      latestAssessment.impactLevel !== impact.level ||
+      latestAssessment.contentCompleteness !== facts.contentCompleteness ||
+      latestAssessment.independentOriginCount !== facts.independentOriginCount;
+    if (changed) {
+      const [assessment] = await ctx.db
+        .insert(eventAssessments)
+        .values({
+          eventId: event.id,
+          revision: (latestAssessment?.revision ?? 0) + 1,
+          reliabilityStatus: reliability.status,
+          impactLevel: impact.level,
+          contentCompleteness: facts.contentCompleteness,
+          independentOriginCount: facts.independentOriginCount,
+          independentActorCount: facts.independentActorCount,
+          disputed: reliability.status === "disputed",
+          retracted: reliability.status === "retracted",
+          policyVersion: module.id,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (assessment) {
+        ctx.metrics.assessments.inc({ reliability: reliability.status });
+        for (const code of takeBounded(impact.reasonCodes, 8)) {
+          await ctx.db
+            .insert(eventAssessmentReasons)
+            .values({ assessmentId: assessment.id, code, detail: impact.reason })
+            .onConflictDoNothing();
+        }
+      }
+    }
+
+    const analysisAllowed = cluster.some((item) =>
+      trustMaps.allows(item.row.sourceIdentityId, item.hostname, "analysis"),
+    );
+    if (material.material && analysisAllowed) {
+      const claimIds = [...new Set(clusterClaims.map((item) => item.claimId))];
+      if (ctx.analyzeQueue) {
+        await ctx.analyzeQueue.add(
+          "analyze",
+          {
+            eventId: event.id,
+            scanId: scan.id,
+            marketDomainId: module.id,
+            idempotencyKey: `analyze:${event.id}`,
+          },
+          {
+            jobId: `analyze:${event.id}`,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5_000 },
+          },
+        );
+      } else {
+        await maybeAnalyze(
+          ctx,
+          event.id,
+          scan.agentId,
+          takeBounded(clusterRows, ctx.config.RIDDLR_ANALYSIS_EVIDENCE_LIMIT),
+          notes,
+          agentContext,
+          deps.fetchImpl,
+          {
+            facts,
+            material,
+            title: event.title,
+            reliability: reliability.status,
+            impact: impact.level,
+            claimIds,
+            earlyWarningsEnabled,
+            previousReliability,
+            shadowAssessments,
+            marketDomainId: module.id,
+            earlyWarningAllowed: cluster.some((item) =>
+              trustMaps.allows(item.row.sourceIdentityId, item.hostname, "early_warning"),
+            ),
+          },
+        );
+      }
+    }
+  }
+}
+
 async function loadAgentScanContext(ctx: AppContext, agentId: string) {
   const [agent] = await ctx.db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
   const skillRows = await ctx.db
@@ -645,7 +1133,18 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
         .where(eq(watchlistItems.watchlistId, watchlist.id))
         .limit(MAX_WATCHLIST_ITEMS)
     : [];
-  const module = ctx.domains.require("crypto");
+  const domainRows = await ctx.db
+    .select()
+    .from(agentMarketDomains)
+    .where(eq(agentMarketDomains.agentId, agentId))
+    .limit(4);
+  const domainId = (domainRows[0]?.marketDomainId ?? "crypto") as
+    | "crypto"
+    | "equities"
+    | "forex"
+    | "commodities"
+    | "macro";
+  const module = ctx.domains.require(domainId);
   const resolved = items
     .map((item) =>
       module.canonicalizeAsset({
@@ -660,6 +1159,8 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
     agent,
     skillPolicies: skillRows.map((row) => ({ slug: row.slug, markdown: row.markdownBody })),
     watchlist: resolved,
+    module,
+    marketDomainId: module.id,
   };
 }
 
@@ -807,6 +1308,28 @@ async function maybeAnalyze(
     facts: ReturnType<typeof buildEventFacts>;
     material: ReturnType<typeof isMaterialEvent>;
     title: string;
+    reliability?:
+      | "mention"
+      | "single_source"
+      | "corroborated"
+      | "primary_confirmed"
+      | "disputed"
+      | "retracted"
+      | "legacy_unassessed";
+    impact?: "informational" | "low" | "moderate" | "high" | "critical";
+    claimIds?: string[];
+    earlyWarningsEnabled?: boolean;
+    previousReliability?:
+      | "mention"
+      | "single_source"
+      | "corroborated"
+      | "primary_confirmed"
+      | "disputed"
+      | "retracted"
+      | "legacy_unassessed";
+    shadowAssessments?: boolean;
+    marketDomainId?: string;
+    earlyWarningAllowed?: boolean;
   },
 ) {
   const budget = resolveDailyTokenBudget(
@@ -871,7 +1394,7 @@ async function maybeAnalyze(
     .map((item) => skippedSkillNotice(item))
     .filter((item): item is string => Boolean(item));
   const prompt = buildAnalysisPrompt({
-    eventSummary: hint?.title ?? "Crypto cluster",
+    eventSummary: hint?.title ?? "Evidence cluster",
     evidence: evidenceRows.map((row) => ({
       id: row.id,
       title: row.title ?? undefined,
@@ -884,6 +1407,7 @@ async function maybeAnalyze(
       ...notes.filter((note) => !factNotes.includes(note)),
     ],
     skillPolicies: selectedPolicies,
+    claimIds: hint?.claimIds,
   });
   const promptHash = createHash("sha256").update(prompt.system).digest("hex");
   const skillHash = createHash("sha256")
@@ -949,16 +1473,54 @@ async function maybeAnalyze(
         rawOutput: completion.parsed as Record<string, unknown>,
       });
     }
-    const signal = validateSignalOutput(parsed, allowed);
+    const claimEvidenceLinks = new Map<string, Set<string>>();
+    if ((hint?.claimIds ?? []).length > 0 && evidenceRows.length > 0) {
+      const links = await ctx.db
+        .select({
+          claimId: claimEvidence.claimId,
+          evidenceId: claimEvidence.evidenceId,
+        })
+        .from(claimEvidence)
+        .where(
+          inArray(
+            claimEvidence.evidenceId,
+            evidenceRows.map((row) => row.id),
+          ),
+        );
+      for (const link of links) {
+        const current = claimEvidenceLinks.get(link.claimId) ?? new Set<string>();
+        current.add(link.evidenceId);
+        claimEvidenceLinks.set(link.claimId, current);
+      }
+    }
+    const signal = validateSignalOutput(
+      parsed,
+      allowed,
+      new Set(hint?.claimIds ?? []),
+      hint?.reliability,
+      claimEvidenceLinks,
+    );
     const material = hint?.material ?? {
       material: true,
-      reason: "independent_hosts",
+      reason: "independent_origins",
     };
     const gate = decideSignalGate({
       facts: hint?.facts ?? fallbackFacts(evidenceRows, notes),
       risk: signal.risk,
       confidence: signal.confidence,
       material,
+      reliability: hint?.reliability,
+      impact: hint?.impact,
+      earlyWarningsEnabled: hint?.earlyWarningsEnabled,
+      previousReliability: hint?.previousReliability,
+      shadowAssessments: hint?.shadowAssessments ?? (await instanceShadowAssessments(ctx)),
+    });
+    const notifyEligible =
+      gate.notifyKind === "early_warning" && hint?.earlyWarningAllowed === false
+        ? false
+        : gate.notifyEligible;
+    ctx.metrics.notifications.inc({
+      kind: notifyEligible ? gate.notifyKind : gate.persist ? "held" : "skipped",
     });
     const skillTrace = {
       selected: selection.selected,
@@ -971,7 +1533,7 @@ async function maybeAnalyze(
       estimatedPromptTokens: estimatePromptTokens(prompt.system.length + prompt.user.length),
       signalGate: {
         disposition: gate.disposition,
-        notifyEligible: gate.notifyEligible,
+        notifyEligible,
         reason: gate.reason,
       },
     };
@@ -1015,32 +1577,53 @@ async function maybeAnalyze(
           agentId,
           headline: signal.headline,
           whyItMatters: signal.whyItMatters,
-          proof: signal.proof,
+          proof: {
+            evidenceIds: signal.proof.evidenceIds,
+            claimIds: takeBounded(signal.proof.claimIds ?? [], 32),
+            summary: signal.proof.summary,
+          },
           action: signal.action,
           risk: signal.risk,
-          confidence: String(signal.confidence),
+          confidence: String(gate.cappedConfidence),
           marketContext: signal.marketContext,
           contradictoryEvidence: signal.contradictoryEvidence,
           invalidationConditions: signal.invalidationConditions,
           schemaVersion: "1",
-          notifyEligible: gate.notifyEligible,
+          notifyEligible,
           epistemicStatus: "signal",
+          outputKind: gate.outputKind,
+          notifyKind: gate.notifyKind,
         })
         .onConflictDoNothing()
         .returning();
       saved = inserted[0];
-      await ctx.db
-        .update(events)
-        .set({ status: "analyzed", epistemicStatus: "signal" })
-        .where(eq(events.id, eventId));
+      if (saved) {
+        for (const claimId of signal.proof.claimIds ?? []) {
+          const linked = claimEvidenceLinks.get(claimId);
+          for (const evidenceId of signal.proof.evidenceIds) {
+            if (!linked?.has(evidenceId)) {
+              continue;
+            }
+            await ctx.db
+              .insert(signalClaimProofs)
+              .values({ signalId: saved.id, claimId, evidenceId })
+              .onConflictDoNothing();
+          }
+        }
+      }
+      await ctx.db.update(events).set({ status: "analyzed" }).where(eq(events.id, eventId));
     } else {
       await ctx.db.update(events).set({ status: "analyzed" }).where(eq(events.id, eventId));
     }
-    if (saved && gate.notifyEligible) {
+    if (saved && notifyEligible) {
       if (ctx.notifyQueue) {
         await ctx.notifyQueue.add(
           "notify",
-          { signalId: saved.id, idempotencyKey: `notify:${saved.id}` },
+          {
+            signalId: saved.id,
+            marketDomainId: hint?.marketDomainId ?? agentContext.marketDomainId,
+            idempotencyKey: `notify:${saved.id}`,
+          },
           {
             jobId: `notify:${saved.id}`,
             attempts: 5,
@@ -1082,6 +1665,10 @@ export async function analyzeQueuedEvent(
       adapterPayload: evidenceItems.adapterPayload,
       publishedAt: evidenceItems.publishedAt,
       fetchedAt: evidenceItems.fetchedAt,
+      originKey: evidenceItems.originKey,
+      referencedOriginKey: evidenceItems.referencedOriginKey,
+      contentCompleteness: evidenceItems.contentCompleteness,
+      sourceIdentityId: evidenceItems.sourceIdentityId,
       role: eventEvidence.role,
     })
     .from(eventEvidence)
@@ -1103,8 +1690,14 @@ export async function analyzeQueuedEvent(
     assetIds.length > 0
       ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(50)
       : [];
+  const claimRows = await ctx.db
+    .select({ claimId: eventClaims.claimId })
+    .from(eventClaims)
+    .where(eq(eventClaims.eventId, eventId))
+    .limit(32);
   const agentContext = await loadAgentScanContext(ctx, event.agentId);
   const watchlistIds = new Set(agentContext.watchlist.map((item) => item.canonicalId));
+  const trustMaps = await loadTrustMaps(ctx);
   const facts = buildEventFacts({
     evidence: linked.map((row) => ({
       hostname: sourceHostname(row.canonicalUrl),
@@ -1115,6 +1708,18 @@ export async function analyzeQueuedEvent(
         ? row.role
         : "primary") as "primary" | "supporting" | "derived" | "contradicting",
       adapterPayload: row.adapterPayload,
+      originKey: row.originKey ?? undefined,
+      referencedOriginKey: row.referencedOriginKey ?? undefined,
+      outboundUrls: payloadUrls(row.adapterPayload),
+      contentCompleteness:
+        (row.contentCompleteness as
+          | "snippet"
+          | "full_document"
+          | "native_complete"
+          | "incomplete"
+          | "unsupported") ?? undefined,
+      hasValidatedClaim: claimRows.length > 0,
+      trustTier: trustMaps.forEvidence(row.sourceIdentityId, sourceHostname(row.canonicalUrl)),
     })),
     assets: eventAssetRows.map((item) => ({
       assetClass: item.assetClass,
@@ -1139,12 +1744,16 @@ export async function analyzeQueuedEvent(
   const material = isMaterialEvent({
     independentHostCount: facts.independentHostCount,
     independentFamilyCount: facts.independentFamilyCount,
+    independentOriginCount: facts.independentOriginCount,
     evidenceCount: facts.evidenceCount,
     derivedCount: facts.derivedCount,
     watchlistOverlap: facts.watchlistOverlap,
     portfolioOverlap: facts.portfolioOverlap,
     sourcedObservationCount: observationRows.length,
-    hasAuthoritativePrimary: facts.hasAuthoritativePrimary,
+    hasAuthoritativePrimary: facts.hasTrustedFirsthand,
+    hasTrustedFirsthand: facts.hasTrustedFirsthand,
+    contentCompleteness: facts.contentCompleteness,
+    hasValidatedClaim: facts.hasValidatedClaim,
   });
   const discovery = discoverCandidate({
     facts,
@@ -1164,6 +1773,42 @@ export async function analyzeQueuedEvent(
     ].filter(Boolean),
     agentContext,
     fetchImpl,
-    { facts, material, title: event.title },
+    {
+      facts,
+      material,
+      title: event.title,
+      reliability: event.reliabilityStatus as
+        | "mention"
+        | "single_source"
+        | "corroborated"
+        | "primary_confirmed"
+        | "disputed"
+        | "retracted"
+        | "legacy_unassessed"
+        | undefined,
+      impact: event.impactLevel as
+        | "informational"
+        | "low"
+        | "moderate"
+        | "high"
+        | "critical"
+        | undefined,
+      claimIds: claimRows.map((item) => item.claimId),
+      earlyWarningsEnabled: await instanceEarlyWarningsEnabled(ctx),
+      previousReliability: event.reliabilityStatus as
+        | "mention"
+        | "single_source"
+        | "corroborated"
+        | "primary_confirmed"
+        | "disputed"
+        | "retracted"
+        | "legacy_unassessed"
+        | undefined,
+      shadowAssessments: await instanceShadowAssessments(ctx),
+      marketDomainId: event.marketDomainId ?? agentContext.marketDomainId,
+      earlyWarningAllowed: linked.some((row) =>
+        trustMaps.allows(row.sourceIdentityId, sourceHostname(row.canonicalUrl), "early_warning"),
+      ),
+    },
   );
 }

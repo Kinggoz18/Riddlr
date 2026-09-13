@@ -1,11 +1,17 @@
 import {
+  claimTitle,
+  classifyPageHeuristic,
   DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
   type DomainModule,
   type ExtractedAsset,
+  fingerprintClaim,
+  claimsCompatible as genericClaimsCompatible,
   type MarketObservation,
   type NormalizedEvidence,
   takeBounded,
+  watchlistSearchQuery,
+  weakClaimObject,
 } from "@riddlr/domain";
 
 const KNOWN: Record<string, ExtractedAsset> = {
@@ -101,6 +107,69 @@ const LEGACY_CRYPTO_OBJECTIVES = [
   "cross_source_corroboration",
 ];
 
+export const CRYPTO_CLAIM_KINDS = [
+  "crypto:security_incident",
+  "crypto:insolvency",
+  "crypto:stablecoin_peg_change",
+  "crypto:regulatory_action",
+  "crypto:service_outage",
+  "crypto:market_move",
+  "crypto:general_report",
+] as const;
+
+export const CRYPTO_IMPACT_POLICY_VERSION = "crypto-impact-1";
+
+const CLAIM_PATTERNS: Array<{
+  kind: (typeof CRYPTO_CLAIM_KINDS)[number];
+  predicate: string;
+  re: RegExp;
+}> = [
+  {
+    kind: "crypto:security_incident",
+    predicate: "security_incident",
+    re: /\b(hack|exploit|breach|compromised)\b/i,
+  },
+  {
+    kind: "crypto:insolvency",
+    predicate: "insolvency",
+    re: /\b(insolvent|insolvency|withdrawal halt|halted withdrawals)\b/i,
+  },
+  {
+    kind: "crypto:stablecoin_peg_change",
+    predicate: "peg_change",
+    re: /\bdepeg(?:ged|ging)?\b|\blost (its )?peg\b/i,
+  },
+  {
+    kind: "crypto:regulatory_action",
+    predicate: "regulatory_action",
+    re: /\b(sec|cftc|doj|ofac|enforcement action)\b/i,
+  },
+  {
+    kind: "crypto:service_outage",
+    predicate: "service_outage",
+    re: /\b(outage|went down|service disruption)\b/i,
+  },
+  {
+    kind: "crypto:market_move",
+    predicate: "market_move",
+    re: /\b(etf inflows?|inflows accelerate|listed products)\b/i,
+  },
+];
+
+function excerptAround(content: string, match: RegExpExecArray | null): string {
+  if (!match) {
+    return content.slice(0, 180).trim();
+  }
+  const start = Math.max(0, match.index - 40);
+  return content.slice(start, start + 180).trim();
+}
+
+function completeEnough(item: NormalizedEvidence): boolean {
+  return (
+    item.contentCompleteness === "full_document" || item.contentCompleteness === "native_complete"
+  );
+}
+
 export function mergeShippedCryptoObjectives(current: string[]): string[] {
   const set = new Set(current);
   if (DEFAULT_CRYPTO_OBJECTIVES.every((id) => set.has(id))) {
@@ -119,6 +188,23 @@ export function mergeShippedCryptoObjectives(current: string[]): string[] {
 export const cryptoDomainModule: DomainModule = {
   id: "crypto",
   assetClasses: [...CRYPTO_ASSET_CLASSES],
+  claimKinds() {
+    return [...CRYPTO_CLAIM_KINDS];
+  },
+  sourceQuery(input) {
+    const watchlist = input.watchlist.map((item) => ({
+      canonicalId: item.canonicalId,
+      symbol: item.symbol,
+      name: item.displayName,
+    }));
+    if (input.adapterId === "searxng") {
+      return watchlistSearchQuery(watchlist, "cryptocurrency bitcoin ethereum stablecoin news");
+    }
+    if (input.adapterId === "x" || input.adapterId === "discord") {
+      return watchlistSearchQuery(watchlist, "crypto");
+    }
+    return watchlist.map((item) => item.canonicalId).join(" ");
+  },
   canonicalizeAsset(input) {
     if (input.canonicalId) {
       const known = Object.values(KNOWN).find((item) => item.canonicalId === input.canonicalId);
@@ -223,6 +309,104 @@ export const cryptoDomainModule: DomainModule = {
     }
     return takeBounded(observations, 20);
   },
+  extractClaims(evidence: NormalizedEvidence[]) {
+    const out: ReturnType<DomainModule["extractClaims"]> = [];
+    for (const item of evidence) {
+      if (!completeEnough(item)) {
+        continue;
+      }
+      const pageClass = classifyPageHeuristic({
+        url: item.canonicalUrl ?? item.url,
+        title: item.title,
+        bodyText: item.bodyText,
+      });
+      if (pageClass === "market_profile" || pageClass === "documentation") {
+        continue;
+      }
+      const content = `${item.title ?? ""}\n${item.bodyText ?? ""}`;
+      if (content.trim().length < 40) {
+        continue;
+      }
+      const assets = this.extractAssets([item]);
+      const subjectCanonicalId = assets[0]?.canonicalId;
+      const timeBucket = (item.publishedAt ?? item.fetchedAt).toISOString().slice(0, 10);
+      const negated =
+        /\b(no|not|without|isn't|is not)\b.{0,24}\b(depeg|hack|exploit|insolvent)\b/i.test(content);
+      for (const pattern of CLAIM_PATTERNS) {
+        const match = pattern.re.exec(content);
+        if (!match) {
+          continue;
+        }
+        if (weakClaimObject(match[0])) {
+          continue;
+        }
+        const polarity = negated ? "negated" : "asserted";
+        const excerpt = excerptAround(content, match);
+        const objectText = match[0];
+        const fingerprint = fingerprintClaim({
+          marketDomainId: "crypto",
+          kind: pattern.kind,
+          subjectCanonicalId,
+          polarity,
+          objectText,
+          timeBucket,
+        });
+        const claim = {
+          marketDomainId: "crypto" as const,
+          kind: pattern.kind,
+          subjectCanonicalId,
+          predicate: pattern.predicate,
+          objectText,
+          polarity: polarity as "asserted" | "negated",
+          modality: "asserted" as const,
+          fingerprint,
+          title: "",
+          excerpt,
+        };
+        out.push({ ...claim, title: claimTitle(claim) });
+      }
+    }
+    return takeBounded(out, 32);
+  },
+  normalizeClaim(candidate, evidence) {
+    if (!(CRYPTO_CLAIM_KINDS as readonly string[]).includes(candidate.kind)) {
+      return undefined;
+    }
+    if (candidate.kind === "crypto:general_report") {
+      return undefined;
+    }
+    if (weakClaimObject(candidate.objectText ?? candidate.excerpt)) {
+      return undefined;
+    }
+    const assets = this.extractAssets([evidence]);
+    const subjectCanonicalId = candidate.subjectCanonicalId ?? assets[0]?.canonicalId;
+    const timeBucket = (evidence.publishedAt ?? evidence.fetchedAt).toISOString().slice(0, 10);
+    const fingerprint = fingerprintClaim({
+      marketDomainId: "crypto",
+      kind: candidate.kind,
+      subjectCanonicalId,
+      polarity: candidate.polarity,
+      objectText: candidate.objectText ?? candidate.predicate,
+      timeBucket,
+    });
+    const claim = {
+      marketDomainId: "crypto" as const,
+      kind: candidate.kind,
+      subjectCanonicalId,
+      predicate: candidate.predicate,
+      objectText: candidate.objectText,
+      value: candidate.value,
+      unit: candidate.unit,
+      polarity: candidate.polarity,
+      modality: candidate.modality,
+      fingerprint,
+      title: "",
+    };
+    return { ...claim, title: claimTitle(claim) };
+  },
+  claimsCompatible(left, right) {
+    return genericClaimsCompatible(left, right);
+  },
   assembleContext({ evidence, assets, observations, watchlist = [] }) {
     const notes = [
       `Independent evidence items: ${evidence.length}`,
@@ -235,6 +419,73 @@ export const cryptoDomainModule: DomainModule = {
       observations,
       notes,
     };
+  },
+  assessImpact(input) {
+    if (input.retracted) {
+      return {
+        level: "informational",
+        reason: "retracted",
+        reasonCodes: ["crypto:retracted"],
+      };
+    }
+    const kinds = new Set(input.claims.map((item) => item.kind));
+    if (kinds.has("crypto:security_incident") || kinds.has("crypto:insolvency")) {
+      return {
+        level: "critical",
+        reason: "active_compromise_or_insolvency",
+        reasonCodes: ["crypto:security_incident", "crypto:insolvency"],
+      };
+    }
+    if (kinds.has("crypto:stablecoin_peg_change") && !input.contradicted) {
+      return {
+        level: "critical",
+        reason: "peg_failure",
+        reasonCodes: ["crypto:peg_failure"],
+      };
+    }
+    if (kinds.has("crypto:regulatory_action")) {
+      return {
+        level: input.watchlistOverlap || input.portfolioOverlap ? "high" : "moderate",
+        reason: "regulatory_action",
+        reasonCodes: ["crypto:regulatory_action"],
+      };
+    }
+    if (kinds.has("crypto:service_outage")) {
+      return {
+        level: "high",
+        reason: "service_outage",
+        reasonCodes: ["crypto:service_outage"],
+      };
+    }
+    if (input.stale) {
+      return {
+        level: "informational",
+        reason: "stale_report",
+        reasonCodes: ["crypto:stale"],
+      };
+    }
+    if (kinds.has("crypto:market_move") && (input.watchlistOverlap || input.portfolioOverlap)) {
+      return {
+        level: "moderate",
+        reason: "watchlist_market_move",
+        reasonCodes: ["crypto:market_move"],
+      };
+    }
+    if (input.hasTrustedFirsthand && kinds.size > 0 && !kinds.has("crypto:general_report")) {
+      return {
+        level: "high",
+        reason: "trusted_firsthand_claim",
+        reasonCodes: ["crypto:firsthand"],
+      };
+    }
+    return {
+      level: "informational",
+      reason: "no_high_impact_claim",
+      reasonCodes: ["crypto:informational"],
+    };
+  },
+  principalClaimTitle(claim) {
+    return claim.title || claimTitle(claim);
   },
   defaultAgentProfile() {
     return {

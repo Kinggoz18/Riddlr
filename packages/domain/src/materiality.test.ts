@@ -53,7 +53,7 @@ describe("materiality", () => {
         sourcedObservationCount: 0,
         hasAuthoritativePrimary: false,
       }).reason,
-    ).toBe("independent_hosts");
+    ).toBe("independent_origins");
     expect(
       isMaterialEvent({
         independentHostCount: 1,
@@ -65,7 +65,7 @@ describe("materiality", () => {
         sourcedObservationCount: 0,
         hasAuthoritativePrimary: true,
       }).reason,
-    ).toBe("authoritative_primary");
+    ).toBe("early_warning_candidate");
     expect(
       isMaterialEvent({
         independentHostCount: 1,
@@ -76,8 +76,24 @@ describe("materiality", () => {
         portfolioOverlap: false,
         sourcedObservationCount: 1,
         hasAuthoritativePrimary: false,
+        contentCompleteness: "full_document",
+        hasValidatedClaim: true,
       }).reason,
     ).toBe("watchlist_observation");
+    expect(
+      isMaterialEvent({
+        independentHostCount: 1,
+        independentFamilyCount: 1,
+        evidenceCount: 1,
+        derivedCount: 0,
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        sourcedObservationCount: 1,
+        hasAuthoritativePrimary: false,
+        contentCompleteness: "full_document",
+        hasValidatedClaim: false,
+      }).material,
+    ).toBe(false);
     expect(isMaterial({ independentSourceCount: 0, evidenceCount: 4 })).toBe(false);
   });
 });

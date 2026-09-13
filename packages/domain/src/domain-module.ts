@@ -1,5 +1,7 @@
+import type { ClaimCandidate, NormalizedClaim } from "./claims.js";
 import type { NormalizedEvidence } from "./evidence.js";
 import type { AssetClass, MarketDomainId } from "./market-domains.js";
+import type { ImpactAssessment } from "./reliability.js";
 
 export type ExtractedAsset = {
   assetClass: AssetClass;
@@ -23,9 +25,23 @@ export type DomainContext = {
   notes: string[];
 };
 
+export type ImpactInput = {
+  claims: NormalizedClaim[];
+  assets: ExtractedAsset[];
+  observations: MarketObservation[];
+  watchlistOverlap: boolean;
+  portfolioOverlap: boolean;
+  hasTrustedFirsthand: boolean;
+  stale: boolean;
+  contradicted: boolean;
+  retracted: boolean;
+};
+
 export type DomainModule = {
   id: MarketDomainId;
   assetClasses: AssetClass[];
+  claimKinds(): string[];
+  sourceQuery(input: { adapterId: string; watchlist: ExtractedAsset[] }): string;
   canonicalizeAsset(input: {
     symbol?: string;
     name?: string;
@@ -34,12 +50,20 @@ export type DomainModule = {
   }): ExtractedAsset | undefined;
   extractAssets(evidence: NormalizedEvidence[]): ExtractedAsset[];
   extractObservations(evidence: NormalizedEvidence[]): MarketObservation[];
+  extractClaims(evidence: NormalizedEvidence[]): Array<NormalizedClaim & { excerpt?: string }>;
+  normalizeClaim(
+    candidate: ClaimCandidate,
+    evidence: NormalizedEvidence,
+  ): NormalizedClaim | undefined;
+  claimsCompatible(left: NormalizedClaim, right: NormalizedClaim): boolean;
   assembleContext(input: {
     evidence: NormalizedEvidence[];
     assets: ExtractedAsset[];
     observations: MarketObservation[];
     watchlist?: ExtractedAsset[];
   }): DomainContext;
+  assessImpact(input: ImpactInput): ImpactAssessment;
+  principalClaimTitle(claim: NormalizedClaim): string;
   defaultAgentProfile(): {
     name: string;
     description: string;

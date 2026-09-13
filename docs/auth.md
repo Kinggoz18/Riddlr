@@ -20,7 +20,9 @@ No social sign-on.
   lifetime (`RIDDLR_SESSION_ABSOLUTE_HOURS`, default 12)
 - Max concurrent sessions (`RIDDLR_MAX_SESSIONS`, default 8)
 - Settings lists sessions (no token hash), revokes one, or revokes others
-- Password reset via Mailpit locally or Resend in production
+- Password reset via Mailpit locally, Resend in Settings or
+  `RIDDLR_RESEND_API_KEY` in production, or a host reset link
+  (`docker compose exec -T api node apps/server/dist/cmd/reset-password.js`)
 - Security mail for new sessions, recovery use, recovery rotate, password
   change, and key rotation (failures do not block the auth path)
 - Rate limits on login, 2FA, and reset

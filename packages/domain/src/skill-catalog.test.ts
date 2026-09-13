@@ -54,12 +54,16 @@ describe("skill routing", () => {
           sourceFamily: "search",
           text: "Tether USDT depeg commentary after redemption pressure",
           role: "primary",
+          hasValidatedClaim: true,
+          contentCompleteness: "full_document",
         },
         {
           hostname: "coindesk.com",
           sourceFamily: "search",
           text: "USDT trades off peg on one venue",
           role: "primary",
+          hasValidatedClaim: true,
+          contentCompleteness: "full_document",
         },
       ],
       assets: [{ assetClass: "stablecoin", canonicalId: "coingecko:tether" }],
@@ -472,11 +476,25 @@ describe("signal gate", () => {
     expect(gate.reason).toBe("interesting_not_material");
   });
 
-  it("notifies corroborated material events according to risk", () => {
+  it("notifies corroborated material events according to impact", () => {
     const event = facts({
       evidence: [
-        { hostname: "a.example", sourceFamily: "search", text: "one", role: "primary" },
-        { hostname: "b.example", sourceFamily: "search", text: "two", role: "primary" },
+        {
+          hostname: "a.example",
+          sourceFamily: "search",
+          text: "one",
+          role: "primary",
+          hasValidatedClaim: true,
+          contentCompleteness: "full_document",
+        },
+        {
+          hostname: "b.example",
+          sourceFamily: "search",
+          text: "two",
+          role: "primary",
+          hasValidatedClaim: true,
+          contentCompleteness: "full_document",
+        },
       ],
       assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
       observations: [],
@@ -488,6 +506,7 @@ describe("signal gate", () => {
       risk: "high",
       confidence: 0.92,
       material: { material: true, reason: "independent_hosts" },
+      impact: "high",
     });
     expect(gate.notifyEligible).toBe(true);
     expect(gate.disposition).toBe("high");
@@ -495,14 +514,29 @@ describe("signal gate", () => {
 
   it("allows high confidence together with high risk", () => {
     const event = facts([
-      { hostname: "a.example", sourceFamily: "search", text: "one", role: "primary" },
-      { hostname: "b.example", sourceFamily: "search", text: "two", role: "primary" },
+      {
+        hostname: "a.example",
+        sourceFamily: "search",
+        text: "one",
+        role: "primary",
+        hasValidatedClaim: true,
+        contentCompleteness: "full_document",
+      },
+      {
+        hostname: "b.example",
+        sourceFamily: "search",
+        text: "two",
+        role: "primary",
+        hasValidatedClaim: true,
+        contentCompleteness: "full_document",
+      },
     ]);
     const gate = decideSignalGate({
       facts: event,
       risk: "high",
       confidence: 0.92,
       material: { material: true, reason: "independent_hosts" },
+      impact: "high",
     });
     expect(gate.disposition).toBe("high");
     expect(gate.notifyEligible).toBe(true);

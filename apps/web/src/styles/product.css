@@ -549,6 +549,14 @@ a.ui-button {
   font-size: 0.75rem;
 }
 
+.config-strip > span.config-chip-ok {
+  border-color: var(--mint);
+}
+
+.config-strip > span.config-chip-off {
+  border-color: var(--danger);
+}
+
 .data-list {
   display: grid;
   gap: 0;
@@ -965,6 +973,16 @@ a.ui-button {
   color: var(--muted-strong);
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.badge.ok {
+  border-color: var(--mint);
+  color: var(--mint);
+}
+
+.badge.danger {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .stat-value {

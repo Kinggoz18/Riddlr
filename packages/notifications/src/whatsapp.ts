@@ -181,8 +181,30 @@ export function formatSignalNotification(input: {
   risk?: string;
   invalidation?: string;
   publicUrl?: string;
+  kind?: "signal" | "early_warning" | "confirmation" | "dispute" | "retraction";
+  sourceLabel?: string;
+  ageLabel?: string;
 }): string {
-  const lines = [`SIGNAL: ${input.headline}`];
+  const prefix =
+    input.kind === "early_warning"
+      ? "UNVERIFIED EARLY WARNING"
+      : input.kind === "confirmation"
+        ? "CONFIRMATION"
+        : input.kind === "dispute"
+          ? "DISPUTE"
+          : input.kind === "retraction"
+            ? "RETRACTION"
+            : "SIGNAL";
+  const lines = [`${prefix}: ${input.headline}`];
+  if (input.kind === "early_warning") {
+    lines.push("This is not confirmed. Independent corroboration is absent.");
+    if (input.sourceLabel) {
+      lines.push(`SOURCE: ${input.sourceLabel}`);
+    }
+    if (input.ageLabel) {
+      lines.push(`AGE: ${input.ageLabel}`);
+    }
+  }
   if (input.whyItMatters) {
     lines.push(`WHY: ${input.whyItMatters}`);
   }

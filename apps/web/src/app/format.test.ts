@@ -53,6 +53,7 @@ describe("agent labels", () => {
     expect(auditActionLabel("setup.unlock")).toBe("Setup code accepted");
     expect(auditActionLabel("agent.create")).toBe("Agent created");
     expect(auditActionLabel("audit.cleared")).toBe("Audit log cleared");
+    expect(auditActionLabel("settings.email")).toBe("Email transport saved");
     expect(auditActionLabel("custom.thing")).toBe("Custom Thing");
     expect(auditResourceLabel("7c9e6679-7425-40de-944b-e07fc1f90ae7")).toBe("7c9e6679");
     expect(auditResourceLabel("2")).toBe("2");

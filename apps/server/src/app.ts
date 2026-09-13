@@ -5,6 +5,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import {
   completeSetupSchema,
+  emailSetupSchema,
   keyRotateSchema,
   llmSetupSchema,
   loginSchema,
@@ -36,10 +37,16 @@ import {
   analyses,
   assets,
   auditLogs,
+  claimEvidence,
+  claims,
   encryptedSecrets,
+  eventAssessmentReasons,
+  eventAssessments,
   eventAssets,
+  eventClaims,
   eventEvidence,
   events,
+  evidenceDocuments,
   evidenceItems,
   evidenceRelations,
   instanceSettings,
@@ -53,7 +60,10 @@ import {
   scanSourceRuns,
   scans,
   sessions,
+  signalClaimProofs,
   signals,
+  sourceIdentities,
+  sourceIdentityPolicies,
   sources,
   users,
   whatsappSessions,
@@ -67,6 +77,7 @@ import {
   MARKET_DOMAIN_REGISTRY,
   ONBOARDING_STEP_COUNT,
   parsePageCursor,
+  sourceHostname,
   takeBounded,
   UnsupportedMarketDomainError,
 } from "@riddlr/domain";
@@ -79,6 +90,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import type { AppContext } from "./context.js";
 import { registerAgentRoutes } from "./modules/agent-api.js";
+import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
 import {
   registerNotificationSettingsRoutes,
@@ -105,6 +117,7 @@ import {
   requireSetupStep,
   saveLlmProvider,
   setSetupStep,
+  toPublicLlm,
 } from "./modules/setup.js";
 import {
   assertSetupAccess,
@@ -534,11 +547,10 @@ export async function buildApp(ctx: AppContext) {
     ctx.metrics.authEvents.inc({ result: "login" });
     if (!totp) {
       await sendSecurityMail({
-        config: ctx.config,
+        ctx,
         to: user.email,
         kind: "new_session",
         text: `A session was opened for ${user.email}. You can revoke it from Settings.`,
-        logger: ctx.logger,
       });
     }
     return { ok: true, requiresTwoFactor: Boolean(totp) };
@@ -577,11 +589,10 @@ export async function buildApp(ctx: AppContext) {
         return reply.code(401).send({ error: { code: "invalid_totp", message: "Invalid code." } });
       }
       await sendSecurityMail({
-        config: ctx.config,
+        ctx,
         to: auth.user.email,
         kind: "recovery_used",
         text: "A recovery code was used to sign in to this Riddlr instance. If this was not you, reset your password.",
-        logger: ctx.logger,
       });
       await ctx.db.insert(auditLogs).values({
         actorUserId: auth.user.id,
@@ -595,11 +606,10 @@ export async function buildApp(ctx: AppContext) {
       keepId: auth.session.id,
     });
     await sendSecurityMail({
-      config: ctx.config,
+      ctx,
       to: auth.user.email,
       kind: "new_session",
       text: `A session was opened for ${auth.user.email}. You can revoke it from Settings.`,
-      logger: ctx.logger,
     });
     await ctx.db.insert(auditLogs).values({
       actorUserId: auth.user.id,
@@ -770,17 +780,22 @@ export async function buildApp(ctx: AppContext) {
       resource: auth.user.id,
     });
     await sendSecurityMail({
-      config: ctx.config,
+      ctx,
       to: auth.user.email,
       kind: "password_changed",
       text: "The password for this Riddlr instance was changed. Other sessions were signed out.",
-      logger: ctx.logger,
     });
     return { ok: true };
   });
 
+  app.get("/api/v1/auth/reset/status", async () => {
+    const transport = await resolveEmailTransport(ctx);
+    return { delivered: transport.transport !== "none" };
+  });
+
   app.post("/api/v1/auth/reset/request", authLimit, async (request) => {
     const body = passwordResetRequestSchema.parse(request.body);
+    const transport = await resolveEmailTransport(ctx);
     const rows = await ctx.db
       .select()
       .from(users)
@@ -797,14 +812,13 @@ export async function buildApp(ctx: AppContext) {
       const resetUrl = new URL("/reset", ctx.config.RIDDLR_PUBLIC_URL);
       resetUrl.searchParams.set("token", token);
       await sendSecurityMail({
-        config: ctx.config,
+        ctx,
         to: user.email,
         kind: "password_reset",
         text: `Use this single-use link within one hour:\n${resetUrl.toString()}`,
-        logger: ctx.logger,
       });
     }
-    return { ok: true };
+    return { ok: true, delivered: transport.transport !== "none" };
   });
 
   app.post("/api/v1/auth/reset/complete", authLimit, async (request, reply) => {
@@ -848,11 +862,10 @@ export async function buildApp(ctx: AppContext) {
       .limit(1);
     if (resetUser) {
       await sendSecurityMail({
-        config: ctx.config,
+        ctx,
         to: resetUser.email,
         kind: "password_changed",
         text: "Your Riddlr password was reset. All sessions were signed out.",
-        logger: ctx.logger,
       });
     }
     return { ok: true };
@@ -997,7 +1010,26 @@ export async function buildApp(ctx: AppContext) {
       .where(eq(analyses.eventId, signal.eventId))
       .orderBy(desc(analyses.createdAt))
       .limit(1);
-    return { signal, evidence, skillTrace: analysis?.skillTrace };
+    const proofLinks = await ctx.db
+      .select({
+        claimId: signalClaimProofs.claimId,
+        evidenceId: signalClaimProofs.evidenceId,
+        excerpt: claimEvidence.excerpt,
+        stance: claimEvidence.stance,
+        title: claims.title,
+      })
+      .from(signalClaimProofs)
+      .innerJoin(claims, eq(signalClaimProofs.claimId, claims.id))
+      .innerJoin(
+        claimEvidence,
+        and(
+          eq(claimEvidence.claimId, signalClaimProofs.claimId),
+          eq(claimEvidence.evidenceId, signalClaimProofs.evidenceId),
+        ),
+      )
+      .where(eq(signalClaimProofs.signalId, id))
+      .limit(32);
+    return { signal, evidence, skillTrace: analysis?.skillTrace, proofLinks };
   });
   app.get("/api/v1/events", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
@@ -1100,6 +1132,107 @@ export async function buildApp(ctx: AppContext) {
       .where(eq(analyses.eventId, id))
       .orderBy(desc(analyses.createdAt))
       .limit(1);
+    const claimRows =
+      evidenceIds.length > 0
+        ? await ctx.db
+            .select({
+              claimId: eventClaims.claimId,
+              stance: eventClaims.stance,
+              title: claims.title,
+              kind: claims.kind,
+              fingerprint: claims.fingerprint,
+              excerpt: claimEvidence.excerpt,
+              excerptStart: claimEvidence.excerptStart,
+              excerptEnd: claimEvidence.excerptEnd,
+              evidenceId: claimEvidence.evidenceId,
+            })
+            .from(eventClaims)
+            .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+            .leftJoin(
+              claimEvidence,
+              and(
+                eq(claimEvidence.claimId, claims.id),
+                inArray(claimEvidence.evidenceId, evidenceIds),
+              ),
+            )
+            .where(eq(eventClaims.eventId, id))
+            .limit(64)
+        : [];
+    const assessmentHistory = await ctx.db
+      .select()
+      .from(eventAssessments)
+      .where(eq(eventAssessments.eventId, id))
+      .orderBy(desc(eventAssessments.revision))
+      .limit(12);
+    const assessment = assessmentHistory[0];
+    const assessmentIds = assessmentHistory.map((item) => item.id);
+    const reasonRows =
+      assessmentIds.length > 0
+        ? await ctx.db
+            .select()
+            .from(eventAssessmentReasons)
+            .where(inArray(eventAssessmentReasons.assessmentId, assessmentIds))
+            .limit(64)
+        : [];
+    const identityIds = [
+      ...new Set(
+        evidence
+          .map((item) => item.sourceIdentityId)
+          .filter((item): item is string => Boolean(item)),
+      ),
+    ];
+    const identityRows =
+      identityIds.length > 0
+        ? await ctx.db
+            .select()
+            .from(sourceIdentities)
+            .where(inArray(sourceIdentities.id, identityIds))
+            .limit(32)
+        : [];
+    const identityPolicies =
+      identityIds.length > 0
+        ? await ctx.db
+            .select()
+            .from(sourceIdentityPolicies)
+            .where(
+              and(
+                inArray(sourceIdentityPolicies.identityId, identityIds),
+                eq(sourceIdentityPolicies.active, true),
+              ),
+            )
+            .limit(32)
+        : [];
+    const trustSnapshot = evidence.map((item) => {
+      const identity = identityRows.find((row) => row.id === item.sourceIdentityId);
+      const policy = identityPolicies
+        .filter((row) => row.identityId === item.sourceIdentityId)
+        .sort((left, right) => right.revision - left.revision)[0];
+      const hostname = identity?.hostname ?? sourceHostname(item.canonicalUrl);
+      const hostLabel = hostname && hostname !== "unknown-host" ? hostname : undefined;
+      return {
+        evidenceId: item.id,
+        identityId: item.sourceIdentityId,
+        hostname: hostLabel,
+        displayName: identity?.displayName ?? identity?.externalId ?? hostLabel,
+        platform: identity?.platform,
+        trustTier: policy?.trustTier ?? "unknown",
+        allowedUses: policy?.allowedUses ?? [],
+        originKey: item.originKey,
+      };
+    });
+    const documents =
+      evidenceIds.length > 0
+        ? await ctx.db
+            .select({
+              evidenceId: evidenceDocuments.evidenceId,
+              summary: evidenceDocuments.extractedTitle,
+              cleanedText: evidenceDocuments.cleanedText,
+              status: evidenceDocuments.status,
+            })
+            .from(evidenceDocuments)
+            .where(inArray(evidenceDocuments.evidenceId, evidenceIds))
+            .limit(20)
+        : [];
     return {
       event: eventRows[0],
       evidence,
@@ -1108,6 +1241,14 @@ export async function buildApp(ctx: AppContext) {
       assets: eventAssetRows,
       independence,
       skillTrace: analysis?.skillTrace,
+      claims: claimRows,
+      assessment,
+      assessments: assessmentHistory.map((item) => ({
+        ...item,
+        reasons: reasonRows.filter((reason) => reason.assessmentId === item.id),
+      })),
+      trustSnapshot,
+      documents,
     };
   });
   app.get("/api/v1/scans", { preHandler: authed }, async (request) => {
@@ -1168,6 +1309,14 @@ export async function buildApp(ctx: AppContext) {
       .select()
       .from(sources)
       .limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+    const [enrichmentBacklog] = await ctx.db
+      .select({ count: count() })
+      .from(evidenceItems)
+      .where(eq(evidenceItems.contentCompleteness, "snippet"));
+    const [staleAssessments] = await ctx.db
+      .select({ count: count() })
+      .from(events)
+      .where(eq(events.reliabilityStatus, "legacy_unassessed"));
     return {
       postgres,
       valkey,
@@ -1175,19 +1324,22 @@ export async function buildApp(ctx: AppContext) {
       workerConcurrency: ctx.config.RIDDLR_WORKER_CONCURRENCY,
       memory: snapshotProcessMemory(),
       sources: sourceRows.map(publicSource),
+      enrichmentBacklog: Number(enrichmentBacklog?.count ?? 0),
+      staleAssessments: Number(staleAssessments?.count ?? 0),
     };
   });
   app.get("/api/v1/settings", { preHandler: authed }, async (request) => {
     const auth = await currentUser(ctx, request);
     const providers = await ctx.db.select().from(providerConfigs).limit(16);
     const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
+    const llm = toPublicLlm(providers);
     return {
-      llmConfigured: providers.some(
-        (item) =>
-          item.kind.includes("compatible") ||
-          item.kind.includes("openai") ||
-          item.kind.includes("anthropic"),
-      ),
+      llmConfigured: llm.configured,
+      llm,
+      email: {
+        ...publicEmailSettings(await resolveEmailTransport(ctx)),
+        resendSaved: providers.some((item) => item.kind === "resend" && Boolean(item.secretId)),
+      },
       telegramConfigured: providers.some((item) => item.kind === "telegram"),
       whatsappConfigured: providers.some((item) => item.kind === "whatsapp"),
       totpEnabled: Boolean(auth && (await loadVerifiedTotpFactor(ctx, auth.user.id))),
@@ -1216,6 +1368,47 @@ export async function buildApp(ctx: AppContext) {
         configured: Boolean(item.secretId),
       })),
     };
+  });
+  app.post("/api/v1/settings/email", { preHandler: authed }, async (request) => {
+    const body = emailSetupSchema.parse(request.body);
+    const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
+    const keyVersion = settingsRows[0]?.keyVersion ?? 1;
+    const encrypted = encryptSecret({
+      masterKey: ctx.masterKey,
+      plaintext: body.apiKey,
+      purpose: "resend",
+      keyVersion,
+      aad: `resend|${keyVersion}`,
+    });
+    const [secret] = await ctx.db
+      .insert(encryptedSecrets)
+      .values({
+        purpose: "resend",
+        ciphertext: encrypted.ciphertext,
+        nonce: encrypted.nonce,
+        tag: encrypted.tag,
+        alg: encrypted.alg,
+        keyVersion,
+      })
+      .returning();
+    await ctx.db.delete(providerConfigs).where(eq(providerConfigs.kind, "resend"));
+    await ctx.db.insert(providerConfigs).values({
+      kind: "resend",
+      secretId: secret?.id,
+      settings: { from: body.from, configured: true },
+    });
+    const auth = await currentUser(ctx, request);
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth?.user.id,
+      action: "settings.email",
+      resource: "resend",
+    });
+    return { ok: true, configured: true };
+  });
+  app.delete("/api/v1/settings/email", { preHandler: authed }, async () => {
+    await ctx.db.delete(providerConfigs).where(eq(providerConfigs.kind, "resend"));
+    await ctx.db.delete(encryptedSecrets).where(eq(encryptedSecrets.purpose, "resend"));
+    return { ok: true };
   });
   app.post("/api/v1/settings/llm", { preHandler: authed }, async (request, reply) => {
     const body = llmSetupSchema.parse(request.body);
@@ -1372,11 +1565,10 @@ export async function buildApp(ctx: AppContext) {
       resource: auth.user.id,
     });
     await sendSecurityMail({
-      config: ctx.config,
+      ctx,
       to: auth.user.email,
       kind: "recovery_rotated",
       text: "New recovery codes were generated. Previous unused codes no longer work.",
-      logger: ctx.logger,
     });
     return { recoveryCodes: codes };
   });
@@ -1434,11 +1626,10 @@ export async function buildApp(ctx: AppContext) {
       resource: String(rotated.keyVersion),
     });
     await sendSecurityMail({
-      config: ctx.config,
+      ctx,
       to: auth.user.email,
       kind: "keys_rotated",
       text: `Encryption key version is now ${rotated.keyVersion}. Stored credentials were re-encrypted in batches.`,
-      logger: ctx.logger,
     });
     return rotated;
   });

@@ -10,7 +10,8 @@ pnpm licenses:check
 Unit tests cover domain registry, fingerprints, clustering, encryption, schema validation,
 materiality, schedules, prompt wrapping, provider adapters, Discord REST
 fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
-skill routing, signal gating, and coming-soon rejection. Architecture tests keep generic packages from importing
+skill routing, signal gating, claim corroboration, HTML extraction, enrichment
+eligibility, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -20,7 +21,7 @@ exhausted. They cover four-step onboarding, first-run access, default-agent Cryp
 coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, token-budget skip, Discord token encryption and official REST
 polling, X bearer encryption and recent search, session rotation after 2FA,
-recovery codes, password reset hashing, secret non-disclosure, notification
+recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, and audit clear.
 
@@ -42,4 +43,8 @@ TOTP enrollment can be skipped during first-run and enabled later in Settings.
 Do not call `/setup/totp/start` after setup is complete.
 
 Integration tests mock SearXNG, Discord, X, WhatsApp, and LLM HTTP in-process. They do not
-call live provider networks.
+call live provider networks. The intelligence-flow fixture returns HTML for
+eligible search URLs, treats snippets as incomplete, and asserts a
+repeat scan reuses evidence fingerprints and the same event row. A syndication
+fixture with a shared outbound Reuters URL is not treated as independent
+corroboration. Signal proof rows must match `claim_evidence`.

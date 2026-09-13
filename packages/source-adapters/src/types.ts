@@ -9,7 +9,15 @@ export type SourceErrorClass =
   | "capability_missing"
   | "malformed"
   | "partial"
-  | "unavailable";
+  | "unavailable"
+  | "blocked"
+  | "robots_denied"
+  | "unsupported_media"
+  | "paywalled"
+  | "too_large"
+  | "stale"
+  | "deleted"
+  | "extraction_failed";
 
 export type SourceCapability = {
   modes: Array<"search" | "poll" | "stream">;
@@ -36,6 +44,11 @@ export type FetchResult = {
   partial: boolean;
   errors: Array<{ class: SourceErrorClass; message: string }>;
   unresponsiveEngines: string[];
+  requestUrl?: string;
+  providerRequestId?: string;
+  paginationCursor?: string;
+  responseStatus?: number;
+  adapterMetadata?: Record<string, unknown>;
 };
 
 export type SourceAdapter = {
@@ -244,6 +257,20 @@ export async function assertSafeResolvedHttpUrl(
   return url;
 }
 
+export function redactRequestUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/token|key|secret|auth|password|bearer/i.test(key)) {
+        parsed.searchParams.set(key, "[redacted]");
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
 const MAX_SAFE_FETCH_BYTES = 1_000_000;
 
 export async function safeFetch(
@@ -276,7 +303,7 @@ export async function safeFetch(
     }
     const next = new URL(location, url);
     await assertSafeResolvedHttpUrl(next.href, init.allowComposeHosts ?? [], init.lookup);
-    throw new Error("Redirects to other hosts are not followed.");
+    return response;
   }
   const length = Number(response.headers.get("content-length") ?? "0");
   const maxBytes = init.maxBytes ?? MAX_SAFE_FETCH_BYTES;
@@ -295,4 +322,62 @@ export async function readBoundedJson(
     throw new Error("Provider response exceeded the size bound.");
   }
   return JSON.parse(buffer.toString("utf8")) as unknown;
+}
+
+export async function readBoundedBytes(
+  response: Response,
+  maxBytes = MAX_SAFE_FETCH_BYTES,
+): Promise<Buffer> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) {
+      throw new Error("Provider response exceeded the size bound.");
+    }
+    return buffer;
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error("Provider response exceeded the size bound.");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
+export async function safeFetchFollow(
+  input: string,
+  init: RequestInit & {
+    allowComposeHosts?: string[];
+    lookup?: LookupFn;
+    maxBytes?: number;
+    fetchImpl?: typeof fetch;
+    maxRedirects?: number;
+  } = {},
+): Promise<{ response: Response; finalUrl: string }> {
+  const maxRedirects = init.maxRedirects ?? 3;
+  let current = input;
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    const response = await safeFetch(current, { ...init, redirect: "manual" });
+    if (response.status < 300 || response.status >= 400) {
+      return { response, finalUrl: current };
+    }
+    const location = response.headers.get("location");
+    if (!location) {
+      return { response, finalUrl: current };
+    }
+    if (hop === maxRedirects) {
+      throw new Error("Too many redirects.");
+    }
+    current = new URL(location, current).href;
+  }
+  throw new Error("Too many redirects.");
 }

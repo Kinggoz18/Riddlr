@@ -148,8 +148,10 @@ export function candidateKindLabel(kind: string) {
   switch (kind) {
     case "potential_opportunity":
       return "Potential opportunity";
-    case "emerging_narrative":
-      return "Emerging narrative";
+    case "search_mention":
+      return "Search mention";
+    case "single_source_report":
+      return "Single-source report";
     case "hidden_gem":
       return "Hidden gem";
     case "major_event":
@@ -172,7 +174,7 @@ export function candidateKindLabel(kind: string) {
 }
 
 export function independenceCopy(independent: number, derived: number) {
-  return `${independent} independent source${independent === 1 ? "" : "s"} · ${derived} reprint${derived === 1 ? "" : "s"}`;
+  return `${independent} independent origin${independent === 1 ? "" : "s"} · ${derived} reprint${derived === 1 ? "" : "s"}`;
 }
 
 export const OBJECTIVE_OPTIONS = [
@@ -247,6 +249,8 @@ export function auditActionLabel(action: string) {
       return "WhatsApp saved";
     case "settings.telegram":
       return "Telegram saved";
+    case "settings.email":
+      return "Email transport saved";
     case "secrets.key_rotate":
       return "Encryption keys rotated";
     case "agent.create":

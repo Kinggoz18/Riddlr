@@ -9,18 +9,22 @@ Record these fields with every measurement run:
 - dataset size (sources, evidence items, scan window)
 - whether an LLM provider was configured
 - `RIDDLR_WORKER_CONCURRENCY`, `RIDDLR_SCAN_EVIDENCE_LIMIT`,
-  `RIDDLR_ANALYSIS_EVIDENCE_LIMIT`
+  `RIDDLR_ANALYSIS_EVIDENCE_LIMIT`, `RIDDLR_ENRICH_PER_SCAN`,
+  `RIDDLR_ENRICH_PER_HOST`, `RIDDLR_ENRICH_CONCURRENCY`,
+  `RIDDLR_UNDERSTAND_CONCURRENCY`
 
 Measure, when collected:
 
 - source fan-out time
 - queue wait (job queued → worker start)
 - evidence throughput (items/s)
+- enrichment and understanding cache hits
 - database query p95 for overview/signals
 - scan duration
 - AI latency (provider round-trip)
 - RSS and **peak RSS** of `api` and `worker` (`snapshotProcessMemory()`, also
-  on `GET /api/v1/health` as `memory`)
+  on `GET /api/v1/health` as `memory`). Integration scans record RSS and peak
+  RSS after the mocked intelligence flow.
 
 ## 10 Sep 2026 — host process snapshot
 

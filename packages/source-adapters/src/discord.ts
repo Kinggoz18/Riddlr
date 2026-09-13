@@ -26,6 +26,33 @@ export function assertSnowflake(value: string, label: string): string {
   return value;
 }
 
+export function discordBotInviteUrl(
+  clientId: string,
+  permissions = DISCORD_BOT_PERMISSIONS,
+): string {
+  const id = assertSnowflake(clientId, "Application id");
+  const url = new URL("https://discord.com/oauth2/authorize");
+  url.searchParams.set("client_id", id);
+  url.searchParams.set("permissions", String(permissions));
+  url.searchParams.set("scope", "bot");
+  return url.toString();
+}
+
+export function applicationIdFromBotToken(token: string): string | undefined {
+  const first = token.trim().split(".")[0];
+  if (!first) {
+    return undefined;
+  }
+  try {
+    const padded =
+      first.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (first.length % 4)) % 4);
+    const decoded = Buffer.from(padded, "base64").toString("utf8");
+    return SNOWFLAKE_RE.test(decoded) ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function snowflakeFromDate(date: Date): string {
   const ms = BigInt(date.getTime() - DISCORD_EPOCH_MS);
   if (ms <= 0n) {
@@ -41,7 +68,11 @@ type DiscordMessage = {
   guild_id?: unknown;
   content?: unknown;
   timestamp?: unknown;
-  author?: DiscordAuthor;
+  edited_timestamp?: unknown;
+  type?: unknown;
+  webhook_id?: unknown;
+  author?: DiscordAuthor & { bot?: unknown };
+  message_reference?: { message_id?: unknown; channel_id?: unknown; guild_id?: unknown };
 };
 
 export function parseDiscordMessages(
@@ -74,13 +105,56 @@ export function parseDiscordMessages(
       continue;
     }
     const content = typeof row.content === "string" ? row.content : "";
-    if (!content.trim()) {
-      emptyContent += 1;
-      continue;
-    }
     const guildId = typeof row.guild_id === "string" ? row.guild_id : (input.guildId ?? "@me");
+    const authorId = row.author && typeof row.author.id === "string" ? row.author.id : undefined;
     const author =
       row.author && typeof row.author.username === "string" ? row.author.username : undefined;
+    const referencedId =
+      row.message_reference && typeof row.message_reference.message_id === "string"
+        ? row.message_reference.message_id
+        : undefined;
+    const webhookId = typeof row.webhook_id === "string" ? row.webhook_id : undefined;
+    const bot = Boolean(row.author?.bot);
+    if (!content.trim()) {
+      emptyContent += 1;
+      evidence.push({
+        sourceFamily: "discord",
+        adapterId: "discord",
+        externalId: id,
+        url: `https://discord.com/channels/${guildId}/${channelId}/${id}`,
+        title: author ? `${author} in #${channelId}` : `Discord message ${id}`,
+        bodyText: "",
+        author,
+        publishedAt: typeof row.timestamp === "string" ? new Date(row.timestamp) : undefined,
+        fetchedAt,
+        editedAt:
+          typeof row.edited_timestamp === "string" ? new Date(row.edited_timestamp) : undefined,
+        contentCompleteness: "incomplete",
+        sourceIdentity: authorId
+          ? {
+              platform: "discord",
+              externalId: authorId,
+              displayName: author,
+              parentExternalId: channelId,
+            }
+          : undefined,
+        originKey: referencedId
+          ? `discord:${referencedId}`
+          : authorId
+            ? `discord:${authorId}`
+            : `discord:${id}`,
+        referencedOriginKey: referencedId ? `discord:${referencedId}` : undefined,
+        adapterPayload: {
+          channelId,
+          guildId,
+          messageId: id,
+          webhookId,
+          bot,
+          messageType: row.type,
+        },
+      });
+      continue;
+    }
     evidence.push({
       sourceFamily: "discord",
       adapterId: "discord",
@@ -91,10 +165,27 @@ export function parseDiscordMessages(
       author,
       publishedAt: typeof row.timestamp === "string" ? new Date(row.timestamp) : undefined,
       fetchedAt,
-      adapterPayload: { channelId, guildId, messageId: id },
+      editedAt:
+        typeof row.edited_timestamp === "string" ? new Date(row.edited_timestamp) : undefined,
+      contentCompleteness: "native_complete",
+      sourceIdentity: authorId
+        ? {
+            platform: "discord",
+            externalId: authorId,
+            displayName: author,
+            parentExternalId: channelId,
+          }
+        : undefined,
+      originKey: referencedId
+        ? `discord:${referencedId}`
+        : authorId
+          ? `discord:${authorId}`
+          : `discord:${id}`,
+      referencedOriginKey: referencedId ? `discord:${referencedId}` : undefined,
+      adapterPayload: { channelId, guildId, messageId: id, webhookId, bot, messageType: row.type },
     });
   }
-  if (rows.length > 0 && evidence.length === 0 && emptyContent > 0) {
+  if (rows.length > 0 && evidence.every((item) => !item.bodyText?.trim()) && emptyContent > 0) {
     errors.push({
       class: "capability_missing",
       message:
@@ -342,6 +433,8 @@ export function createDiscordAdapter(fetchImpl: typeof fetch = fetch): SourceAda
         partial: errors.length > 0,
         errors,
         unresponsiveEngines: [],
+        requestUrl: "https://discord.com/api/v10/channels/{channel.id}/messages",
+        adapterMetadata: errors.length > 0 ? { channelErrors: errors.length } : undefined,
       };
     },
   };

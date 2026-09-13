@@ -9,6 +9,8 @@ function HealthPage() {
     workerHeartbeat: string | null;
     workerConcurrency?: number;
     memory?: { rss: number; peakRss: number };
+    enrichmentBacklog?: number;
+    staleAssessments?: number;
   }>();
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -75,6 +77,20 @@ function HealthPage() {
             </div>
           </Card>
         ) : null}
+        <Card>
+          <h2>Enrichment backlog</h2>
+          <p className="metric-line">
+            <span>Snippet evidence</span>
+            <strong>{data.enrichmentBacklog ?? 0}</strong>
+          </p>
+        </Card>
+        <Card>
+          <h2>Stale assessments</h2>
+          <p className="metric-line">
+            <span>Legacy unassessed</span>
+            <strong>{data.staleAssessments ?? 0}</strong>
+          </p>
+        </Card>
       </section>
     </>
   );

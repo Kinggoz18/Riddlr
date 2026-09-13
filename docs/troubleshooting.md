@@ -27,6 +27,10 @@
 - SearXNG 403: JSON format is disabled. Use the bundled container.
 - Worker unhealthy: API still serves reads; scans will not run.
 - Password reset locally: open Mailpit through the Compose proxy path `/mailpit`.
+- Password reset with no email transport: authenticator recovery codes, or on
+  the host `docker compose exec -T api node apps/server/dist/cmd/reset-password.js`.
+  That prints a one-hour `/reset?token=` URL. Settings → Email saves a Resend
+  API key while you can still sign in.
 - LLM schema errors: the signal is rejected, the event stays `needs_analysis`.
 - Daily token budget exhausted: analysis is skipped and the event stays
   `needs_analysis`. Unlimited daily usage does not skip for a cap.

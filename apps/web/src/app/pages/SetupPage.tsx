@@ -371,7 +371,10 @@ function SetupPage() {
                 <option value="anthropic_compatible">Anthropic-compatible</option>
               </select>
             </Field>
-            <Field label="Base URL">
+            <Field
+              label="Base URL"
+              hint="https://api.openai.com, https://openrouter.ai/api/v1, or the full /chat/completions URL."
+            >
               <input
                 id="base-url"
                 name="baseUrl"

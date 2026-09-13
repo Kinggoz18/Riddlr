@@ -40,7 +40,22 @@ describe("package boundaries", () => {
       for (const file of filesUnder(dir)) {
         const text = readFileSync(file, "utf8");
         expect(text, file).not.toMatch(/@riddlr\/domain-crypto/);
+        if (name !== "domain") {
+          expect(text, file).not.toMatch(/cryptocurrency bitcoin ethereum stablecoin news/);
+        }
       }
+    }
+  });
+
+  it("keeps crypto implementation out of generic engine modules", () => {
+    const files = [
+      join(root, "apps/server/src/modules/pipeline.ts"),
+      join(root, "apps/server/src/modules/intelligence.ts"),
+    ];
+    for (const file of files) {
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toMatch(/@riddlr\/domain-crypto/);
+      expect(text, file).not.toMatch(/cryptocurrency bitcoin ethereum stablecoin news/);
     }
   });
 });

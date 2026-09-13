@@ -20,6 +20,9 @@ type EventRow = {
   materialityReason?: string | null;
   epistemicStatus?: string | null;
   candidateKind?: string | null;
+  reliabilityStatus?: string | null;
+  impactLevel?: string | null;
+  contentCompleteness?: string | null;
   assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
 };
 
@@ -47,7 +50,7 @@ function EventsPage() {
     <>
       <PageHeader
         title="Events"
-        description="Clusters of related evidence. Discovery can surface a candidate before analysis. A candidate is not a recommendation to buy, sell, or trade. Signals are created later, only after material analysis and the signal gate."
+        description="Clusters of related evidence. Independent origins are not reprints. Discovery can surface a candidate before analysis. A candidate is not a recommendation to buy, sell, or trade. Signals are created later, only after material analysis and the signal gate."
       />
       {rows.length === 0 ? (
         <EmptyState
@@ -64,6 +67,13 @@ function EventsPage() {
                 <p className="record-meta">
                   <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
                   {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
+                  {row.reliabilityStatus ? (
+                    <span>{row.reliabilityStatus.replaceAll("_", " ")}</span>
+                  ) : null}
+                  {row.impactLevel ? <span>Impact {row.impactLevel}</span> : null}
+                  {row.contentCompleteness ? (
+                    <span>{row.contentCompleteness.replaceAll("_", " ")}</span>
+                  ) : null}
                   {row.epistemicStatus ? (
                     <span>{epistemicStatusLabel(row.epistemicStatus)}</span>
                   ) : null}

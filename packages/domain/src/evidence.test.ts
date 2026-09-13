@@ -28,7 +28,7 @@ describe("evidence provenance", () => {
       classifyReprint({
         sameCanonicalUrl: false,
         sameContentHash: false,
-        sameHostnameSameDay: true,
+        sameOrigin: true,
       }),
     ).toBe("derived");
     expect(independenceCounts(["primary", "derived", "derived", "supporting"])).toEqual({

@@ -5,6 +5,7 @@ const REDACT_PATHS = [
   "*.password",
   "*.secret",
   "*.apiKey",
+  "*.resendApiKey",
   "*.token",
   "*.cookie",
   "*.ciphertext",
@@ -12,6 +13,7 @@ const REDACT_PATHS = [
   "*.totp",
   "authorization",
   "RIDDLR_ENCRYPTION_MASTER_KEY",
+  "RIDDLR_RESEND_API_KEY",
 ];
 
 export function createLogger(options: { level: string; pretty: boolean }) {
@@ -43,13 +45,54 @@ export function createMetrics() {
     labelNames: ["status"],
     registers: [register],
   });
+  const evidenceOutcomes = new Counter({
+    name: "riddlr_evidence_outcomes_total",
+    help: "Evidence completeness outcomes",
+    labelNames: ["completeness"],
+    registers: [register],
+  });
+  const assessments = new Counter({
+    name: "riddlr_event_assessments_total",
+    help: "Event reliability assessments",
+    labelNames: ["reliability"],
+    registers: [register],
+  });
   const aiCalls = new Counter({
     name: "riddlr_ai_calls_total",
     help: "LLM calls",
     labelNames: ["provider", "result"],
     registers: [register],
   });
-  return { register, httpDuration, authEvents, scans, aiCalls };
+  const enrichmentOutcomes = new Counter({
+    name: "riddlr_enrichment_outcomes_total",
+    help: "Document enrichment outcomes",
+    labelNames: ["status"],
+    registers: [register],
+  });
+  const claims = new Counter({
+    name: "riddlr_claims_total",
+    help: "Claim extraction outcomes",
+    labelNames: ["result"],
+    registers: [register],
+  });
+  const notifications = new Counter({
+    name: "riddlr_notifications_total",
+    help: "Notification decisions",
+    labelNames: ["kind"],
+    registers: [register],
+  });
+  return {
+    register,
+    httpDuration,
+    authEvents,
+    scans,
+    aiCalls,
+    evidenceOutcomes,
+    assessments,
+    enrichmentOutcomes,
+    claims,
+    notifications,
+  };
 }
 
 let peakRss = 0;

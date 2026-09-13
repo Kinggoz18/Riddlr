@@ -9,6 +9,25 @@ export {
   textOpposes,
 } from "./analysis-facts.js";
 export {
+  assertClaimKind,
+  CLAIM_KIND_RE,
+  type ClaimCandidate,
+  claimCandidateSchema,
+  claimGroupKey,
+  claimStanceFromExtraction,
+  claimsCompatible,
+  claimTitle,
+  excerptHash,
+  excerptOffsets,
+  excerptPresent,
+  fingerprintClaim,
+  MAX_CLAIM_EXCERPT_CHARS,
+  MAX_CLAIMS_PER_DOCUMENT,
+  type NormalizedClaim,
+  takeClaims,
+  weakClaimObject,
+} from "./claims.js";
+export {
   absorbMarketDataClusters,
   CLUSTER_SIMILARITY_THRESHOLD,
   CLUSTER_WINDOW_MS,
@@ -44,8 +63,24 @@ export {
   type DomainModule,
   DomainModuleRegistry,
   type ExtractedAsset,
+  type ImpactInput,
   type MarketObservation,
 } from "./domain-module.js";
+export {
+  classifyPageHeuristic,
+  completenessFromDocument,
+  ENRICH_TIMEOUT_MS,
+  type EnrichmentEligibility,
+  EXTRACTOR_VERSION,
+  enrichmentEligibility,
+  MAX_ENRICH_BYTES,
+  MAX_ENRICH_CHARS,
+  MAX_ENRICH_PER_HOST,
+  MAX_ENRICH_PER_SCAN,
+  MAX_ENRICH_REDIRECTS,
+  prioritizeEnrichment,
+  trustAllowsUse,
+} from "./enrichment.js";
 export {
   canonicalizeUrl,
   classifyReprint,
@@ -53,12 +88,21 @@ export {
   type EvidenceRole,
   fingerprintEvidence,
   independenceCounts,
+  lineageOriginKey,
   type NormalizedEvidence,
   normalizeEvidence,
   normalizeText,
+  overlappingOutbound,
   type RawEvidence,
   uniqueIndependentHostCount,
 } from "./evidence.js";
+export {
+  type ExtractedHtml,
+  extractMainHtml,
+  extractOutboundUrls,
+  headlineBodyMismatch,
+  preferEvidenceTitle,
+} from "./html-extract.js";
 export {
   clampPageSize,
   clampPositiveInt,
@@ -107,6 +151,36 @@ export {
   PrivateMaterialError,
   rejectPrivateMaterial,
 } from "./portfolio.js";
+export {
+  assessReliability,
+  CLAIM_MODALITIES,
+  CLAIM_POLARITIES,
+  CLAIM_STANCES,
+  type ClaimModality,
+  type ClaimPolarity,
+  type ClaimStance,
+  CONTENT_COMPLETENESS,
+  type ContentCompleteness,
+  capConfidence,
+  IMPACT_LEVELS,
+  type ImpactAssessment,
+  type ImpactLevel,
+  NOTIFY_KINDS,
+  type NotifyKind,
+  originKey,
+  PAGE_CLASSES,
+  type PageClass,
+  RELIABILITY_STATUSES,
+  type ReliabilityStatus,
+  SIGNAL_OUTPUT_KINDS,
+  type SignalOutputKind,
+  type SourceIdentityCandidate,
+  TRUST_TIERS,
+  TRUST_USES,
+  type TrustTier,
+  type TrustUse,
+  uniqueKeys,
+} from "./reliability.js";
 export {
   AGENT_KINDS,
   AGENT_SCHEDULES,
@@ -204,6 +278,18 @@ export {
   utcDayRange,
   utcDayStamp,
 } from "./token-budget.js";
+export {
+  buildUnderstandingPrompt,
+  CONTENT_UNDERSTANDING_JSON_SCHEMA,
+  CONTENT_UNDERSTANDING_SCHEMA_VERSION,
+  type ContentUnderstanding,
+  contentUnderstandingSchema,
+  InvalidUnderstandingError,
+  MAX_UNDERSTANDING_CONTENT_CHARS,
+  MAX_UNDERSTANDING_SUMMARY_CHARS,
+  skipUnderstandingForPageClass,
+  validateContentUnderstanding,
+} from "./understanding.js";
 export {
   assertCanonicalAssetId,
   CANONICAL_ASSET_ID_RE,

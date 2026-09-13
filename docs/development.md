@@ -12,6 +12,9 @@ pnpm dev
 API: http://localhost:3001  
 Web: http://localhost:5173 (proxies `/api` to the API)
 
+Mailpit SMTP is `smtp://127.0.0.1:1025` when the Compose overlay publishes it.
+Set `RIDDLR_SMTP_URL` for password reset mail, or save Resend in Settings.
+
 Native setup talks to the API on loopback. `RIDDLR_SETUP_ACCESS=public` does
 not show the setup-code card here. Use Compose `--public` to try that gate.
 

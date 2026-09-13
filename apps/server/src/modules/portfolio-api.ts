@@ -356,6 +356,8 @@ export function registerNotificationSettingsRoutes(
           minRisk: body.minRisk,
           cooldownMinutes: body.cooldownMinutes,
           quietHours: body.quietHours,
+          earlyWarnings: body.earlyWarnings,
+          shadowAssessments: body.shadowAssessments,
         },
       })
       .where(eq(instanceSettings.id, 1));

@@ -106,6 +106,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
     page.getByRole("link", { name: "Watchlist agent" }).or(watchlistAgent).first(),
   ).toBeVisible();
   await page.getByRole("link", { name: "Sources" }).click();
+  await expect(page.getByRole("heading", { name: "Source identities" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Publisher hosts" })).toBeVisible();
   await page.getByRole("link", { name: "Add source" }).click();
   await expect(page.getByRole("heading", { name: "Discord" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "CoinGecko" })).toBeVisible();
@@ -128,6 +130,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();
   await page.locator(".page-subnav").getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: "Telegram" })).toBeVisible();
+  await expect(page.getByLabel("Unverified early warnings")).toBeVisible();
+  await expect(page.getByLabel("Shadow assessments")).toBeVisible();
   await expect(page.getByRole("heading", { name: "WhatsApp Cloud API" })).toBeVisible();
   await page.locator(".page-subnav").getByRole("link", { name: "Security" }).click();
   await expect(page.getByRole("heading", { name: "Recovery codes" })).toBeVisible();
@@ -142,6 +146,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Health" }).click();
   await expect(page.getByRole("heading", { name: "PostgreSQL" })).toBeVisible();
   await expect(page.getByText("Concurrency")).toBeVisible();
+  await expect(page.getByText("Enrichment backlog")).toBeVisible();
+  await expect(page.getByText("Stale assessments")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   const menu = page.getByRole("button", { name: "Open navigation" });
   if (await menu.isVisible()) {
@@ -156,6 +162,7 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await signIn(page);
   await page.getByRole("link", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
+  await expect(page.getByText(/independent origins/i)).toBeVisible();
   await page.getByRole("link", { name: "Watchlists" }).click();
   await expect(page.getByRole("heading", { name: /Watchlists/i })).toBeVisible();
   await page.getByRole("link", { name: /Default watchlist/i }).click();

@@ -21,6 +21,8 @@ export const CANDIDATE_KINDS = [
   "significant_development",
   "asset_specific_change",
   "general_market_trend",
+  "search_mention",
+  "single_source_report",
 ] as const;
 export type CandidateKind = (typeof CANDIDATE_KINDS)[number];
 
@@ -38,12 +40,14 @@ const KIND_RANK: CandidateKind[] = [
   "risk",
   "anomaly",
   "unusual_market_behaviour",
+  "significant_development",
+  "major_event",
+  "single_source_report",
   "emerging_narrative",
   "hidden_gem",
-  "major_event",
-  "significant_development",
   "asset_specific_change",
   "general_market_trend",
+  "search_mention",
   "potential_opportunity",
 ];
 
@@ -56,6 +60,8 @@ const KIND_OBJECTIVES: Record<CandidateKind, string[]> = {
   risk: ["risk_signals"],
   anomaly: ["anomalies"],
   significant_development: ["significant_market_changes", "general_crypto_intelligence"],
+  search_mention: ["emerging_narratives", "general_crypto_intelligence"],
+  single_source_report: ["emerging_narratives", "cross_source_corroboration"],
   asset_specific_change: ["asset_specific_changes"],
   general_market_trend: ["general_market_trends"],
 };
@@ -107,7 +113,10 @@ export function discoverCandidate(input: {
 export function epistemicFromFacts(
   facts: EventFacts,
 ): Exclude<EpistemicStatus, "inferred" | "signal"> {
-  if (facts.independentHostCount >= 2) {
+  if (facts.independentOriginCount >= 2 && facts.contentCompleteness !== "snippet") {
+    return "confirmed";
+  }
+  if (facts.independentHostCount >= 2 && facts.contentCompleteness !== "snippet") {
     return "confirmed";
   }
   if (facts.priceChangePct !== undefined || facts.volumeUsd !== undefined) {
@@ -169,10 +178,23 @@ function kindFlags(
       (facts.holderClaim && /\b(exploit|hack|insolvent)\b/i.test(text)),
     anomaly: facts.contradictingCount > 0,
     unusual_market_behaviour: facts.marketReaction === "strong",
-    emerging_narrative: facts.firstIndependentMention && news,
-    hidden_gem: facts.firstIndependentMention && (facts.watchlistOverlap || meme),
-    major_event: material.material && facts.independentHostCount >= 2,
-    significant_development: facts.hasAuthoritativePrimary,
+    emerging_narrative:
+      facts.firstIndependentMention &&
+      news &&
+      facts.hasValidatedClaim &&
+      facts.contentCompleteness !== "snippet",
+    hidden_gem:
+      facts.firstIndependentMention && (facts.watchlistOverlap || meme) && facts.hasValidatedClaim,
+    major_event: material.material && facts.independentOriginCount >= 2,
+    significant_development: facts.hasTrustedFirsthand,
+    search_mention:
+      news &&
+      (facts.contentCompleteness === "snippet" || !facts.hasValidatedClaim) &&
+      facts.firstIndependentMention,
+    single_source_report:
+      facts.hasValidatedClaim &&
+      facts.independentOriginCount <= 1 &&
+      facts.contentCompleteness !== "snippet",
     asset_specific_change: facts.watchlistOverlap && (quotes || facts.primaryCount > 0),
     general_market_trend: quotes && !news,
     potential_opportunity: true,

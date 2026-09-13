@@ -39,6 +39,17 @@ describe("LLM prompt harness", () => {
     expect(prompt.user).toContain("Application-computed facts");
   });
 
+  it("lists claim IDs as CLAIM= so they are not parsed as evidence ID=", () => {
+    const prompt = buildAnalysisPrompt({
+      eventSummary: "BTC",
+      evidence: [{ id: "e1", title: "Bitcoin" }],
+      contextNotes: ["facts"],
+      claimIds: ["11111111-1111-4111-8111-111111111111"],
+    });
+    expect(prompt.user).toContain("CLAIM=11111111-1111-4111-8111-111111111111");
+    expect(prompt.user).not.toMatch(/claim id=/i);
+  });
+
   it("truncates oversized evidence so prompt context stays bounded", () => {
     const bodyText = "x".repeat(6_000);
     const prompt = buildAnalysisPrompt({
@@ -52,7 +63,76 @@ describe("LLM prompt harness", () => {
   });
 });
 
+const structuredOk = {
+  choices: [{ message: { content: JSON.stringify({ headline: "ok" }) } }],
+};
+
+async function requestedUrl(
+  kind: "openai_compatible" | "anthropic_compatible",
+  baseUrl: string,
+): Promise<string> {
+  let requested = "";
+  const fetchImpl: typeof fetch = async (input) => {
+    requested = String(input);
+    return new Response(
+      JSON.stringify(
+        kind === "anthropic_compatible"
+          ? { content: [{ type: "text", text: JSON.stringify({ headline: "ok" }) }] }
+          : structuredOk,
+      ),
+      { status: 200 },
+    );
+  };
+  const provider =
+    kind === "anthropic_compatible"
+      ? createAnthropicCompatibleProvider({ baseUrl, apiKey: "sk-test", fetchImpl })
+      : createOpenAiCompatibleProvider({ baseUrl, apiKey: "sk-test", fetchImpl });
+  await provider.completeStructured({
+    model: "test-model",
+    system: "sys",
+    user: "user",
+    jsonSchema: { type: "object" },
+  });
+  return requested;
+}
+
 describe("provider adapters", () => {
+  it("posts OpenAI-compatible completions for origin and /v1 base URLs", async () => {
+    expect(await requestedUrl("openai_compatible", "https://api.openai.com")).toBe(
+      "https://api.openai.com/v1/chat/completions",
+    );
+    expect(await requestedUrl("openai_compatible", "https://api.openai.com/")).toBe(
+      "https://api.openai.com/v1/chat/completions",
+    );
+    expect(await requestedUrl("openai_compatible", "https://api.openai.com/v1")).toBe(
+      "https://api.openai.com/v1/chat/completions",
+    );
+    expect(await requestedUrl("openai_compatible", "https://openrouter.ai/api/v1")).toBe(
+      "https://openrouter.ai/api/v1/chat/completions",
+    );
+    expect(await requestedUrl("openai_compatible", "https://openrouter.ai/api/v1/")).toBe(
+      "https://openrouter.ai/api/v1/chat/completions",
+    );
+    expect(
+      await requestedUrl("openai_compatible", "https://openrouter.ai/api/v1/chat/completions"),
+    ).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(
+      await requestedUrl("openai_compatible", "https://api.openai.com/v1/chat/completions"),
+    ).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
+  it("posts Anthropic-compatible messages for origin and /v1 base URLs", async () => {
+    expect(await requestedUrl("anthropic_compatible", "https://api.anthropic.com")).toBe(
+      "https://api.anthropic.com/v1/messages",
+    );
+    expect(await requestedUrl("anthropic_compatible", "https://proxy.example/api/v1")).toBe(
+      "https://proxy.example/api/v1/messages",
+    );
+    expect(
+      await requestedUrl("anthropic_compatible", "https://api.anthropic.com/v1/messages"),
+    ).toBe("https://api.anthropic.com/v1/messages");
+  });
+
   it("parses OpenAI-compatible structured output", async () => {
     const provider = createOpenAiCompatibleProvider({
       baseUrl: "https://example.test",
@@ -103,13 +183,15 @@ describe("provider adapters", () => {
 
   it("probes a provider with a bounded live completion", async () => {
     let called = false;
+    let body: { response_format?: unknown } | undefined;
     await probeLlmProvider({
       kind: "openai_compatible",
       baseUrl: "https://example.test",
       apiKey: "sk-test",
       model: "gpt-test",
-      fetchImpl: async () => {
+      fetchImpl: async (_url, init) => {
         called = true;
+        body = JSON.parse(String(init?.body)) as { response_format?: unknown };
         return new Response(
           JSON.stringify({
             choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
@@ -119,6 +201,7 @@ describe("provider adapters", () => {
       },
     });
     expect(called).toBe(true);
+    expect(body?.response_format).toBeUndefined();
   });
 
   it("fails closed when the probe cannot reach the model", async () => {

@@ -1,11 +1,13 @@
-import { agents } from "@riddlr/db";
+import { agents, evidenceItems, evidenceOccurrences, scans } from "@riddlr/db";
+import { assertSupportedMarketDomains, type MarketDomainId } from "@riddlr/domain";
 import { snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import { Worker } from "bullmq";
 import { eq } from "drizzle-orm";
 import { createContext } from "../context.js";
+import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
-import { analyzeQueuedEvent, runScan } from "../modules/pipeline.js";
+import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
 import { enqueueAgentScan } from "../modules/scans.js";
 
 const ctx = await createContext();
@@ -44,6 +46,64 @@ const analyzeWorker = new Worker(
   async (job) => {
     const eventId = String((job.data as { eventId?: string }).eventId ?? "");
     await analyzeQueuedEvent(ctx, eventId);
+  },
+  workerOptions,
+);
+
+async function enrichOrUnderstand(job: { data: { evidenceId?: string; marketDomainId?: string } }) {
+  const evidenceId = String(job.data.evidenceId ?? "");
+  const marketDomainId = String(job.data.marketDomainId ?? "") as MarketDomainId;
+  assertSupportedMarketDomains([marketDomainId]);
+  const module = ctx.domains.require(marketDomainId);
+  const [row] = await ctx.db
+    .select()
+    .from(evidenceItems)
+    .where(eq(evidenceItems.id, evidenceId))
+    .limit(1);
+  if (!row) {
+    return;
+  }
+  await enrichAndUnderstandScan({ ctx, module, evidenceRows: [row] });
+}
+
+const enrichWorker = new Worker(
+  QUEUE_NAMES.enrichEvidence,
+  async (job) => {
+    await enrichOrUnderstand(job);
+  },
+  { ...workerOptions, concurrency: ctx.config.RIDDLR_ENRICH_CONCURRENCY },
+);
+
+const understandWorker = new Worker(
+  QUEUE_NAMES.understandEvidence,
+  async (job) => {
+    await enrichOrUnderstand(job);
+  },
+  { ...workerOptions, concurrency: ctx.config.RIDDLR_UNDERSTAND_CONCURRENCY },
+);
+
+const clusterWorker = new Worker(
+  QUEUE_NAMES.clusterEvents,
+  async (job) => {
+    const scanId = String((job.data as { scanId?: string }).scanId ?? "");
+    const marketDomainId = String(
+      (job.data as { marketDomainId?: string }).marketDomainId ?? "",
+    ) as MarketDomainId;
+    assertSupportedMarketDomains([marketDomainId]);
+    const [scan] = await ctx.db.select().from(scans).where(eq(scans.id, scanId)).limit(1);
+    if (!scan) {
+      return;
+    }
+    const occurrences = await ctx.db
+      .select({ evidenceId: evidenceOccurrences.evidenceId })
+      .from(evidenceOccurrences)
+      .where(eq(evidenceOccurrences.scanId, scanId))
+      .limit(ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT);
+    await clusterScanEvents(
+      ctx,
+      scan,
+      occurrences.map((item) => item.evidenceId),
+    );
   },
   workerOptions,
 );
@@ -91,9 +151,16 @@ const shutdown = async () => {
   await worker.close();
   await notifyWorker.close();
   await analyzeWorker.close();
+  await enrichWorker.close();
+  await understandWorker.close();
+  await clusterWorker.close();
   await ctx.scanQueue.close();
-  await ctx.analyzeQueue.close();
-  await ctx.notifyQueue.close();
+  await ctx.ingestQueue?.close();
+  await ctx.enrichQueue?.close();
+  await ctx.understandQueue?.close();
+  await ctx.clusterQueue?.close();
+  await ctx.analyzeQueue?.close();
+  await ctx.notifyQueue?.close();
   await ctx.redis.quit();
   process.exit(0);
 };

@@ -1,6 +1,6 @@
 import { normalizeEvidence } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
-import { cryptoDomainModule, mergeShippedCryptoObjectives } from "./module.js";
+import { cryptoDomainModule } from "./module.js";
 
 describe("crypto domain module", () => {
   it("canonicalizes BTC to a coingecko id, not a ticker-only identity", () => {
@@ -109,17 +109,158 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.id).toBe("crypto");
   });
 
-  it("upgrades the original default objectives without overwriting a custom set", () => {
+  it("skips snippet mentions when extracting claims", () => {
+    const claims = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Bitcoin ETF inflows accelerate",
+        bodyText: "Bitcoin demand rose after reported ETF inflows covering US listed products.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://example.com/bitcoin-etf",
+        contentCompleteness: "snippet",
+      }),
+    ]);
+    expect(claims).toEqual([]);
+  });
+
+  it("extracts a market-move claim from a complete document", () => {
+    const claims = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Bitcoin ETF inflows accelerate",
+        bodyText:
+          "Bitcoin demand rose after reported ETF inflows covering US listed products in the latest issuer filing.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://example.com/bitcoin-etf",
+        contentCompleteness: "full_document",
+      }),
+    ]);
+    expect(claims.some((item) => item.kind === "crypto:market_move")).toBe(true);
+  });
+
+  it("does not treat a custody story and an ETF inflow story as the same claim", () => {
+    const inflows = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Bitcoin ETF inflows accelerate",
+        bodyText:
+          "Bitcoin demand rose after reported ETF inflows covering US listed products in the latest issuer filing.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://example.com/bitcoin-etf",
+        contentCompleteness: "full_document",
+      }),
+    ]);
+    const custody = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Bank of America custody",
+        bodyText: "Bank of America announced a bitcoin custody mandate after a filing.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://example.com/custody",
+        contentCompleteness: "full_document",
+      }),
+    ]);
+    expect(inflows[0]?.fingerprint).toBeDefined();
+    expect(custody.some((item) => item.fingerprint === inflows[0]?.fingerprint)).toBe(false);
+  });
+
+  it("does not emit a generic report for a market profile page", () => {
+    const claims = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Bitcoin price",
+        bodyText: "Live bitcoin price on Coinbase with charts and converter.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://www.coinbase.com/price/bitcoin",
+        contentCompleteness: "full_document",
+      }),
+    ]);
+    expect(claims).toEqual([]);
+    expect(claims.some((item) => item.kind === "crypto:general_report")).toBe(false);
+  });
+
+  it("computes critical impact for security, insolvency, and peg claims", () => {
+    const evidence = normalizeEvidence({
+      sourceFamily: "search",
+      adapterId: "searxng",
+      title: "Exchange hack",
+      bodyText: "Hot wallet compromised after exploit.",
+      fetchedAt: new Date("2026-09-13T00:00:00Z"),
+      url: "https://example.com/hack",
+      contentCompleteness: "full_document",
+    });
+    const security = cryptoDomainModule.extractClaims([evidence]);
     expect(
-      mergeShippedCryptoObjectives([
-        "general_crypto_intelligence",
-        "emerging_narratives",
-        "major_events",
-        "significant_market_changes",
-        "risk_signals",
-        "cross_source_corroboration",
-      ]),
-    ).toContain("hidden_gems");
-    expect(mergeShippedCryptoObjectives(["risk_signals"])).toEqual(["risk_signals"]);
+      cryptoDomainModule.assessImpact({
+        claims: security,
+        assets: [],
+        observations: [],
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: false,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("critical");
+    const peg = cryptoDomainModule.extractClaims([
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "USDT depeg",
+        bodyText: "Tether depegged from the dollar after a reserve scare.",
+        fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        url: "https://example.com/peg",
+        contentCompleteness: "full_document",
+      }),
+    ]);
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: peg,
+        assets: [],
+        observations: [],
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: false,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("critical");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: cryptoDomainModule.extractClaims([
+          normalizeEvidence({
+            sourceFamily: "search",
+            adapterId: "searxng",
+            title: "Exchange insolvent",
+            bodyText: "The venue is insolvent and halted withdrawals.",
+            fetchedAt: new Date("2026-09-13T00:00:00Z"),
+            url: "https://example.com/insolvent",
+            contentCompleteness: "full_document",
+          }),
+        ]),
+        assets: [],
+        observations: [],
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: false,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("critical");
+  });
+
+  it("keeps crypto search fallbacks on the domain module", () => {
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "searxng", watchlist: [] })).toContain(
+      "cryptocurrency bitcoin ethereum stablecoin news",
+    );
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
   });
 });
