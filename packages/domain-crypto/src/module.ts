@@ -1,4 +1,5 @@
 import {
+  canonicalizeFromRegistry,
   claimTitle,
   classifyPageHeuristic,
   DEFAULT_AGENT_DESCRIPTION,
@@ -9,55 +10,13 @@ import {
   claimsCompatible as genericClaimsCompatible,
   type MarketObservation,
   type NormalizedEvidence,
+  type RegistryAsset,
+  resolveEvidenceAssets,
   takeBounded,
   watchlistSearchQuery,
   weakClaimObject,
 } from "@riddlr/domain";
-
-const KNOWN: Record<string, ExtractedAsset> = {
-  btc: {
-    assetClass: "cryptocurrency",
-    canonicalId: "coingecko:bitcoin",
-    symbol: "BTC",
-    displayName: "Bitcoin",
-  },
-  bitcoin: {
-    assetClass: "cryptocurrency",
-    canonicalId: "coingecko:bitcoin",
-    symbol: "BTC",
-    displayName: "Bitcoin",
-  },
-  eth: {
-    assetClass: "cryptocurrency",
-    canonicalId: "coingecko:ethereum",
-    symbol: "ETH",
-    displayName: "Ethereum",
-  },
-  ethereum: {
-    assetClass: "cryptocurrency",
-    canonicalId: "coingecko:ethereum",
-    symbol: "ETH",
-    displayName: "Ethereum",
-  },
-  sol: {
-    assetClass: "cryptocurrency",
-    canonicalId: "coingecko:solana",
-    symbol: "SOL",
-    displayName: "Solana",
-  },
-  usdt: {
-    assetClass: "stablecoin",
-    canonicalId: "coingecko:tether",
-    symbol: "USDT",
-    displayName: "Tether",
-  },
-  usdc: {
-    assetClass: "stablecoin",
-    canonicalId: "coingecko:usd-coin",
-    symbol: "USDC",
-    displayName: "USD Coin",
-  },
-};
+import { CRYPTO_RESOLVER_RULES } from "./resolver-rules.js";
 
 export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
   {
@@ -80,7 +39,6 @@ export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
   },
 ];
 
-const TOKEN_RE = /\b(bitcoin|ethereum|solana|btc|eth|sol|usdt|usdc|meme coin|stablecoin)\b/gi;
 const CRYPTO_ASSET_CLASSES = ["cryptocurrency", "meme_coin", "stablecoin"] as const;
 
 export const DEFAULT_CRYPTO_OBJECTIVES = [
@@ -205,55 +163,18 @@ export const cryptoDomainModule: DomainModule = {
     }
     return watchlist.map((item) => item.canonicalId).join(" ");
   },
-  canonicalizeAsset(input) {
-    if (input.canonicalId) {
-      const known = Object.values(KNOWN).find((item) => item.canonicalId === input.canonicalId);
-      if (known) {
-        return known;
-      }
-      if (!input.name && !input.symbol) {
-        return undefined;
-      }
-      const assetClass =
-        CRYPTO_ASSET_CLASSES.find((item) => item === input.assetClass) ?? "cryptocurrency";
-      return {
-        assetClass,
-        canonicalId: input.canonicalId,
-        symbol: input.symbol,
-        displayName: input.name,
-      };
-    }
-    const key = (input.symbol ?? input.name ?? "").toLowerCase();
-    return KNOWN[key];
+  canonicalizeAsset(input, registry: readonly RegistryAsset[] = []) {
+    return canonicalizeFromRegistry(input, registry);
   },
-  extractAssets(evidence: NormalizedEvidence[]) {
-    const found = new Map<string, ExtractedAsset>();
-    for (const item of evidence) {
-      const haystack = `${item.title ?? ""} ${item.bodyText ?? ""}`;
-      for (const match of haystack.matchAll(TOKEN_RE)) {
-        const key = match[0].toLowerCase();
-        const asset =
-          KNOWN[key] ??
-          (key.includes("meme")
-            ? {
-                assetClass: "meme_coin" as const,
-                canonicalId: "crypto:meme-narrative",
-                displayName: "Meme coins",
-              }
-            : undefined);
-        if (asset) {
-          found.set(asset.canonicalId, asset);
-        }
-      }
-    }
-    return [...found.values()];
+  extractAssets(evidence: NormalizedEvidence[], registry: readonly RegistryAsset[] = []) {
+    return resolveEvidenceAssets(evidence, registry, CRYPTO_RESOLVER_RULES);
   },
-  extractObservations(evidence: NormalizedEvidence[]) {
+  extractObservations(evidence: NormalizedEvidence[], registry: readonly RegistryAsset[] = []) {
     const observations: MarketObservation[] = [];
     for (const item of evidence) {
       const hay = `${item.title ?? ""} ${item.bodyText ?? ""}`;
       const sourceId = item.canonicalUrl ?? item.externalId ?? item.contentHash;
-      const assetCanonicalId = this.extractAssets([item])[0]?.canonicalId;
+      const assetCanonicalId = this.extractAssets([item], registry)[0]?.canonicalId;
       const observedAt = item.publishedAt ?? item.fetchedAt;
       const negated =
         /\b(no|not|without|isn't|is not)\b.{0,24}\b(depeg|hack|exploit|insolvent)/i.test(hay);
@@ -309,7 +230,7 @@ export const cryptoDomainModule: DomainModule = {
     }
     return takeBounded(observations, 20);
   },
-  extractClaims(evidence: NormalizedEvidence[]) {
+  extractClaims(evidence: NormalizedEvidence[], registry: readonly RegistryAsset[] = []) {
     const out: ReturnType<DomainModule["extractClaims"]> = [];
     for (const item of evidence) {
       if (!completeEnough(item)) {
@@ -327,7 +248,7 @@ export const cryptoDomainModule: DomainModule = {
       if (content.trim().length < 40) {
         continue;
       }
-      const assets = this.extractAssets([item]);
+      const assets = this.extractAssets([item], registry);
       const subjectCanonicalId = assets[0]?.canonicalId;
       const timeBucket = (item.publishedAt ?? item.fetchedAt).toISOString().slice(0, 10);
       const negated =
@@ -368,7 +289,7 @@ export const cryptoDomainModule: DomainModule = {
     }
     return takeBounded(out, 32);
   },
-  normalizeClaim(candidate, evidence) {
+  normalizeClaim(candidate, evidence, registry: readonly RegistryAsset[] = []) {
     if (!(CRYPTO_CLAIM_KINDS as readonly string[]).includes(candidate.kind)) {
       return undefined;
     }
@@ -378,7 +299,7 @@ export const cryptoDomainModule: DomainModule = {
     if (weakClaimObject(candidate.objectText ?? candidate.excerpt)) {
       return undefined;
     }
-    const assets = this.extractAssets([evidence]);
+    const assets = this.extractAssets([evidence], registry);
     const subjectCanonicalId = candidate.subjectCanonicalId ?? assets[0]?.canonicalId;
     const timeBucket = (evidence.publishedAt ?? evidence.fetchedAt).toISOString().slice(0, 10);
     const fingerprint = fingerprintClaim({

@@ -10,6 +10,24 @@ export type ExtractedAsset = {
   displayName?: string;
 };
 
+export type AssetRegistryStatus = "active" | "inactive";
+
+export type AssetExternalIds = {
+  coingeckoId?: string;
+  caip19?: string[];
+};
+
+export type RegistryAsset = {
+  assetClass: AssetClass;
+  canonicalId: string;
+  symbol?: string | null;
+  name?: string | null;
+  aliases: readonly string[];
+  externalIds: AssetExternalIds;
+  marketCapRank?: number | null;
+  status: AssetRegistryStatus;
+};
+
 export type MarketObservation = {
   kind: string;
   assetCanonicalId?: string;
@@ -42,18 +60,31 @@ export type DomainModule = {
   assetClasses: AssetClass[];
   claimKinds(): string[];
   sourceQuery(input: { adapterId: string; watchlist: ExtractedAsset[] }): string;
-  canonicalizeAsset(input: {
-    symbol?: string;
-    name?: string;
-    canonicalId?: string;
-    assetClass?: AssetClass;
-  }): ExtractedAsset | undefined;
-  extractAssets(evidence: NormalizedEvidence[]): ExtractedAsset[];
-  extractObservations(evidence: NormalizedEvidence[]): MarketObservation[];
-  extractClaims(evidence: NormalizedEvidence[]): Array<NormalizedClaim & { excerpt?: string }>;
+  canonicalizeAsset(
+    input: {
+      symbol?: string;
+      name?: string;
+      canonicalId?: string;
+      assetClass?: AssetClass;
+    },
+    registry?: readonly RegistryAsset[],
+  ): ExtractedAsset | undefined;
+  extractAssets(
+    evidence: NormalizedEvidence[],
+    registry?: readonly RegistryAsset[],
+  ): ExtractedAsset[];
+  extractObservations(
+    evidence: NormalizedEvidence[],
+    registry?: readonly RegistryAsset[],
+  ): MarketObservation[];
+  extractClaims(
+    evidence: NormalizedEvidence[],
+    registry?: readonly RegistryAsset[],
+  ): Array<NormalizedClaim & { excerpt?: string }>;
   normalizeClaim(
     candidate: ClaimCandidate,
     evidence: NormalizedEvidence,
+    registry?: readonly RegistryAsset[],
   ): NormalizedClaim | undefined;
   claimsCompatible(left: NormalizedClaim, right: NormalizedClaim): boolean;
   assembleContext(input: {

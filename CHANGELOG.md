@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Asset identity is the `assets` registry. Watchlist search and text extraction
+  use CoinGecko’s top-N list (default 1,000) plus aliases and CAIP-19 contract
+  ids. Bare tickers and unknown ids are rejected. See
+  [docs/integrations/coingecko.md](docs/integrations/coingecko.md).
+
 - Discord invite URLs include the Application ID (`client_id`). Discord returns
   Invalid Form Body without it. The Discord source form no longer uses a
   password-manager username/password pair for the bot token and server id.

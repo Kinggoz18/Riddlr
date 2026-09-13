@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "@riddlr/config";
@@ -17,6 +17,7 @@ import {
   agentSources,
   agents,
   aiUsageEvents,
+  assets,
   claimEvidence,
   createDb,
   encryptedSecrets,
@@ -32,19 +33,28 @@ import {
   signals,
   skills,
   users,
+  watchlistItems,
+  watchlists,
   whatsappSessions,
 } from "@riddlr/db";
-import { DomainModuleRegistry } from "@riddlr/domain";
+
+import { DomainModuleRegistry, normalizeEvidence } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
 import { createLogger, createMetrics, snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import { Queue } from "bullmq";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Redis } from "ioredis";
+import postgres from "postgres";
 import { GenericContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { AppContext } from "../src/context.js";
+import {
+  findRegistryAsset,
+  listRegistryAssets,
+  seedAssetRegistry,
+} from "../src/modules/asset-registry.js";
 import { runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
 
@@ -1718,6 +1728,192 @@ describe("setup, auth, and domain persistence", () => {
     expect(sessions.some((row) => row.toE164 === "15551234567")).toBe(true);
     const unused = await ctx.db.select().from(portfolios);
     expect(unused.length).toBeGreaterThan(0);
+  });
+
+  it("backfills aliases onto a pre-0012 assets row", async () => {
+    const databaseUrl = ctx.config.RIDDLR_DATABASE_URL;
+    const admin = postgres(databaseUrl, { max: 1 });
+    await admin.unsafe("CREATE DATABASE riddlr_pre_0012");
+    await admin.end();
+    const migrateUrl = databaseUrl.replace(/\/riddlr$/, "/riddlr_pre_0012");
+    const sql = postgres(migrateUrl, { max: 1 });
+    const dir = join(process.cwd(), "packages/db/drizzle");
+    const files = readdirSync(dir)
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    for (const file of files) {
+      if (file >= "0012_asset_registry.sql") {
+        continue;
+      }
+      const migration = readFileSync(join(dir, file), "utf8")
+        .replace(/^\s*BEGIN\s*;/i, "")
+        .replace(/\bCOMMIT\s*;\s*$/i, "");
+      await sql.begin(async (tx) => {
+        await tx.unsafe(migration);
+      });
+    }
+    await sql.unsafe(`
+      INSERT INTO assets (asset_class, canonical_id, symbol, name)
+      VALUES ('cryptocurrency', 'coingecko:litecoin', 'LTC', 'Litecoin')
+    `);
+    const registryMigration = readFileSync(join(dir, "0012_asset_registry.sql"), "utf8")
+      .replace(/^\s*BEGIN\s*;/i, "")
+      .replace(/\bCOMMIT\s*;\s*$/i, "");
+    await sql.begin(async (tx) => {
+      await tx.unsafe(registryMigration);
+    });
+    const [row] = await sql<
+      {
+        aliases: string[];
+        status: string;
+      }[]
+    >`
+      SELECT aliases, status FROM assets WHERE canonical_id = 'coingecko:litecoin'
+    `;
+    expect(row?.status).toBe("active");
+    expect(row?.aliases).toEqual(expect.arrayContaining(["ltc", "litecoin", "$ltc"]));
+    await sql.end();
+  });
+
+  it("seeds the CoinGecko registry from fixtures and resolves a seeded watchlist asset", async () => {
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/coingecko");
+    const markets = JSON.parse(
+      readFileSync(join(fixtures, "markets-page1.json"), "utf8"),
+    ) as unknown;
+    const list = JSON.parse(
+      readFileSync(join(fixtures, "coins-list-truncated.json"), "utf8"),
+    ) as unknown;
+    const fetchImpl: typeof fetch = async (input) => {
+      const href = String(input);
+      if (href.includes("/coins/markets")) {
+        return Response.json(markets);
+      }
+      if (href.includes("/coins/list")) {
+        return Response.json(list);
+      }
+      return new Response("not found", { status: 404 });
+    };
+
+    const unauth = await app.inject({ method: "GET", url: "/api/v1/assets?q=sol" });
+    expect(unauth.statusCode).toBe(401);
+
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/v1/assets?q=solana",
+      headers: { cookie },
+    });
+    expect(bootstrap.statusCode).toBe(200);
+    expect(
+      (bootstrap.json().assets as Array<{ canonicalId: string }>).some(
+        (item) => item.canonicalId === "coingecko:solana",
+      ),
+    ).toBe(true);
+
+    await ctx.db.insert(assets).values([
+      {
+        assetClass: "cryptocurrency",
+        canonicalId: "coingecko:litecoin",
+        symbol: "LTC",
+        name: "Litecoin",
+        aliases: ["ltc", "litecoin"],
+        status: "active",
+      },
+      {
+        assetClass: "cryptocurrency",
+        canonicalId: "coingecko:pepe",
+        symbol: "PEPE",
+        name: "Pepe",
+        aliases: ["pepe"],
+        status: "active",
+      },
+    ]);
+    const [watchlist] = await ctx.db.select().from(watchlists).limit(1);
+    expect(watchlist).toBeDefined();
+    await ctx.db.insert(watchlistItems).values({
+      watchlistId: watchlist?.id as string,
+      assetClass: "cryptocurrency",
+      canonicalId: "coingecko:pepe",
+      symbol: "PEPE",
+      name: "Pepe",
+    });
+
+    const started = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const first = seedAssetRegistry(ctx, async (input) => {
+      started.resolve();
+      await gate.promise;
+      return fetchImpl(input);
+    });
+    await started.promise;
+    const locked = await seedAssetRegistry(ctx, fetchImpl);
+    expect(locked.upserted).toBe(0);
+    gate.resolve();
+    const seeded = await first;
+    expect(seeded.error).toBeUndefined();
+    expect(seeded.upserted).toBeGreaterThan(0);
+
+    const limited = await seedAssetRegistry(
+      ctx,
+      async () => new Response("rate limited", { status: 429 }),
+    );
+    expect(limited.error).toContain("rate_limited");
+
+    expect((await findRegistryAsset(ctx, "coingecko:litecoin"))?.status).toBe("inactive");
+    expect((await findRegistryAsset(ctx, "coingecko:pepe"))?.status).toBe("active");
+
+    const search = await app.inject({
+      method: "GET",
+      url: "/api/v1/assets?q=zcash",
+      headers: { cookie },
+    });
+    expect(search.statusCode).toBe(200);
+    expect(
+      (search.json().assets as Array<{ canonicalId: string }>).map((item) => item.canonicalId),
+    ).toContain("coingecko:zcash");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "Zcash watcher",
+        marketDomainIds: ["crypto"],
+        watchlistItems: [{ canonicalId: "coingecko:zcash" }],
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(
+      (created.json().agent.watchlist.items as Array<{ canonicalId: string }>).map(
+        (item) => item.canonicalId,
+      ),
+    ).toEqual(["coingecko:zcash"]);
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "Unknown coin watcher",
+        marketDomainIds: ["crypto"],
+        watchlistItems: [{ canonicalId: "coingecko:not-a-listed-coin" }],
+      },
+    });
+    expect(unknown.statusCode).toBe(400);
+
+    const registry = await listRegistryAssets(ctx);
+    const extracted = cryptoDomainModule.extractAssets(
+      [
+        normalizeEvidence({
+          sourceFamily: "search",
+          adapterId: "searxng",
+          title: "Zcash validators halted",
+          bodyText: "ZEC halted after the upgrade.",
+          fetchedAt: new Date("2026-09-13T00:00:00Z"),
+        }),
+      ],
+      registry,
+    );
+    expect(extracted.map((item) => item.canonicalId)).toEqual(["coingecko:zcash"]);
   });
 
   it("invalidates unused sibling password-reset tokens", async () => {

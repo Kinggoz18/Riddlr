@@ -55,6 +55,8 @@ const envSchema = z.object({
     .min(MIN_DAILY_TOKEN_BUDGET)
     .max(MAX_DAILY_TOKEN_BUDGET)
     .default(DEFAULT_DAILY_TOKEN_BUDGET),
+  RIDDLR_REGISTRY_TOP_N: z.coerce.number().int().min(1).max(2000).default(1000),
+  RIDDLR_REGISTRY_SEED_INTERVAL_HOURS: z.coerce.number().int().min(6).max(168).default(24),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & {

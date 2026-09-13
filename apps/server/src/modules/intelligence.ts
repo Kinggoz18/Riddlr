@@ -39,6 +39,7 @@ import { createAnthropicCompatibleProvider, createOpenAiCompatibleProvider } fro
 import { enrichPublicDocument } from "@riddlr/source-adapters";
 import { and, eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { listRegistryAssets } from "./asset-registry.js";
 
 export async function upsertSourceIdentity(
   ctx: AppContext,
@@ -176,6 +177,7 @@ export async function enrichAndUnderstandScan(input: {
   windowStart?: Date;
 }): Promise<void> {
   const { ctx, module, fetchImpl } = input;
+  const registry = await listRegistryAssets(ctx);
   const blocked = (await ctx.db.select().from(publisherHostPolicies).limit(64))
     .filter((row) => row.blocked)
     .map((item) => item.hostname);
@@ -296,7 +298,7 @@ export async function enrichAndUnderstandScan(input: {
       .from(evidenceItems)
       .where(eq(evidenceItems.id, original.id))
       .limit(1);
-    await persistClaimsForEvidence(ctx, module, row ?? original, fetchImpl);
+    await persistClaimsForEvidence(ctx, module, row ?? original, fetchImpl, registry);
   }
 }
 
@@ -304,7 +306,8 @@ async function persistClaimsForEvidence(
   ctx: AppContext,
   module: DomainModule,
   row: typeof evidenceItems.$inferSelect,
-  fetchImpl?: typeof fetch,
+  fetchImpl: typeof fetch | undefined,
+  registry: Awaited<ReturnType<typeof listRegistryAssets>>,
 ) {
   const payload = row.adapterPayload ?? {};
   const outboundUrls = Array.isArray(payload.outboundUrls)
@@ -329,7 +332,7 @@ async function persistClaimsForEvidence(
     originKey: row.originKey ?? undefined,
     outboundUrls,
   };
-  let extracted = module.extractClaims([normalized]);
+  let extracted = module.extractClaims([normalized], registry);
   let attributedToOtherOrigin = false;
   let retracting = false;
   if (
@@ -345,7 +348,7 @@ async function persistClaimsForEvidence(
     ) &&
     !headlineBodyMismatch(row.title ?? undefined, row.bodyText ?? "")
   ) {
-    const understood = await understandEvidence(ctx, module, row, normalized, fetchImpl);
+    const understood = await understandEvidence(ctx, module, row, normalized, fetchImpl, registry);
     extracted = understood.claims;
     attributedToOtherOrigin = understood.attributedToOtherOrigin;
     retracting = understood.retracting;
@@ -424,7 +427,8 @@ async function understandEvidence(
   module: DomainModule,
   row: typeof evidenceItems.$inferSelect,
   normalized: NormalizedEvidence,
-  fetchImpl?: typeof fetch,
+  fetchImpl: typeof fetch | undefined,
+  registry: Awaited<ReturnType<typeof listRegistryAssets>>,
 ): Promise<{
   claims: ReturnType<DomainModule["extractClaims"]>;
   attributedToOtherOrigin: boolean;
@@ -474,7 +478,7 @@ async function understandEvidence(
     }
     return {
       claims: parsed.claims
-        .map((candidate) => module.normalizeClaim(candidate, normalized))
+        .map((candidate) => module.normalizeClaim(candidate, normalized, registry))
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
         .map((item) => ({
           ...item,

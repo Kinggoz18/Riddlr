@@ -59,12 +59,15 @@ export {
   nextEventStatus,
 } from "./discovery.js";
 export {
+  type AssetExternalIds,
+  type AssetRegistryStatus,
   type DomainContext,
   type DomainModule,
   DomainModuleRegistry,
   type ExtractedAsset,
   type ImpactInput,
   type MarketObservation,
+  type RegistryAsset,
 } from "./domain-module.js";
 export {
   classifyPageHeuristic,
@@ -104,19 +107,31 @@ export {
   preferEvidenceTitle,
 } from "./html-extract.js";
 export {
+  COINGECKO_MARKETS_PER_PAGE,
   clampPageSize,
   clampPositiveInt,
   DEFAULT_ANALYSIS_EVIDENCE_LIMIT,
   DEFAULT_PAGE_SIZE,
+  DEFAULT_REGISTRY_SEED_INTERVAL_HOURS,
+  DEFAULT_REGISTRY_TOP_N,
   DEFAULT_SCAN_EVIDENCE_LIMIT,
   DEFAULT_SCAN_SOURCE_LIMIT,
   DEFAULT_WORKER_CONCURRENCY,
+  MAX_ALIASES_PER_ASSET,
+  MAX_ASSET_SEARCH_RESULTS,
+  MAX_ASSETS_PER_DOCUMENT,
+  MAX_CAIP19_PER_ASSET,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_PAGE_SIZE,
   MAX_PORTFOLIO_HOLDINGS,
   MAX_PORTFOLIO_WALLETS,
   MAX_PORTFOLIOS,
+  MAX_REGISTRY_ASSETS,
+  MAX_REGISTRY_LIST_BYTES,
+  MAX_REGISTRY_MARKETS_PAGES,
+  MAX_REGISTRY_SEED_INTERVAL_HOURS,
+  MAX_REGISTRY_TOP_N,
   MAX_WORKER_CONCURRENCY,
   parsePageCursor,
   takeBounded,
@@ -181,6 +196,17 @@ export {
   type TrustUse,
   uniqueKeys,
 } from "./reliability.js";
+export {
+  aliasesForAsset,
+  canonicalizeFromRegistry,
+  escapeIlike,
+  normalizeAlias,
+  type ResolverRules,
+  resolveAssetsInText,
+  resolveEvidenceAssets,
+  searchRegistry,
+  toExtractedAsset,
+} from "./resolve.js";
 export {
   AGENT_KINDS,
   AGENT_SCHEDULES,

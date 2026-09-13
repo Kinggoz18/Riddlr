@@ -1,6 +1,7 @@
 import { DEFAULT_DAILY_TOKEN_BUDGET as domainDefault } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import {
+  assetLabel,
   auditActionLabel,
   auditResourceLabel,
   candidateKindLabel,
@@ -65,5 +66,12 @@ describe("agent labels", () => {
     expect(epistemicStatusLabel("observed")).toBe("Observed");
     expect(epistemicStatusLabel("confirmed")).toBe("Confirmed");
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
+  });
+});
+
+describe("asset display fallback", () => {
+  it("labels catalog ids and falls back to the slug for unknown registry ids", () => {
+    expect(assetLabel("coingecko:bitcoin")).toBe("Bitcoin · BTC");
+    expect(assetLabel("coingecko:zcash")).toBe("zcash");
   });
 });

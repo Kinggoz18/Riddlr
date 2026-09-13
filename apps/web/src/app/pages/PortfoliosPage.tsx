@@ -463,7 +463,7 @@ function PortfolioEdit() {
             }
           }}
         >
-          <Field label="Holding" hint="Pick one named asset.">
+          <Field label="Holding" hint="Search the registry for one named asset.">
             <AssetPicker
               id="canonical-id"
               values={canonicalIds}

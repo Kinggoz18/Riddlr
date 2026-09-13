@@ -36,6 +36,7 @@ import {
 import { and, count, desc, eq, inArray, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import { findRegistryAsset } from "./asset-registry.js";
 import { loadEnabledMarketQuotes } from "./market-sources.js";
 
 export function registerPortfolioRoutes(
@@ -166,6 +167,24 @@ export function registerPortfolioRoutes(
         },
       });
     }
+    const found = await findRegistryAsset(ctx, body.canonicalId.trim().toLowerCase());
+    const resolved = ctx.domains.require("crypto").canonicalizeAsset(
+      {
+        canonicalId: body.canonicalId,
+        symbol: body.symbol,
+        name: body.name,
+        assetClass: body.assetClass,
+      },
+      found && found.status === "active" ? [found] : [],
+    );
+    if (!resolved) {
+      return reply.code(400).send({
+        error: {
+          code: "invalid_canonical_id",
+          message: `Unknown asset ${body.canonicalId}.`,
+        },
+      });
+    }
     const [{ value: existing } = { value: 0 }] = await ctx.db
       .select({ value: count() })
       .from(portfolioHoldings)
@@ -182,11 +201,11 @@ export function registerPortfolioRoutes(
       .insert(portfolioHoldings)
       .values({
         portfolioId: id,
-        assetClass: body.assetClass ?? "cryptocurrency",
-        canonicalId: body.canonicalId,
+        assetClass: resolved.assetClass,
+        canonicalId: resolved.canonicalId,
         quantity: body.quantity,
-        symbol: body.symbol,
-        name: body.name,
+        symbol: resolved.symbol ?? body.symbol,
+        name: resolved.displayName ?? body.name,
       })
       .onConflictDoNothing()
       .returning();

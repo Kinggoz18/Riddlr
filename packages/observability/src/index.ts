@@ -81,6 +81,12 @@ export function createMetrics() {
     labelNames: ["kind"],
     registers: [register],
   });
+  const registrySeeds = new Counter({
+    name: "riddlr_registry_seeds_total",
+    help: "Asset registry seed outcomes",
+    labelNames: ["result"],
+    registers: [register],
+  });
   return {
     register,
     httpDuration,
@@ -92,6 +98,7 @@ export function createMetrics() {
     enrichmentOutcomes,
     claims,
     notifications,
+    registrySeeds,
   };
 }
 

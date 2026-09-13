@@ -1,0 +1,122 @@
+[
+  {
+    "id": "bitcoin",
+    "symbol": "btc",
+    "name": "Bitcoin",
+    "image": "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png?1696501400",
+    "current_price": 77301,
+    "market_cap": 1552357998317,
+    "market_cap_rank": 1,
+    "total_volume": 16016246944,
+    "price_change_percentage_24h": -0.0943,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "ethereum",
+    "symbol": "eth",
+    "name": "Ethereum",
+    "image": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628",
+    "current_price": 2506.22,
+    "market_cap": 305801190989,
+    "market_cap_rank": 2,
+    "total_volume": 8952517575,
+    "price_change_percentage_24h": -1.01878,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "tether",
+    "symbol": "usdt",
+    "name": "Tether",
+    "image": "https://coin-images.coingecko.com/coins/images/325/large/Tether.png?1696501661",
+    "current_price": 0.999749,
+    "market_cap": 183471173682,
+    "market_cap_rank": 3,
+    "total_volume": 32701745276,
+    "price_change_percentage_24h": -0.00854,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "binancecoin",
+    "symbol": "bnb",
+    "name": "BNB",
+    "image": "https://coin-images.coingecko.com/coins/images/825/large/bnb-icon2_2x.png?1696501970",
+    "current_price": 721.11,
+    "market_cap": 96024387228,
+    "market_cap_rank": 4,
+    "total_volume": 713103273,
+    "price_change_percentage_24h": -1.47718,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "ripple",
+    "symbol": "xrp",
+    "name": "XRP",
+    "image": "https://coin-images.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png?1696501442",
+    "current_price": 1.35,
+    "market_cap": 85036312099,
+    "market_cap_rank": 5,
+    "total_volume": 941321531,
+    "price_change_percentage_24h": -1.22301,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "usd-coin",
+    "symbol": "usdc",
+    "name": "USDC",
+    "image": "https://coin-images.coingecko.com/coins/images/6319/large/USDC.png?1769615602",
+    "current_price": 0.999864,
+    "market_cap": 74223414091,
+    "market_cap_rank": 6,
+    "total_volume": 6742324513,
+    "price_change_percentage_24h": -0.00206,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "solana",
+    "symbol": "sol",
+    "name": "Solana",
+    "image": "https://coin-images.coingecko.com/coins/images/4128/large/solana.png?1718769756",
+    "current_price": 100.89,
+    "market_cap": 59181872848,
+    "market_cap_rank": 7,
+    "total_volume": 1846057603,
+    "price_change_percentage_24h": -1.16197,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "tron",
+    "symbol": "trx",
+    "name": "TRON",
+    "image": "https://coin-images.coingecko.com/coins/images/1094/large/photo_2026-04-13_09-59-16.png?1776048311",
+    "current_price": 0.34098,
+    "market_cap": 32375314874,
+    "market_cap_rank": 8,
+    "total_volume": 313803049,
+    "price_change_percentage_24h": 0.1908,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  },
+  {
+    "id": "figure-heloc",
+    "symbol": "figr_heloc",
+    "name": "Figure Heloc",
+    "image": "https://coin-images.coingecko.com/coins/images/68480/large/figure.png?1755863954",
+    "current_price": 1.0,
+    "market_cap": 22551817529,
+    "market_cap_rank": 9,
+    "total_volume": 50043,
+    "price_change_percentage_24h": -0.63555,
+    "last_updated": "2026-09-13T01:20:10.000Z"
+  },
+  {
+    "id": "zcash",
+    "symbol": "zec",
+    "name": "Zcash",
+    "image": "https://coin-images.coingecko.com/coins/images/486/large/Brandmark-Yellow_%281%29.png?1785810558",
+    "current_price": 1112.47,
+    "market_cap": 18792893558,
+    "market_cap_rank": 9,
+    "total_volume": 1223260490,
+    "price_change_percentage_24h": -2.42567,
+    "last_updated": "2026-09-13T17:05:10.000Z"
+  }
+]

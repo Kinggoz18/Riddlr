@@ -69,6 +69,131 @@ export function parseCoinGeckoMarkets(payload: unknown, fetchedAt: Date): FetchR
   return { evidence, partial: false, errors: [], unresponsiveEngines: [] };
 }
 
+export type CoinGeckoRegistryMarket = {
+  id: string;
+  symbol: string;
+  name: string;
+  marketCapRank: number | null;
+};
+
+export type CoinGeckoRegistryListItem = {
+  id: string;
+  symbol: string;
+  name: string;
+  platforms: Record<string, string>;
+};
+
+export type CoinGeckoRegistryJoin = {
+  id: string;
+  symbol: string;
+  name: string;
+  marketCapRank: number | null;
+  platforms: Record<string, string>;
+};
+
+function asRecord(item: unknown): Record<string, unknown> | undefined {
+  return item && typeof item === "object" ? (item as Record<string, unknown>) : undefined;
+}
+
+export function parseCoinGeckoRegistryMarkets(payload: unknown): {
+  rows: CoinGeckoRegistryMarket[];
+  skipped: number;
+  error?: { class: "malformed"; message: string };
+} {
+  if (!Array.isArray(payload)) {
+    return {
+      rows: [],
+      skipped: 0,
+      error: { class: "malformed", message: "CoinGecko markets payload was not an array." },
+    };
+  }
+  const rows: CoinGeckoRegistryMarket[] = [];
+  let skipped = 0;
+  for (const item of payload) {
+    const row = asRecord(item);
+    const id = typeof row?.id === "string" ? row.id : undefined;
+    if (!row || !id) {
+      skipped += 1;
+      continue;
+    }
+    rows.push({
+      id,
+      symbol: typeof row.symbol === "string" ? row.symbol : "",
+      name: typeof row.name === "string" ? row.name : id,
+      marketCapRank: typeof row.market_cap_rank === "number" ? row.market_cap_rank : null,
+    });
+  }
+  return { rows, skipped };
+}
+
+export function parseCoinGeckoRegistryList(payload: unknown): {
+  rows: CoinGeckoRegistryListItem[];
+  skipped: number;
+  error?: { class: "malformed"; message: string };
+} {
+  if (!Array.isArray(payload)) {
+    return {
+      rows: [],
+      skipped: 0,
+      error: { class: "malformed", message: "CoinGecko coins list payload was not an array." },
+    };
+  }
+  const rows: CoinGeckoRegistryListItem[] = [];
+  let skipped = 0;
+  for (const item of payload) {
+    const row = asRecord(item);
+    const id = typeof row?.id === "string" ? row.id : undefined;
+    if (!row || !id) {
+      skipped += 1;
+      continue;
+    }
+    const platforms: Record<string, string> = {};
+    const raw = asRecord(row.platforms) ?? {};
+    for (const [platform, address] of Object.entries(raw)) {
+      if (typeof address === "string" && address) {
+        platforms[platform] = address;
+      }
+    }
+    rows.push({
+      id,
+      symbol: typeof row.symbol === "string" ? row.symbol : "",
+      name: typeof row.name === "string" ? row.name : id,
+      platforms,
+    });
+  }
+  return { rows, skipped };
+}
+
+export function joinCoinGeckoRegistry(
+  markets: CoinGeckoRegistryMarket[],
+  list: CoinGeckoRegistryListItem[],
+  topN: number,
+): CoinGeckoRegistryJoin[] {
+  const ranked = [...markets].sort((left, right) => {
+    const leftRank = left.marketCapRank ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = right.marketCapRank ?? Number.MAX_SAFE_INTEGER;
+    return leftRank - rightRank;
+  });
+  const unique: CoinGeckoRegistryMarket[] = [];
+  const seen = new Set<string>();
+  for (const row of ranked) {
+    if (seen.has(row.id)) {
+      continue;
+    }
+    seen.add(row.id);
+    unique.push(row);
+  }
+  const kept = takeBounded(unique, topN);
+  const platformsById = new Map(list.map((item) => [item.id, item.platforms]));
+  return kept.map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    name: row.name,
+    marketCapRank: row.marketCapRank,
+    platforms: platformsById.get(row.id) ?? {},
+  }));
+}
+
 export function createCoinGeckoAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
   return {
     id: "coingecko",

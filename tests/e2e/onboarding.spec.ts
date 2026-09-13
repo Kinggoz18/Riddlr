@@ -99,7 +99,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
     await page.getByRole("link", { name: "Create agent" }).click();
     await page.getByLabel("Agent name").fill("Watchlist agent");
     await page.getByLabel("Description").fill("Watches Bitcoin for material events.");
-    await page.getByRole("button", { name: "Bitcoin" }).click();
+    await page.getByLabel("Watchlist").fill("Bitcoin");
+    await page.getByRole("option", { name: /Bitcoin/ }).click();
     await page.getByRole("button", { name: "Create agent" }).click();
   }
   await expect(

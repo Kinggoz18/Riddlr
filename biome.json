@@ -12,6 +12,7 @@
       "!**/node_modules",
       "!**/coverage",
       "!**/packages/db/drizzle",
+      "!**/packages/source-adapters/test/fixtures",
       "!**/pnpm-lock.yaml",
       "!**/.pnpm-store"
     ]
