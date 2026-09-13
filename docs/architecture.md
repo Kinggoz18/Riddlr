@@ -6,10 +6,10 @@ is ephemeral infrastructure. The LLM is a read-only analyst.
 ## Data path
 
 ```
-Source → Evidence → Entity / Asset / Instrument → Event
-  → Discovery (candidate) → Market context (domain provider)
-  → skill routing → Analysis (material events)
-  → Validated signal → signal gate → Dashboard / notification policy
+Source → Evidence mention → Document (eligible web) → Claims
+  → Event (claim-aware cluster) → Reliability + domain impact
+  → Analysis (material events) → Validated signal or unverified early warning
+  → Dashboard / notification policy
 ```
 
 ## Process split
@@ -18,6 +18,8 @@ Source → Evidence → Entity / Asset / Instrument → Event
 - `apps/server` `cmd/api` — Fastify HTTP
 - `apps/server` `cmd/worker` — BullMQ processors
 - `apps/server` `cmd/onboard` — host first-run (same four steps as the browser)
+- `apps/server` `cmd/reset-password` — print a one-hour password-reset URL when
+  email is not configured
 
 The API does not run scans in-process.
 
@@ -35,7 +37,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0019](adr/0019-read-only-portfolios.md),
 [ADR 0020](adr/0020-skill-composition.md),
 [ADR 0021](adr/0021-discovery-candidates.md), and
-[ADR 0022](adr/0022-first-run-access.md).
+[ADR 0022](adr/0022-first-run-access.md), and
+[ADR 0023](adr/0023-claim-corroboration.md).
 
 ## Trust boundaries
 

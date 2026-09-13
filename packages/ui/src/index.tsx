@@ -135,11 +135,13 @@ export function EmptyState(props: {
 
 export function StatusBadge(props: { label: string; tone?: "ok" | "soon" | "danger" | "risk" }) {
   const tone =
-    props.tone === "soon"
-      ? "soon"
-      : props.tone === "danger" || props.tone === "risk"
-        ? "danger"
-        : "";
+    props.tone === "ok"
+      ? "ok"
+      : props.tone === "soon"
+        ? "soon"
+        : props.tone === "danger" || props.tone === "risk"
+          ? "danger"
+          : "";
   return <span className={`badge${tone ? ` ${tone}` : ""}`}>{props.label}</span>;
 }
 

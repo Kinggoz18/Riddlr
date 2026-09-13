@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicationIdFromBotToken,
   createDiscordAdapter,
   DISCORD_BOT_PERMISSIONS,
   DISCORD_READ_MESSAGE_HISTORY,
   DISCORD_VIEW_CHANNEL,
+  discordBotInviteUrl,
   parseDiscordMessages,
   snowflakeFromDate,
 } from "./discord.js";
@@ -47,7 +49,8 @@ describe("Discord official REST adapter", () => {
       fetchedAt,
       {},
     );
-    expect(parsed.evidence).toHaveLength(0);
+    expect(parsed.evidence).toHaveLength(1);
+    expect(parsed.evidence[0]?.contentCompleteness).toBe("incomplete");
     expect(parsed.errors[0]?.class).toBe("capability_missing");
     expect(parsed.errors[0]?.message).toMatch(/MESSAGE_CONTENT/);
   });
@@ -68,6 +71,17 @@ describe("Discord official REST adapter", () => {
     expect(adapter.capabilities.lookbackNotes).toMatch(/not guild message-search archive/);
     expect(DISCORD_BOT_PERMISSIONS).toBe(DISCORD_VIEW_CHANNEL | DISCORD_READ_MESSAGE_HISTORY);
     expect(DISCORD_BOT_PERMISSIONS & (1 << 3)).toBe(0);
+  });
+
+  it("builds an invite URL only with a snowflake client_id", () => {
+    expect(discordBotInviteUrl("123456789012345678")).toBe(
+      "https://discord.com/oauth2/authorize?client_id=123456789012345678&permissions=66560&scope=bot",
+    );
+    expect(() => discordBotInviteUrl("")).toThrow(/snowflake/);
+    const applicationId = "123456789012345678";
+    const prefix = Buffer.from(applicationId, "utf8").toString("base64").replace(/=+$/, "");
+    expect(applicationIdFromBotToken(`${prefix}.timestamp.hmac`)).toBe(applicationId);
+    expect(applicationIdFromBotToken("not-a-bot-token")).toBeUndefined();
   });
 
   it("encodes lookback as a Discord snowflake after id", () => {

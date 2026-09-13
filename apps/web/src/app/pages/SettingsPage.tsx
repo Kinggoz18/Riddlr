@@ -48,14 +48,28 @@ function SettingsSubnav() {
 function SettingsPage() {
   const [data, setData] = useState<{
     llmConfigured: boolean;
+    llm?: {
+      configured: boolean;
+      provider?: string;
+      baseUrl?: string;
+      model?: string;
+    };
     telegramConfigured: boolean;
     whatsappConfigured?: boolean;
     notificationPolicy?: {
       minRisk: string;
       cooldownMinutes: number;
       quietHours?: { startHour: number; endHour: number };
+      earlyWarnings?: boolean;
+      shadowAssessments?: boolean;
     };
     totpEnabled?: boolean;
+    email?: {
+      configured: boolean;
+      transport: "resend" | "smtp" | "none";
+      from: string;
+      resendSaved?: boolean;
+    };
     encryption: { alg: string; keyVersion: number; previousKeyConfigured: boolean };
     sessionPolicy?: { absoluteHours: number; idleMinutes: number; maxSessions: number };
   }>();
@@ -80,6 +94,8 @@ function SettingsPage() {
   const [cooldownMinutes, setCooldownMinutes] = useState("30");
   const [quietStart, setQuietStart] = useState("");
   const [quietEnd, setQuietEnd] = useState("");
+  const [earlyWarnings, setEarlyWarnings] = useState(false);
+  const [shadowAssessments, setShadowAssessments] = useState(false);
   const [llmProvider, setLlmProvider] = useState("openai_compatible");
   const [llmBaseUrl, setLlmBaseUrl] = useState("https://api.openai.com");
   const [llmModel, setLlmModel] = useState("gpt-4.1-mini");
@@ -93,6 +109,8 @@ function SettingsPage() {
   const [verifyToken, setVerifyToken] = useState("");
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChat, setTelegramChat] = useState("");
+  const [resendKey, setResendKey] = useState("");
+  const [emailFrom, setEmailFrom] = useState("");
   const [confirmClearAudit, setConfirmClearAudit] = useState(false);
 
   async function refresh() {
@@ -103,6 +121,17 @@ function SettingsPage() {
       api<{ audit: AuditRow[] }>("/api/v1/audit?limit=20"),
     ]);
     setData(settings);
+    if (settings.llm?.configured) {
+      if (settings.llm.provider) {
+        setLlmProvider(settings.llm.provider);
+      }
+      if (settings.llm.baseUrl) {
+        setLlmBaseUrl(settings.llm.baseUrl);
+      }
+      if (settings.llm.model) {
+        setLlmModel(settings.llm.model);
+      }
+    }
     setSessions(sessionBody.sessions);
     setRemaining(recovery.remaining);
     setAudit(auditBody.audit);
@@ -120,6 +149,11 @@ function SettingsPage() {
           ? formatClockHour(String(settings.notificationPolicy.quietHours.endHour))
           : "",
       );
+      setEarlyWarnings(Boolean(settings.notificationPolicy.earlyWarnings));
+      setShadowAssessments(Boolean(settings.notificationPolicy.shadowAssessments));
+    }
+    if (settings.email?.from) {
+      setEmailFrom(settings.email.from);
     }
   }
 
@@ -144,21 +178,33 @@ function SettingsPage() {
       />
       <SettingsSubnav />
       <section className="config-strip" aria-label="Configuration status">
-        <span>
+        <span className={data?.llmConfigured ? "config-chip-ok" : "config-chip-off"}>
           Model
-          <StatusBadge label={data?.llmConfigured ? "Connected" : "Missing"} />
+          <StatusBadge
+            label={data?.llmConfigured ? "Connected" : "Missing"}
+            tone={data?.llmConfigured ? "ok" : "danger"}
+          />
         </span>
-        <span>
+        <span className={data?.telegramConfigured ? "config-chip-ok" : "config-chip-off"}>
           Telegram
-          <StatusBadge label={data?.telegramConfigured ? "Connected" : "Off"} />
+          <StatusBadge
+            label={data?.telegramConfigured ? "Connected" : "Off"}
+            tone={data?.telegramConfigured ? "ok" : "danger"}
+          />
         </span>
-        <span>
+        <span className={data?.whatsappConfigured ? "config-chip-ok" : "config-chip-off"}>
           WhatsApp
-          <StatusBadge label={data?.whatsappConfigured ? "Connected" : "Off"} />
+          <StatusBadge
+            label={data?.whatsappConfigured ? "Connected" : "Off"}
+            tone={data?.whatsappConfigured ? "ok" : "danger"}
+          />
         </span>
-        <span>
+        <span className={data?.totpEnabled ? "config-chip-ok" : "config-chip-off"}>
           Authenticator
-          <StatusBadge label={data?.totpEnabled ? "On" : "Off"} />
+          <StatusBadge
+            label={data?.totpEnabled ? "On" : "Off"}
+            tone={data?.totpEnabled ? "ok" : "danger"}
+          />
         </span>
         <span>
           Encryption
@@ -174,7 +220,7 @@ function SettingsPage() {
               <h2>Model</h2>
               <p className="field-note">
                 {data?.llmConfigured
-                  ? "A provider is connected. Saving a new key replaces it."
+                  ? "A provider is connected. Provider, base URL, and model are shown. The API key is never returned. Saving a new key replaces it."
                   : "Required for analysis. Scans still collect evidence without a model."}
               </p>
               <form
@@ -208,7 +254,10 @@ function SettingsPage() {
                     <option value="anthropic_compatible">Anthropic-compatible</option>
                   </select>
                 </Field>
-                <Field label="Base URL">
+                <Field
+                  label="Base URL"
+                  hint="https://api.openai.com, https://openrouter.ai/api/v1, or the full /chat/completions URL."
+                >
                   <input
                     id="settings-base-url"
                     type="url"
@@ -450,6 +499,98 @@ function SettingsPage() {
                   <Button type="submit">Update password</Button>
                 </form>
               </Card>
+
+              <Card>
+                <h2>Email</h2>
+                <p className="field-note">
+                  Password reset and security mail. Local Compose uses Mailpit at /mailpit. A public
+                  instance needs Resend here or RIDDLR_RESEND_API_KEY. Configure this while you can
+                  still sign in. Authenticator recovery codes work without email. If both are
+                  missing, print a reset link on the host with{" "}
+                  <code>
+                    docker compose exec -T api node apps/server/dist/cmd/reset-password.js
+                  </code>
+                  .
+                </p>
+                {data?.email?.configured ? (
+                  <StatusBadge
+                    label={
+                      data.email.transport === "smtp"
+                        ? "SMTP / Mailpit"
+                        : data.email.transport === "resend"
+                          ? "Resend"
+                          : "Connected"
+                    }
+                  />
+                ) : (
+                  <StatusBadge label="Not configured" tone="danger" />
+                )}
+                <form
+                  autoComplete="off"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/settings/email", {
+                        method: "POST",
+                        body: JSON.stringify({ apiKey: resendKey, from: emailFrom }),
+                      });
+                      setResendKey("");
+                      await refresh();
+                      toast("Email saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save email"), "danger");
+                    }
+                  }}
+                >
+                  <Field
+                    label="Resend API key"
+                    hint="Stored encrypted. Never shown again. Replaces the previous key."
+                  >
+                    <input
+                      id="resend-api-key"
+                      name="resend-api-key"
+                      type="password"
+                      autoComplete="new-password"
+                      value={resendKey}
+                      onChange={(e) => setResendKey(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label="From address"
+                    hint="A verified Resend sender, for example Riddlr <alerts@example.com>."
+                  >
+                    <input
+                      id="resend-from-address"
+                      name="resend-from-address"
+                      autoComplete="off"
+                      value={emailFrom}
+                      onChange={(e) => setEmailFrom(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <p className="ui-actions">
+                    <Button type="submit">Save Resend</Button>
+                    {data?.email?.resendSaved ? (
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          try {
+                            await api("/api/v1/settings/email", { method: "DELETE" });
+                            setResendKey("");
+                            await refresh();
+                            toast("Resend removed");
+                          } catch (err) {
+                            toast(toastFail(err, "Couldn’t remove Resend"), "danger");
+                          }
+                        }}
+                      >
+                        Remove Resend
+                      </Button>
+                    ) : null}
+                  </p>
+                </form>
+              </Card>
             </>
           }
         />
@@ -475,6 +616,8 @@ function SettingsPage() {
                               ? { startHour, endHour }
                               : undefined;
                           })(),
+                          earlyWarnings,
+                          shadowAssessments,
                         }),
                       });
                       await refresh();
@@ -539,6 +682,32 @@ function SettingsPage() {
                       />
                     </Field>
                   </div>
+                  <label className="check-row" htmlFor="early-warnings">
+                    <input
+                      id="early-warnings"
+                      type="checkbox"
+                      checked={earlyWarnings}
+                      onChange={(e) => setEarlyWarnings(e.target.checked)}
+                    />
+                    Unverified early warnings
+                  </label>
+                  <p className="field-note">
+                    Notify high-impact operator-trusted firsthand reports before independent
+                    corroboration. They stay labelled unverified.
+                  </p>
+                  <label className="check-row" htmlFor="shadow-assessments">
+                    <input
+                      id="shadow-assessments"
+                      type="checkbox"
+                      checked={shadowAssessments}
+                      onChange={(e) => setShadowAssessments(e.target.checked)}
+                    />
+                    Shadow assessments
+                  </label>
+                  <p className="field-note">
+                    Persist reliability and impact without sending notifications. Use this while
+                    comparing the new corroboration path.
+                  </p>
                   <Button type="submit">Save notification policy</Button>
                 </form>
               </Card>

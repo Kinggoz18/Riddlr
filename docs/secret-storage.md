@@ -13,5 +13,7 @@ Provider credentials and TOTP secrets are encrypted before insert.
   `POST /api/v1/settings/encryption/rotate` (password, plus TOTP if enabled)
   re-encrypts secrets in batches of 50 and increments the version.
 
-The API never returns ciphertext contents. Settings show `configured`,
-algorithm, and key version only. Logs redact secret fields.
+The API never returns ciphertext or stored API keys. Settings show the LLM
+provider, base URL, and model, plus encryption `configured`, algorithm, and
+key version. Email settings show the From address and whether Resend or SMTP
+is configured, never the Resend API key. Logs redact secret fields.

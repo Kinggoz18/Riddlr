@@ -10,7 +10,7 @@ function SignalDetailPage() {
     signal: {
       headline: string;
       whyItMatters: string;
-      proof: { summary: string; evidenceIds: string[] };
+      proof: { summary: string; evidenceIds: string[]; claimIds?: string[] };
       action: string;
       risk: string;
       confidence: string;
@@ -18,8 +18,17 @@ function SignalDetailPage() {
       contradictoryEvidence?: string;
       invalidationConditions?: string;
       epistemicStatus?: string;
+      outputKind?: string;
+      notifyKind?: string;
     };
     evidence: Array<{ id: string; title?: string; canonicalUrl?: string; bodyText?: string }>;
+    proofLinks?: Array<{
+      claimId: string;
+      evidenceId: string;
+      excerpt?: string | null;
+      stance?: string;
+      title?: string;
+    }>;
     skillTrace?: {
       selected?: Array<{ slug: string; displayName: string; reason: string }>;
       skipped?: Array<{ slug: string; displayName: string; reason: string; notice?: string }>;
@@ -51,9 +60,18 @@ function SignalDetailPage() {
         <StatusBadge label={s.risk} tone="risk" />
         <span>Confidence {s.confidence}</span>
         <span>
-          {s.epistemicStatus === "signal" || !s.epistemicStatus ? "Signal" : s.epistemicStatus}
+          {s.outputKind === "unverified_early_warning" || s.notifyKind === "early_warning"
+            ? "Unverified early warning"
+            : s.epistemicStatus === "signal" || !s.epistemicStatus
+              ? "Signal"
+              : s.epistemicStatus}
         </span>
       </p>
+      {s.outputKind === "unverified_early_warning" ? (
+        <p className="field-note">
+          Unverified early warning. Independent corroboration is absent. This is not confirmed.
+        </p>
+      ) : null}
       <div className="proof-stack">
         <Card>
           <h2>Why it matters</h2>
@@ -62,6 +80,22 @@ function SignalDetailPage() {
         <Card>
           <h2>Proof</h2>
           <p>{s.proof.summary}</p>
+          {s.proof.claimIds && s.proof.claimIds.length > 0 ? (
+            <p className="field-note">Claim proof: {s.proof.claimIds.join(", ")}</p>
+          ) : null}
+          {data.proofLinks && data.proofLinks.length > 0 ? (
+            <ul className="data-list">
+              {data.proofLinks.map((item) => (
+                <li key={`${item.claimId}-${item.evidenceId}`}>
+                  <span>{item.title ?? item.claimId}</span>
+                  <small>
+                    {item.stance ?? "supports"}
+                    {item.excerpt ? ` · “${item.excerpt}”` : ""}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <ul className="data-list">
             {data.evidence.map((item) => (
               <li key={item.id}>

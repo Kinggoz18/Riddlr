@@ -30,6 +30,27 @@ describe("X official recent search adapter", () => {
     expect(parsed.evidence).toHaveLength(1);
     expect(parsed.evidence[0]?.url).toBe("https://x.com/alice/status/123");
     expect(parsed.evidence[0]?.adapterPayload?.publicMetrics).toEqual({ like_count: 2 });
+    expect(parsed.evidence[0]?.contentCompleteness).toBe("native_complete");
+    expect(parsed.evidence[0]?.originKey).toBe("x:9");
+  });
+
+  it("points retweets at the referenced origin", () => {
+    const parsed = parseXSearchPayload(
+      {
+        data: [
+          {
+            id: "2",
+            text: "RT copied report",
+            author_id: "9",
+            referenced_tweets: [{ type: "retweeted", id: "1" }],
+          },
+        ],
+        includes: { users: [{ id: "9", username: "alice" }] },
+      },
+      fetchedAt,
+    );
+    expect(parsed.evidence[0]?.referencedOriginKey).toBe("x:1");
+    expect(parsed.evidence[0]?.originKey).toBe("x:1");
   });
 
   it("maps plan errors to capability_missing and never treats archive as available", () => {

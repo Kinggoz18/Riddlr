@@ -270,6 +270,10 @@ a:focus-visible,
   border-color: var(--danger-line);
   color: var(--danger);
 }
+.badge.ok {
+  border-color: var(--mint);
+  color: var(--mint);
+}
 .skip-link {
   position: absolute;
   left: -999px;

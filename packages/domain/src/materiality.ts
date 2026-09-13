@@ -1,18 +1,33 @@
+import type { ContentCompleteness } from "./reliability.js";
+
 export type MaterialityInput = {
   independentHostCount: number;
   independentFamilyCount: number;
+  independentOriginCount?: number;
   evidenceCount: number;
   derivedCount: number;
   watchlistOverlap: boolean;
   portfolioOverlap: boolean;
   sourcedObservationCount: number;
   hasAuthoritativePrimary: boolean;
+  hasTrustedFirsthand?: boolean;
+  contentCompleteness?: ContentCompleteness;
+  hasValidatedClaim?: boolean;
 };
 
 export type MaterialityDecision = {
   material: boolean;
   reason: string;
 };
+
+function complete(input: MaterialityInput): boolean {
+  if (!input.contentCompleteness) {
+    return true;
+  }
+  return (
+    input.contentCompleteness === "full_document" || input.contentCompleteness === "native_complete"
+  );
+}
 
 export function isMaterialEvent(input: MaterialityInput): MaterialityDecision {
   if (input.evidenceCount <= 0) {
@@ -21,19 +36,23 @@ export function isMaterialEvent(input: MaterialityInput): MaterialityDecision {
   if (input.derivedCount >= input.evidenceCount) {
     return { material: false, reason: "reprint_only" };
   }
-  if (input.independentHostCount >= 2) {
-    return { material: true, reason: "independent_hosts" };
+  const origins = input.independentOriginCount ?? input.independentHostCount;
+  if (origins >= 2 && complete(input) && input.hasValidatedClaim !== false) {
+    return { material: true, reason: "independent_origins" };
   }
-  if (input.hasAuthoritativePrimary && input.independentHostCount >= 1) {
-    return { material: true, reason: "authoritative_primary" };
+  if ((input.hasTrustedFirsthand || input.hasAuthoritativePrimary) && complete(input)) {
+    return { material: true, reason: "early_warning_candidate" };
   }
-  if (input.watchlistOverlap && input.sourcedObservationCount > 0) {
-    return { material: true, reason: "watchlist_observation" };
+  if (input.watchlistOverlap && input.sourcedObservationCount > 0 && complete(input)) {
+    if (input.hasValidatedClaim) {
+      return { material: true, reason: "watchlist_observation" };
+    }
   }
   if (
     input.portfolioOverlap &&
     input.independentFamilyCount >= 1 &&
-    input.independentHostCount >= 1
+    origins >= 1 &&
+    complete(input)
   ) {
     return { material: true, reason: "portfolio_overlap" };
   }
@@ -47,11 +66,14 @@ export function isMaterial(input: {
   return isMaterialEvent({
     independentHostCount: input.independentSourceCount,
     independentFamilyCount: input.independentSourceCount,
+    independentOriginCount: input.independentSourceCount,
     evidenceCount: input.evidenceCount,
     derivedCount: 0,
     watchlistOverlap: false,
     portfolioOverlap: false,
     sourcedObservationCount: 0,
     hasAuthoritativePrimary: false,
+    contentCompleteness: "full_document",
+    hasValidatedClaim: true,
   }).material;
 }

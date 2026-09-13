@@ -57,15 +57,29 @@ export async function setActiveMarketSource(ctx: AppContext, sourceId: string) {
   }
 }
 
-export async function attachSourceToAgents(ctx: AppContext, sourceId: string) {
-  const agentRows = await ctx.db.select({ id: agents.id }).from(agents).limit(32);
-  if (agentRows.length === 0) {
+export async function attachSourceToAgents(ctx: AppContext, sourceId: string, agentIds?: string[]) {
+  const targets =
+    agentIds && agentIds.length > 0
+      ? agentIds
+      : (
+          await ctx.db
+            .select({ id: agents.id })
+            .from(agents)
+            .where(eq(agents.kind, "system_default"))
+            .limit(1)
+        ).map((row) => row.id);
+  if (targets.length === 0) {
     return;
   }
   await ctx.db
     .insert(agentSources)
-    .values(agentRows.map((agent) => ({ agentId: agent.id, sourceId })))
+    .values(takeBounded(targets, 16).map((agentId) => ({ agentId, sourceId })))
     .onConflictDoNothing();
+}
+
+export async function replaceSourceAgents(ctx: AppContext, sourceId: string, agentIds: string[]) {
+  await ctx.db.delete(agentSources).where(eq(agentSources.sourceId, sourceId));
+  await attachSourceToAgents(ctx, sourceId, agentIds);
 }
 
 export async function sourceRuntimeConfig(

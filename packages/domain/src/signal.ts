@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ReliabilityStatus } from "./reliability.js";
+import { SIGNAL_OUTPUT_KINDS } from "./reliability.js";
 
 export const RISK_LEVELS = ["low", "moderate", "high", "critical"] as const;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
@@ -9,6 +11,7 @@ export const signalOutputSchema = z
     whyItMatters: z.string().min(1),
     proof: z.object({
       evidenceIds: z.array(z.string().min(1)).min(1),
+      claimIds: z.array(z.string().min(1)).optional(),
       summary: z.string().min(1),
     }),
     action: z.string().min(1),
@@ -19,6 +22,8 @@ export const signalOutputSchema = z
     marketContext: z.string(),
     contradictoryEvidence: z.string(),
     invalidationConditions: z.string(),
+    outputKind: z.enum(SIGNAL_OUTPUT_KINDS).optional(),
+    claimedReliability: z.string().optional(),
   })
   .strict();
 
@@ -49,6 +54,7 @@ export const SIGNAL_JSON_SCHEMA = {
       required: ["evidenceIds", "summary"],
       properties: {
         evidenceIds: { type: "array", items: { type: "string" } },
+        claimIds: { type: "array", items: { type: "string" } },
         summary: { type: "string" },
       },
     },
@@ -60,6 +66,8 @@ export const SIGNAL_JSON_SCHEMA = {
     marketContext: { type: "string" },
     contradictoryEvidence: { type: "string" },
     invalidationConditions: { type: "string" },
+    outputKind: { type: "string", enum: [...SIGNAL_OUTPUT_KINDS] },
+    claimedReliability: { type: "string" },
   },
 } as const;
 
@@ -73,6 +81,9 @@ export class InvalidSignalError extends Error {
 export function validateSignalOutput(
   value: unknown,
   allowedEvidenceIds: ReadonlySet<string>,
+  allowedClaimIds: ReadonlySet<string> = new Set(),
+  computedReliability?: ReliabilityStatus,
+  claimEvidenceLinks?: ReadonlyMap<string, ReadonlySet<string>>,
 ): SignalOutput {
   const parsed = signalOutputSchema.safeParse(value);
   if (!parsed.success) {
@@ -86,8 +97,41 @@ export function validateSignalOutput(
       throw new InvalidSignalError(`Proof evidence ID is not on the event: ${id}`);
     }
   }
+  if (
+    allowedClaimIds.size > 0 &&
+    (!parsed.data.proof.claimIds || parsed.data.proof.claimIds.length === 0)
+  ) {
+    throw new InvalidSignalError("Signal proof must include claim IDs.");
+  }
+  for (const id of parsed.data.proof.claimIds ?? []) {
+    if (!allowedClaimIds.has(id)) {
+      throw new InvalidSignalError(`Proof claim ID is not on the event: ${id}`);
+    }
+    const linked = claimEvidenceLinks?.get(id);
+    if (
+      claimEvidenceLinks &&
+      (!linked || ![...parsed.data.proof.evidenceIds].some((evidenceId) => linked.has(evidenceId)))
+    ) {
+      throw new InvalidSignalError(`Proof claim ${id} is not supported by cited event evidence.`);
+    }
+  }
   if (parsed.data.confidence < 0 || parsed.data.confidence > 1) {
     throw new InvalidSignalError("Confidence must be between 0 and 1.");
+  }
+  if (
+    parsed.data.claimedReliability &&
+    computedReliability &&
+    parsed.data.claimedReliability !== computedReliability
+  ) {
+    throw new InvalidSignalError("Model cannot promote reliability status.");
+  }
+  if (
+    computedReliability &&
+    computedReliability !== "corroborated" &&
+    computedReliability !== "primary_confirmed" &&
+    parsed.data.claimedReliability === "corroborated"
+  ) {
+    throw new InvalidSignalError("Model cannot promote single-source evidence to corroborated.");
   }
   return parsed.data;
 }

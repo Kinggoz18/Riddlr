@@ -17,6 +17,7 @@ import {
   agentSources,
   agents,
   aiUsageEvents,
+  claimEvidence,
   createDb,
   encryptedSecrets,
   events,
@@ -27,6 +28,7 @@ import {
   portfolios,
   scans,
   sessions,
+  signalClaimProofs,
   signals,
   skills,
   users,
@@ -37,7 +39,7 @@ import { cryptoDomainModule } from "@riddlr/domain-crypto";
 import { createLogger, createMetrics, snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import { Queue } from "bullmq";
-import { eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Redis } from "ioredis";
 import { GenericContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -52,6 +54,10 @@ function cookieHeader(setCookie: string | string[] | undefined): string {
   return String(session ?? "").split(";")[0] ?? "";
 }
 
+function fixtureArticleHtml(title: string, body: string) {
+  return `<!doctype html><html lang="en"><head><title>${title}</title></head><body><article><p>${body}</p><p>The filing said Bitcoin demand rose after reported ETF inflows covering US listed products.</p></article></body></html>`;
+}
+
 function coinGeckoMarketsResponse() {
   return Response.json([
     {
@@ -64,6 +70,16 @@ function coinGeckoMarketsResponse() {
       last_updated: "2026-09-10T00:00:00.000Z",
     },
   ]);
+}
+
+function proofIdsFromAnalysisPrompt(user: string): { evidenceIds: string[]; claimIds: string[] } {
+  const claimIds = [...user.matchAll(/\bCLAIM=([0-9a-f-]{36})/gi)].map(
+    (match) => match[1] as string,
+  );
+  const evidenceIds = [...user.matchAll(/(?:^|\n)ID=([0-9a-f-]{36})/gi)]
+    .map((match) => match[1] as string)
+    .filter((id) => !claimIds.includes(id));
+  return { evidenceIds, claimIds };
 }
 
 describe("setup, auth, and domain persistence", () => {
@@ -354,8 +370,21 @@ describe("setup, auth, and domain persistence", () => {
       headers: { cookie },
     });
     expect(settings.json().llmConfigured).toBe(true);
+    expect(settings.json().llm).toEqual({
+      configured: true,
+      provider: "openai_compatible",
+      baseUrl: "https://api.openai.com",
+      model: "gpt-4.1-mini",
+    });
     expect(settings.json().encryption.keyVersion).toBe(1);
+    expect(settings.json().email).toEqual({
+      configured: false,
+      transport: "none",
+      from: "Riddlr <noreply@localhost>",
+      resendSaved: false,
+    });
     expect(JSON.stringify(settings.json())).not.toContain("sk-test");
+    expect(JSON.stringify(settings.json())).not.toMatch(/"apiKey":/);
     const secrets = await ctx.db.select().from(encryptedSecrets);
     expect(secrets[0]?.ciphertext).not.toContain("sk-test");
   });
@@ -449,13 +478,60 @@ describe("setup, auth, and domain persistence", () => {
       payload: { email: "ops@example.com" },
     });
     expect(requestReset.statusCode).toBe(200);
+    expect(requestReset.json()).toEqual({ ok: true, delivered: false });
     expect(JSON.stringify(requestReset.json())).not.toMatch(/token/);
+    const resetStatus = await app.inject({ method: "GET", url: "/api/v1/auth/reset/status" });
+    expect(resetStatus.json()).toEqual({ delivered: false });
     const completeMissing = await app.inject({
       method: "POST",
       url: "/api/v1/auth/reset/complete",
       payload: { token: "not-a-real-reset-token-value", newPassword: "replacement horse battery" },
     });
     expect(completeMissing.statusCode).toBe(400);
+  });
+
+  it("stores an encrypted Resend key and reports email as configured", async () => {
+    const apiKey = "re_test_never_return_secret";
+    const saved = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/email",
+      headers: { cookie },
+      payload: { apiKey, from: "Riddlr <alerts@example.com>" },
+    });
+    expect(saved.statusCode).toBe(200);
+    const settings = await app.inject({
+      method: "GET",
+      url: "/api/v1/settings",
+      headers: { cookie },
+    });
+    expect(settings.json().email).toEqual({
+      configured: true,
+      transport: "resend",
+      from: "Riddlr <alerts@example.com>",
+      resendSaved: true,
+    });
+    expect(JSON.stringify(settings.json())).not.toContain(apiKey);
+    const secrets = await ctx.db.select().from(encryptedSecrets);
+    expect(
+      secrets.some((row) => row.purpose === "resend" && !row.ciphertext.includes(apiKey)),
+    ).toBe(true);
+    const status = await app.inject({ method: "GET", url: "/api/v1/auth/reset/status" });
+    expect(status.json()).toEqual({ delivered: true });
+    const requestReset = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/reset/request",
+      payload: { email: "ops@example.com" },
+    });
+    expect(requestReset.json()).toEqual({ ok: true, delivered: true });
+    expect(JSON.stringify(requestReset.json())).not.toMatch(/token/);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/settings/email",
+      headers: { cookie },
+    });
+    expect(removed.statusCode).toBe(200);
+    const after = await app.inject({ method: "GET", url: "/api/v1/auth/reset/status" });
+    expect(after.json()).toEqual({ delivered: false });
   });
 
   it("enforces notification delivery uniqueness", async () => {
@@ -524,10 +600,14 @@ describe("setup, auth, and domain persistence", () => {
       .returning();
     expect(scan?.id).toBeDefined();
 
+    let understandingCalls = 0;
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.includes("api.coingecko.com")) {
         return coinGeckoMarketsResponse();
+      }
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 404 });
       }
       if (url.includes("/search")) {
         return Response.json({
@@ -542,20 +622,59 @@ describe("setup, auth, and domain persistence", () => {
             {
               url: "https://news.example.com/bitcoin-etf",
               title: "Bitcoin ETF inflows rose after latest issuer filing",
-              content:
-                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
+              content: "Listed products attracted cash this week as Bitcoin allocations increased.",
               engine: "fixture",
             },
           ],
         });
       }
+      if (url === "https://example.com/bitcoin-etf") {
+        return new Response(
+          `<!doctype html><html lang="en"><head><title>Bitcoin ETF inflows accelerate</title></head><body><article><p>Bitcoin ETF inflows accelerated this week after several US issuers reported stronger allocator demand.</p><p>Desks described the shift as a rotation into listed products rather than a one-day headline spike across social channels.</p><p>The filing said Bitcoin demand rose after reported ETF inflows covering US listed products.</p></article></body></html>`,
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
+      if (url === "https://news.example.com/bitcoin-etf") {
+        return new Response(
+          `<!doctype html><html lang="en"><head><title>Bitcoin ETF inflows rose after latest issuer filing</title></head><body><article><p>Spot Bitcoin vehicles listed in the United States recorded another session of net creations.</p><p>Market desks said listed products pulled cash from other crypto vehicles while ETF inflows continued through the afternoon.</p><p>The latest issuer filing covering US listed products showed Bitcoin demand rose after the inflows print, according to the report.</p></article></body></html>`,
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
       if (url.includes("/v1/chat/completions")) {
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           messages?: Array<{ role?: string; content?: string }>;
+          response_format?: { json_schema?: { name?: string } };
         };
         const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
-        const ids = [...user.matchAll(/ID=([0-9a-f-]{36})/gi)].map((match) => match[1] as string);
-        expect(ids.length).toBeGreaterThan(0);
+        const { evidenceIds: ids, claimIds } = proofIdsFromAnalysisPrompt(user);
+        if (body.response_format?.json_schema?.name === "content_understanding") {
+          understandingCalls += 1;
+          return Response.json({
+            id: "chatcmpl-understanding",
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: "The article reports Bitcoin ETF inflows into US listed products.",
+                    pageClass: "news_report",
+                    headlineBodyConsistent: true,
+                    attributedToOtherOrigin: false,
+                    claims: [
+                      {
+                        kind: "crypto:market_move",
+                        predicate: "market_move",
+                        polarity: "asserted",
+                        modality: "asserted",
+                        excerpt: "ETF inflows",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 80, completion_tokens: 40 },
+          });
+        }
         return Response.json({
           id: "chatcmpl-fixture",
           choices: [
@@ -567,6 +686,7 @@ describe("setup, auth, and domain persistence", () => {
                     "Independent search results describe the same Bitcoin demand shift.",
                   proof: {
                     evidenceIds: ids.slice(0, 1),
+                    claimIds: claimIds.slice(0, 1),
                     summary: "SearXNG titles independently describe Bitcoin ETF inflows.",
                   },
                   action: "Watch ETF flow reporting; do not trade.",
@@ -595,17 +715,51 @@ describe("setup, auth, and domain persistence", () => {
     expect(finished[0]?.status).toBe("succeeded");
     const evidence = await ctx.db.select().from(evidenceItems);
     expect(evidence.length).toBeGreaterThan(0);
+    expect(
+      evidence.filter((row) => row.contentCompleteness === "full_document").length,
+    ).toBeGreaterThanOrEqual(2);
+    const firstEvents = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.scanId, scan?.id as string));
+    expect(firstEvents.some((row) => row.reliabilityStatus === "corroborated")).toBe(true);
     const signalRows = await ctx.db.select().from(signals);
     const produced = signalRows.find((row) => row.headline.includes("Bitcoin ETF"));
     expect(produced).toBeDefined();
     const proofIds = produced?.proof.evidenceIds ?? [];
     expect(proofIds.length).toBeGreaterThan(0);
+    expect((produced?.proof.claimIds ?? []).length).toBeGreaterThan(0);
+    const proofs = produced?.id
+      ? await ctx.db
+          .select()
+          .from(signalClaimProofs)
+          .where(eq(signalClaimProofs.signalId, produced.id))
+      : [];
+    expect(proofs.length).toBeGreaterThan(0);
+    for (const proof of proofs) {
+      expect(produced?.proof.evidenceIds).toContain(proof.evidenceId);
+      expect(produced?.proof.claimIds).toContain(proof.claimId);
+      const linkedClaim = await ctx.db
+        .select()
+        .from(claimEvidence)
+        .where(
+          and(
+            eq(claimEvidence.claimId, proof.claimId),
+            eq(claimEvidence.evidenceId, proof.evidenceId),
+          ),
+        );
+      expect(linkedClaim.length).toBeGreaterThan(0);
+    }
+    const firstFingerprint = firstEvents.find(
+      (row) => row.reliabilityStatus === "corroborated",
+    )?.clusterFingerprint;
     const linked =
       proofIds.length > 0
         ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, proofIds))
         : [];
     expect(linked).toHaveLength(proofIds.length);
 
+    const understandingBeforeRepeat = understandingCalls;
     const [repeat] = await ctx.db
       .insert(scans)
       .values({
@@ -618,11 +772,16 @@ describe("setup, auth, and domain persistence", () => {
     await runScan(ctx, repeat?.id as string, { fetchImpl });
     const afterRepeat = await ctx.db.select().from(evidenceItems);
     expect(afterRepeat).toHaveLength(evidence.length);
-    const repeatEvents = await ctx.db
-      .select()
-      .from(events)
-      .where(eq(events.scanId, repeat?.id as string));
-    expect(repeatEvents[0]?.status).toBe("analyzed");
+    const repeatEvents = await ctx.db.select().from(events).where(eq(events.agentId, agentId));
+    expect(repeatEvents.some((row) => row.status === "analyzed")).toBe(true);
+    if (firstFingerprint) {
+      const sameCluster = await ctx.db
+        .select()
+        .from(events)
+        .where(eq(events.clusterFingerprint, firstFingerprint));
+      expect(sameCluster).toHaveLength(1);
+    }
+    expect(understandingCalls).toBe(understandingBeforeRepeat);
 
     const [failedScan] = await ctx.db
       .insert(scans)
@@ -644,6 +803,75 @@ describe("setup, auth, and domain persistence", () => {
     const memory = snapshotProcessMemory();
     expect(memory.rss).toBeGreaterThan(1_000_000);
     expect(memory.peakRss).toBeGreaterThanOrEqual(memory.rss);
+  });
+
+  it("does not corroborate two hosts that syndicate the same outbound origin", async () => {
+    const agentRows = await ctx.db.select().from(agents);
+    const agentId = agentRows[0]?.id as string;
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId,
+        status: "queued",
+        windowStart: new Date("2026-04-01T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:syndication",
+      })
+      .returning();
+    const html = (hostTitle: string) =>
+      `<!doctype html><html lang="en"><head><title>${hostTitle}</title></head><body><article><p>Bitcoin ETF inflows covering US listed products continued after the latest issuer filing.</p><p>Desks said listed products attracted cash this week.</p><p><a href="https://www.reuters.com/world/crypto-filing">Reuters filing</a></p></article></body></html>`;
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 404 });
+      }
+      if (url.includes("/search")) {
+        return Response.json({
+          results: [
+            {
+              url: "https://desk.example.com/wire",
+              title: "Bitcoin ETF inflows covering US listed products",
+              content:
+                "Bitcoin ETF inflows covering US listed products continued after the latest issuer filing.",
+              engine: "fixture",
+            },
+            {
+              url: "https://mirror.example.net/wire",
+              title: "Bitcoin ETF inflows covering US listed products",
+              content:
+                "Bitcoin ETF inflows covering US listed products continued after the latest issuer filing.",
+              engine: "fixture",
+            },
+          ],
+        });
+      }
+      if (url === "https://desk.example.com/wire") {
+        return new Response(html("Desk reprint"), {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url === "https://mirror.example.net/wire") {
+        return new Response(html("Mirror reprint"), {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url.includes("/v1/chat/completions")) {
+        return new Response("llm should not be required for syndication classification", {
+          status: 500,
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    const clustered = await ctx.db
+      .select()
+      .from(events)
+      .where(eq(events.scanId, scan?.id as string));
+    expect(clustered.some((row) => row.reliabilityStatus === "corroborated")).toBe(false);
   });
 
   it("lists sessions, recovery remaining, and paginated audit without leaking tokens", async () => {
@@ -774,20 +1002,23 @@ describe("setup, auth, and domain persistence", () => {
       after.some((row) => row.ciphertext !== before.find((item) => item.id === row.id)?.ciphertext),
     ).toBe(true);
     for (const row of after) {
-      expect(
-        decryptSecretWithKeys({
-          keys: [ctx.masterKey],
-          secret: {
-            ciphertext: row.ciphertext,
-            nonce: row.nonce,
-            tag: row.tag,
-            alg: "aes-256-gcm",
-            keyVersion: row.keyVersion,
-          },
-          purpose: row.purpose,
-          aad: `${row.purpose}|${row.keyVersion}`,
-        }),
-      ).toMatch(/sk-test-never-store-plain|legacy-llm-key/);
+      const plaintext = decryptSecretWithKeys({
+        keys: [ctx.masterKey],
+        secret: {
+          ciphertext: row.ciphertext,
+          nonce: row.nonce,
+          tag: row.tag,
+          alg: "aes-256-gcm",
+          keyVersion: row.keyVersion,
+        },
+        purpose: row.purpose,
+        aad: `${row.purpose}|${row.keyVersion}`,
+      });
+      if (row.purpose === "llm") {
+        expect(plaintext).toMatch(/sk-test-never-store-plain|legacy-llm-key/);
+      } else {
+        expect(plaintext.length).toBeGreaterThan(0);
+      }
     }
     const settings = await app.inject({
       method: "GET",
@@ -1055,23 +1286,37 @@ describe("setup, auth, and domain persistence", () => {
       if (url.includes("api.coingecko.com")) {
         return coinGeckoMarketsResponse();
       }
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 404 });
+      }
       if (url.includes("/search")) {
         return Response.json({
           results: [
             {
               url: "https://example.com/budget-skip",
               title: "Bitcoin ETF inflows accelerate",
-              content: "Bitcoin demand rose after reported ETF inflows.",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
               engine: "fixture",
             },
             {
-              url: "https://news.example.com/budget-skip-eth",
-              title: "Ethereum and bitcoin narratives overlap",
-              content: "Ethereum upgrade coverage mentions bitcoin liquidity.",
+              url: "https://news.example.com/budget-skip",
+              title: "Bitcoin ETF inflows rose after latest issuer filing",
+              content:
+                "Bitcoin demand rose after reported ETF inflows covering US listed products.",
               engine: "fixture",
             },
           ],
         });
+      }
+      if (url.startsWith("https://example.com/") || url.startsWith("https://news.example.com/")) {
+        return new Response(
+          fixtureArticleHtml(
+            "Bitcoin ETF inflows accelerate",
+            "Bitcoin ETF inflows covering US listed products rose.",
+          ),
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
       }
       if (url.includes("/v1/chat/completions") || url.includes("/v1/messages")) {
         llmCalled = true;
@@ -1124,6 +1369,9 @@ describe("setup, auth, and domain persistence", () => {
       if (url.includes("api.coingecko.com")) {
         return coinGeckoMarketsResponse();
       }
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 404 });
+      }
       if (url.includes("/search")) {
         return Response.json({
           results: [
@@ -1144,13 +1392,22 @@ describe("setup, auth, and domain persistence", () => {
           ],
         });
       }
+      if (url.startsWith("https://example.com/") || url.startsWith("https://news.example.com/")) {
+        return new Response(
+          fixtureArticleHtml(
+            "Bitcoin ETF inflows accelerate",
+            "Bitcoin ETF inflows covering US listed products rose.",
+          ),
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
       if (url.includes("/v1/chat/completions")) {
         llmCalled = true;
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           messages?: Array<{ role?: string; content?: string }>;
         };
         const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
-        const ids = [...user.matchAll(/ID=([0-9a-f-]{36})/gi)].map((match) => match[1] as string);
+        const { evidenceIds: ids, claimIds } = proofIdsFromAnalysisPrompt(user);
         return Response.json({
           id: "chatcmpl-unlimited",
           choices: [
@@ -1162,6 +1419,7 @@ describe("setup, auth, and domain persistence", () => {
                     "Independent search results describe the same Bitcoin demand shift.",
                   proof: {
                     evidenceIds: ids.slice(0, 1),
+                    claimIds: claimIds.slice(0, 1),
                     summary: "SearXNG titles independently describe Bitcoin ETF inflows.",
                   },
                   action: "Watch ETF flow reporting; do not trade.",
@@ -1224,10 +1482,12 @@ describe("setup, auth, and domain persistence", () => {
     });
     expect(listed.statusCode).toBe(200);
     expect(JSON.stringify(listed.json())).not.toContain(token);
-    expect(
-      listed.json().adapters.find((item: { id: string }) => item.id === "discord").capabilities
-        .lookbackNotes,
-    ).toMatch(/not guild message-search archive/);
+    const discordAdapter = listed
+      .json()
+      .adapters.find((item: { id: string }) => item.id === "discord");
+    expect(discordAdapter.inviteUrl).toBeUndefined();
+    expect(discordAdapter.botPermissions).toBe(66560);
+    expect(discordAdapter.capabilities.lookbackNotes).toMatch(/not guild message-search archive/);
     const secrets = await ctx.db.select().from(encryptedSecrets);
     expect(
       secrets.some((row) => row.purpose === "discord" && !row.ciphertext.includes(token)),

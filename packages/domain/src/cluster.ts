@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { EvidenceRole } from "./evidence.js";
 import { normalizeText } from "./evidence.js";
 import { takeBounded } from "./limits.js";
@@ -69,6 +70,10 @@ export type ClusterableEvidence = {
   publishedAt?: Date;
   hostname?: string;
   sourceFamily?: string;
+  originKey?: string;
+  claimFingerprints?: string[];
+  claimGroupKeys?: string[];
+  marketDomainId?: string;
 };
 
 function inTimeWindow(left?: Date, right?: Date): boolean {
@@ -88,11 +93,34 @@ export function clusterEvidence<T extends ClusterableEvidence>(
   for (const item of bounded) {
     let assigned = false;
     for (const cluster of clusters) {
-      const similarToCluster = cluster.some(
-        (member) =>
-          inTimeWindow(item.publishedAt, member.publishedAt) &&
-          isNearDuplicate(item.text, member.text, CLUSTER_SIMILARITY_THRESHOLD),
-      );
+      const similarToCluster = cluster.some((member) => {
+        if (!inTimeWindow(item.publishedAt, member.publishedAt)) {
+          return false;
+        }
+        if (
+          item.marketDomainId &&
+          member.marketDomainId &&
+          item.marketDomainId !== member.marketDomainId
+        ) {
+          return false;
+        }
+        const sharedClaim =
+          item.claimFingerprints &&
+          member.claimFingerprints &&
+          item.claimFingerprints.some((fingerprint) =>
+            member.claimFingerprints?.includes(fingerprint),
+          );
+        if (sharedClaim) {
+          return true;
+        }
+        const sharedAsset =
+          item.assetCanonicalIds.length > 0 &&
+          member.assetCanonicalIds.some((id) => item.assetCanonicalIds.includes(id));
+        return (
+          (sharedAsset || item.claimFingerprints === undefined) &&
+          isNearDuplicate(item.text, member.text, CLUSTER_SIMILARITY_THRESHOLD)
+        );
+      });
       if (similarToCluster) {
         cluster.push(item);
         assigned = true;
@@ -111,8 +139,19 @@ export function clusterEvidence<T extends ClusterableEvidence>(
   return { clusters, remainder };
 }
 
-export function eventClusterFingerprint(ids: string[]): string {
-  return [...ids].sort().join("|");
+export function eventClusterFingerprint(input: {
+  marketDomainId?: string;
+  claimFingerprints?: string[];
+  contentHashes?: string[];
+  assetCanonicalIds?: string[];
+  windowDay?: string;
+}): string {
+  const claims = [...new Set(input.claimFingerprints ?? [])].filter(Boolean).sort();
+  const hashes = [...new Set(input.contentHashes ?? [])].filter(Boolean).sort();
+  const assets = [...new Set(input.assetCanonicalIds ?? [])].sort();
+  const identity = claims.join(",") || hashes.join(",") || assets.join(",") || "unlabeled";
+  const basis = [input.marketDomainId ?? "", identity, input.windowDay ?? ""].join("|");
+  return createHash("sha256").update(basis).digest("hex");
 }
 
 export function absorbMarketDataClusters<T extends ClusterableEvidence>(clusters: T[][]): T[][] {
@@ -136,11 +175,32 @@ export function absorbMarketDataClusters<T extends ClusterableEvidence>(clusters
   return news;
 }
 
+function syntheticClaimTitle(title: string): boolean {
+  return /^[\w .-]+: [a-z]+_[a-z0-9_]+/i.test(title.trim());
+}
+
 export function clusterEventTitle(input: {
   assets: Array<{ displayName?: string | null; symbol?: string | null; canonicalId: string }>;
   evidenceTitles: Array<string | null | undefined>;
   hostnames: string[];
+  principalClaimTitle?: string;
+  reliabilityStatus?: string;
 }): string {
+  const principal = input.principalClaimTitle?.trim();
+  if (principal && !syntheticClaimTitle(principal)) {
+    return principal;
+  }
+  if (input.reliabilityStatus === "mention") {
+    const host = input.hostnames.find((host) => host && host !== "unknown-host");
+    return host ? `Search mention · ${host}` : "Search mention";
+  }
+  const useful = input.evidenceTitles.find((title) => {
+    const value = title?.trim() ?? "";
+    return value.length >= 28 && value.length <= 140 && !syntheticClaimTitle(value);
+  });
+  if (useful?.trim()) {
+    return useful.trim();
+  }
   const assetLabels = takeBounded(
     [
       ...new Set(
@@ -171,12 +231,12 @@ export function clusterEventTitle(input: {
   if (assetLabels.length > 0) {
     return `${assetLabels.join(", ")} cluster${hostSuffix}`;
   }
-  const useful = input.evidenceTitles.find((title) => {
+  const shortTitle = input.evidenceTitles.find((title) => {
     const value = title?.trim() ?? "";
     return value.length >= 8 && value.length <= 140;
   });
-  if (useful?.trim()) {
-    return `${useful.trim()}${hostSuffix}`;
+  if (shortTitle?.trim()) {
+    return `${shortTitle.trim()}${hostSuffix}`;
   }
   return hosts.length > 0 ? `Evidence cluster · ${hosts[0]}` : "Unlabeled evidence cluster";
 }

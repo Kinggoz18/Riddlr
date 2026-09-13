@@ -34,7 +34,7 @@ function belowThreshold(): MaterialityDecision {
 }
 
 describe("discovery candidates", () => {
-  it("treats a first independent mention as a discovered emerging-narrative candidate", () => {
+  it("treats a first independent mention without a claim as a search mention", () => {
     const event = facts([
       {
         hostname: "x.com",
@@ -50,7 +50,7 @@ describe("discovery candidates", () => {
       material: belowThreshold(),
     });
     expect(discovery.candidate).toBe(true);
-    expect(discovery.kind).toBe("emerging_narrative");
+    expect(discovery.kind).toBe("search_mention");
     expect(discovery.epistemicStatus).toBe("discovered");
     expect(nextEventStatus({ evidenceCount: 1, discovery, material: belowThreshold() })).toBe(
       "candidate",

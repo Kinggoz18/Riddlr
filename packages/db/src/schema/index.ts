@@ -87,6 +87,8 @@ export const instanceSettings = pgTable("instance_settings", {
       minRisk: "low" | "moderate" | "high" | "critical";
       cooldownMinutes: number;
       quietHours?: { startHour: number; endHour: number };
+      earlyWarnings?: boolean;
+      shadowAssessments?: boolean;
     }>()
     .notNull()
     .default({ minRisk: "moderate", cooldownMinutes: 30 }),
@@ -252,6 +254,7 @@ export const agentSources = pgTable(
     sourceId: uuid("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
+    priority: integer("priority").notNull().default(0),
   },
   (table) => [primaryKey({ columns: [table.agentId, table.sourceId] })],
 );
@@ -313,6 +316,12 @@ export const evidenceItems = pgTable(
     externalId: text("external_id"),
     language: text("language"),
     fetchRequestId: uuid("fetch_request_id"),
+    contentCompleteness: text("content_completeness").notNull().default("snippet"),
+    originKey: text("origin_key"),
+    referencedOriginKey: text("referenced_origin_key"),
+    sourceIdentityId: uuid("source_identity_id"),
+    sourcePolicyRevision: integer("source_policy_revision"),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
   },
   (table) => [uniqueIndex("evidence_fingerprint_idx").on(table.fingerprint)],
 );
@@ -332,6 +341,8 @@ export const sourceFetchRequests = pgTable("source_fetch_requests", {
   paginationCursor: text("pagination_cursor"),
   status: text("status").notNull(),
   errorClass: text("error_class"),
+  responseStatus: integer("response_status"),
+  adapterMetadata: jsonb("adapter_metadata").$type<Record<string, unknown>>(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   evidenceCount: integer("evidence_count").notNull().default(0),
@@ -390,6 +401,11 @@ export const events = pgTable("events", {
   epistemicStatus: text("epistemic_status"),
   candidateKind: text("candidate_kind"),
   discoveryReason: text("discovery_reason"),
+  marketDomainId: text("market_domain_id"),
+  reliabilityStatus: text("reliability_status").notNull().default("legacy_unassessed"),
+  impactLevel: text("impact_level"),
+  contentCompleteness: text("content_completeness"),
+  principalClaimId: uuid("principal_claim_id"),
 });
 
 export const eventEvidence = pgTable(
@@ -592,7 +608,9 @@ export const signals = pgTable(
       .references(() => agents.id),
     headline: text("headline").notNull(),
     whyItMatters: text("why_it_matters").notNull(),
-    proof: jsonb("proof").$type<{ evidenceIds: string[]; summary: string }>().notNull(),
+    proof: jsonb("proof")
+      .$type<{ evidenceIds: string[]; claimIds?: string[]; summary: string }>()
+      .notNull(),
     action: text("action").notNull(),
     risk: text("risk").notNull(),
     confidence: text("confidence").notNull(),
@@ -602,6 +620,8 @@ export const signals = pgTable(
     schemaVersion: text("schema_version").notNull().default("1"),
     notifyEligible: boolean("notify_eligible").notNull().default(true),
     epistemicStatus: text("epistemic_status").notNull().default("signal"),
+    outputKind: text("output_kind").notNull().default("signal"),
+    notifyKind: text("notify_kind").notNull().default("signal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -708,3 +728,229 @@ export const auditLogs = pgTable("audit_logs", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const sourceIdentities = pgTable(
+  "source_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platform: text("platform").notNull(),
+    externalId: text("external_id").notNull(),
+    displayName: text("display_name"),
+    hostname: text("hostname"),
+    parentId: uuid("parent_id"),
+    verifiedBadge: boolean("verified_badge").notNull().default(false),
+    firstObservedAt: timestamp("first_observed_at", { withTimezone: true }).notNull().defaultNow(),
+    lastObservedAt: timestamp("last_observed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("source_identities_platform_external_idx").on(table.platform, table.externalId),
+  ],
+);
+
+export const sourceIdentityPolicies = pgTable(
+  "source_identity_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identityId: uuid("identity_id")
+      .notNull()
+      .references(() => sourceIdentities.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull().default(1),
+    trustTier: text("trust_tier").notNull().default("unknown"),
+    allowedUses: jsonb("allowed_uses").$type<string[]>().notNull().default(["discovery"]),
+    active: boolean("active").notNull().default(true),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("source_identity_policies_revision_idx").on(table.identityId, table.revision),
+  ],
+);
+
+export const publisherHostPolicies = pgTable(
+  "publisher_host_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    hostname: text("hostname").notNull(),
+    revision: integer("revision").notNull().default(1),
+    trustTier: text("trust_tier").notNull().default("unknown"),
+    blocked: boolean("blocked").notNull().default(false),
+    allowedUses: jsonb("allowed_uses")
+      .$type<string[]>()
+      .notNull()
+      .default(["discovery", "analysis"]),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("publisher_host_policies_host_revision_idx").on(table.hostname, table.revision),
+  ],
+);
+
+export const evidenceDocuments = pgTable(
+  "evidence_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    evidenceId: uuid("evidence_id")
+      .notNull()
+      .references(() => evidenceItems.id, { onDelete: "cascade" }),
+    requestedUrl: text("requested_url").notNull(),
+    finalUrl: text("final_url"),
+    httpStatus: integer("http_status"),
+    contentType: text("content_type"),
+    byteCount: integer("byte_count").notNull().default(0),
+    responseHash: text("response_hash").notNull(),
+    cleanedContentHash: text("cleaned_content_hash").notNull(),
+    cleanedText: text("cleaned_text").notNull(),
+    extractedTitle: text("extracted_title"),
+    byline: text("byline"),
+    language: text("language"),
+    etag: text("etag"),
+    lastModified: text("last_modified"),
+    extractorVersion: text("extractor_version").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    status: text("status").notNull(),
+    failureReason: text("failure_reason"),
+  },
+  (table) => [
+    uniqueIndex("evidence_documents_content_idx").on(table.evidenceId, table.cleanedContentHash),
+  ],
+);
+
+export const evidenceUnderstanding = pgTable(
+  "evidence_understanding",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    evidenceId: uuid("evidence_id")
+      .notNull()
+      .references(() => evidenceItems.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id").references(() => evidenceDocuments.id, { onDelete: "cascade" }),
+    cleanedContentHash: text("cleaned_content_hash").notNull(),
+    model: text("model").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    promptHash: text("prompt_hash").notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    language: text("language"),
+    summary: text("summary").notNull(),
+    rawOutput: jsonb("raw_output").$type<Record<string, unknown>>().notNull(),
+    pageClass: text("page_class"),
+    status: text("status").notNull().default("ok"),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("evidence_understanding_cache_idx").on(
+      table.cleanedContentHash,
+      table.model,
+      table.schemaVersion,
+      table.promptHash,
+      table.extractorVersion,
+    ),
+  ],
+);
+
+export const claims = pgTable(
+  "claims",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketDomainId: text("market_domain_id").notNull(),
+    kind: text("kind").notNull(),
+    subjectCanonicalId: text("subject_canonical_id"),
+    predicate: text("predicate").notNull(),
+    objectText: text("object_text"),
+    value: jsonb("value").$type<number | string | boolean | null>(),
+    unit: text("unit"),
+    polarity: text("polarity").notNull(),
+    modality: text("modality").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    title: text("title").notNull(),
+    policyVersion: text("policy_version"),
+    extractionVersion: text("extraction_version"),
+    effectiveStart: timestamp("effective_start", { withTimezone: true }),
+    effectiveEnd: timestamp("effective_end", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("claims_fingerprint_idx").on(table.fingerprint)],
+);
+
+export const claimEvidence = pgTable(
+  "claim_evidence",
+  {
+    claimId: uuid("claim_id")
+      .notNull()
+      .references(() => claims.id, { onDelete: "cascade" }),
+    evidenceId: uuid("evidence_id")
+      .notNull()
+      .references(() => evidenceItems.id, { onDelete: "cascade" }),
+    stance: text("stance").notNull(),
+    excerpt: text("excerpt").notNull(),
+    excerptHash: text("excerpt_hash").notNull(),
+    excerptStart: integer("excerpt_start"),
+    excerptEnd: integer("excerpt_end"),
+    sourceIdentityId: uuid("source_identity_id"),
+  },
+  (table) => [primaryKey({ columns: [table.claimId, table.evidenceId, table.stance] })],
+);
+
+export const eventClaims = pgTable(
+  "event_claims",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    claimId: uuid("claim_id")
+      .notNull()
+      .references(() => claims.id, { onDelete: "cascade" }),
+    stance: text("stance").notNull().default("supports"),
+  },
+  (table) => [primaryKey({ columns: [table.eventId, table.claimId] })],
+);
+
+export const eventAssessments = pgTable(
+  "event_assessments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull().default(1),
+    reliabilityStatus: text("reliability_status").notNull(),
+    impactLevel: text("impact_level").notNull(),
+    contentCompleteness: text("content_completeness").notNull(),
+    independentOriginCount: integer("independent_origin_count").notNull().default(0),
+    independentActorCount: integer("independent_actor_count").notNull().default(0),
+    disputed: boolean("disputed").notNull().default(false),
+    retracted: boolean("retracted").notNull().default(false),
+    policyVersion: text("policy_version"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("event_assessments_revision_idx").on(table.eventId, table.revision)],
+);
+
+export const eventAssessmentReasons = pgTable(
+  "event_assessment_reasons",
+  {
+    assessmentId: uuid("assessment_id")
+      .notNull()
+      .references(() => eventAssessments.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    detail: text("detail"),
+  },
+  (table) => [primaryKey({ columns: [table.assessmentId, table.code] })],
+);
+
+export const signalClaimProofs = pgTable(
+  "signal_claim_proofs",
+  {
+    signalId: uuid("signal_id")
+      .notNull()
+      .references(() => signals.id, { onDelete: "cascade" }),
+    claimId: uuid("claim_id")
+      .notNull()
+      .references(() => claims.id, { onDelete: "cascade" }),
+    evidenceId: uuid("evidence_id")
+      .notNull()
+      .references(() => evidenceItems.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.signalId, table.claimId, table.evidenceId] })],
+);

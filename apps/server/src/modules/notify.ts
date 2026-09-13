@@ -1,12 +1,16 @@
 import { decryptSecretWithKeys } from "@riddlr/crypto";
 import {
   encryptedSecrets,
+  eventEvidence,
+  events,
+  evidenceItems,
   instanceSettings,
   notificationDeliveries,
   providerConfigs,
   signals,
   whatsappSessions,
 } from "@riddlr/db";
+import { sourceHostname } from "@riddlr/domain";
 import {
   DEFAULT_NOTIFICATION_POLICY,
   decideNotification,
@@ -58,6 +62,22 @@ function destinationKey(channel: string, destination: string): string {
   return `${channel}:${destination}`;
 }
 
+function ageLabel(at?: Date | null): string | undefined {
+  if (!at) {
+    return undefined;
+  }
+  const minutes = Math.max(0, Math.round((Date.now() - at.getTime()) / 60_000));
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) {
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 export async function enqueueSignalNotifications(ctx: AppContext, signalId: string) {
   await deliverSignalNotifications(ctx, signalId);
 }
@@ -91,6 +111,28 @@ export async function deliverSignalNotifications(
     cooldownMs: (stored?.cooldownMinutes ?? 30) * 60 * 1000,
     quietHours: stored?.quietHours,
   };
+  const [event] = await ctx.db.select().from(events).where(eq(events.id, signal.eventId)).limit(1);
+  const linked = await ctx.db
+    .select({
+      canonicalUrl: evidenceItems.canonicalUrl,
+      publishedAt: evidenceItems.publishedAt,
+      fetchedAt: evidenceItems.fetchedAt,
+      adapterId: evidenceItems.adapterId,
+    })
+    .from(eventEvidence)
+    .innerJoin(evidenceItems, eq(eventEvidence.evidenceId, evidenceItems.id))
+    .where(eq(eventEvidence.eventId, signal.eventId))
+    .limit(8);
+  const hosts = [
+    ...new Set(
+      linked
+        .map((row) => sourceHostname(row.canonicalUrl))
+        .filter((item) => item && item !== "unknown-host"),
+    ),
+  ];
+  const newest = linked
+    .map((row) => row.publishedAt ?? row.fetchedAt)
+    .sort((left, right) => right.getTime() - left.getTime())[0];
   const body = formatSignalNotification({
     headline: signal.headline,
     whyItMatters: signal.whyItMatters,
@@ -98,6 +140,15 @@ export async function deliverSignalNotifications(
     risk: signal.risk,
     invalidation: signal.invalidationConditions ?? undefined,
     publicUrl: `${ctx.config.RIDDLR_PUBLIC_URL}/signals/${signal.id}`,
+    kind:
+      (signal.notifyKind as
+        | "signal"
+        | "early_warning"
+        | "confirmation"
+        | "dispute"
+        | "retraction") ?? "signal",
+    sourceLabel: hosts[0] ?? linked[0]?.adapterId ?? undefined,
+    ageLabel: ageLabel(newest ?? event?.windowStart ?? signal.createdAt),
   });
   const providers = await ctx.db.select().from(providerConfigs).limit(8);
   await deliverTelegram(ctx, providers, signal, body, policy, fetchImpl);

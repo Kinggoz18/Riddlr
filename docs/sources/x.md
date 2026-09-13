@@ -22,4 +22,11 @@ Recent search covers a rolling seven-day window. `max_results` is 10–100;
 Riddlr sends at most 50. The query string is capped at 512 characters.
 `start_time` is clamped to that seven-day window.
 
+The adapter persists author ID, username snapshot, referenced tweets,
+conversation ID, and outbound URLs. Retweets, quotes, copied text, and a
+shared linked origin are derived references, not independent confirmation. A
+verification badge or follower count does not establish trust. Operators set
+trust on the observed identity under Sources. The platform family `x` is not
+authoritative.
+
 Official reference: https://docs.x.com/x-api/posts/search/quickstart/recent-search

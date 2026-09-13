@@ -4,6 +4,8 @@ import {
   cryptocomSourceSchema,
   discordSourceSchema,
   pageQuerySchema,
+  publisherHostPolicySchema,
+  sourceIdentityPolicySchema,
   sourcePatchSchema,
   xSourceSchema,
 } from "@riddlr/api-contract";
@@ -13,7 +15,10 @@ import {
   encryptedSecrets,
   evidenceItems,
   instanceSettings,
+  publisherHostPolicies,
   scanSourceRuns,
+  sourceIdentities,
+  sourceIdentityPolicies,
   sources,
 } from "@riddlr/db";
 import { clampPageSize, parsePageCursor } from "@riddlr/domain";
@@ -33,6 +38,7 @@ import {
   attachSourceToAgents,
   isMarketDataAdapter,
   marketAdapter,
+  replaceSourceAgents,
   setActiveMarketSource,
   sourceRuntimeConfig,
 } from "./market-sources.js";
@@ -81,7 +87,6 @@ export function registerSourceRoutes(
           family: discord.family,
           capabilities: discord.capabilities,
           botPermissions: DISCORD_BOT_PERMISSIONS,
-          inviteUrl: `https://discord.com/oauth2/authorize?scope=bot&permissions=${DISCORD_BOT_PERMISSIONS}`,
         },
         {
           id: x.id,
@@ -297,6 +302,9 @@ export function registerSourceRoutes(
     if (updated && isMarketDataAdapter(updated.adapterId) && updated.enabled) {
       await setActiveMarketSource(ctx, updated.id);
     }
+    if (body.agentIds) {
+      await replaceSourceAgents(ctx, id, body.agentIds);
+    }
     return { source: updated ? publicSource(updated) : publicSource(row) };
   });
 
@@ -411,6 +419,94 @@ export function registerSourceRoutes(
       await ctx.db.delete(encryptedSecrets).where(eq(encryptedSecrets.id, row.secretId));
     }
     return { ok: true };
+  });
+
+  app.get("/api/v1/source-identities", { preHandler: authed }, async () => {
+    const identities = await ctx.db.select().from(sourceIdentities).limit(100);
+    const policies = await ctx.db.select().from(sourceIdentityPolicies).limit(200);
+    return {
+      identities: identities.map((identity) => ({
+        ...identity,
+        policy: policies
+          .filter((item) => item.identityId === identity.id && item.active)
+          .sort((left, right) => right.revision - left.revision)[0],
+      })),
+    };
+  });
+
+  app.post(
+    "/api/v1/source-identities/:id/policy",
+    { preHandler: authed },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = sourceIdentityPolicySchema.parse(request.body);
+      const [identity] = await ctx.db
+        .select()
+        .from(sourceIdentities)
+        .where(eq(sourceIdentities.id, id))
+        .limit(1);
+      if (!identity) {
+        return reply
+          .code(404)
+          .send({ error: { code: "not_found", message: "Identity not found" } });
+      }
+      const existing = await ctx.db
+        .select()
+        .from(sourceIdentityPolicies)
+        .where(eq(sourceIdentityPolicies.identityId, id))
+        .limit(50);
+      const revision = existing.reduce((max, row) => Math.max(max, row.revision), 0) + 1;
+      await ctx.db
+        .update(sourceIdentityPolicies)
+        .set({ active: false })
+        .where(eq(sourceIdentityPolicies.identityId, id));
+      const [policy] = await ctx.db
+        .insert(sourceIdentityPolicies)
+        .values({
+          identityId: id,
+          revision,
+          trustTier: body.trustTier,
+          allowedUses: body.allowedUses,
+          notes: body.notes,
+          active: true,
+        })
+        .returning();
+      return { policy };
+    },
+  );
+
+  app.get("/api/v1/publisher-hosts", { preHandler: authed }, async () => {
+    const rows = await ctx.db.select().from(publisherHostPolicies).limit(200);
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      const current = latest.get(row.hostname);
+      if (!current || row.revision > current.revision) {
+        latest.set(row.hostname, row);
+      }
+    }
+    return { hosts: [...latest.values()] };
+  });
+
+  app.post("/api/v1/publisher-hosts", { preHandler: authed }, async (request) => {
+    const body = publisherHostPolicySchema.parse(request.body);
+    const hostname = body.hostname.toLowerCase();
+    const existing = await ctx.db
+      .select()
+      .from(publisherHostPolicies)
+      .where(eq(publisherHostPolicies.hostname, hostname))
+      .limit(50);
+    const revision = existing.reduce((max, row) => Math.max(max, row.revision), 0) + 1;
+    const [policy] = await ctx.db
+      .insert(publisherHostPolicies)
+      .values({
+        hostname,
+        revision,
+        trustTier: body.trustTier,
+        blocked: body.blocked ?? false,
+        notes: body.notes,
+      })
+      .returning();
+    return { policy };
   });
 }
 

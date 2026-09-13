@@ -22,12 +22,45 @@ function EventDetailPage() {
       epistemicStatus?: string | null;
       candidateKind?: string | null;
       discoveryReason?: string | null;
+      reliabilityStatus?: string | null;
+      impactLevel?: string | null;
+      contentCompleteness?: string | null;
     };
-    evidence: Array<{ id: string; title?: string; canonicalUrl?: string }>;
+    evidence: Array<{
+      id: string;
+      title?: string;
+      canonicalUrl?: string;
+      bodyText?: string;
+      contentCompleteness?: string;
+    }>;
     roles: Array<{ evidenceId: string; role: string }>;
     observations?: Array<{ kind: string; value: unknown; sourceId: string }>;
     assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
     independence?: { nodes: Array<{ evidenceId: string; hostname: string; role: string }> };
+    claims?: Array<{
+      claimId: string;
+      title: string;
+      kind: string;
+      stance: string;
+      excerpt?: string | null;
+      evidenceId?: string | null;
+    }>;
+    assessment?: { reliabilityStatus: string; impactLevel: string; independentOriginCount: number };
+    assessments?: Array<{
+      revision: number;
+      reliabilityStatus: string;
+      impactLevel: string;
+      independentOriginCount: number;
+      reasons?: Array<{ code: string; detail?: string | null }>;
+    }>;
+    trustSnapshot?: Array<{
+      evidenceId: string;
+      displayName?: string | null;
+      hostname?: string | null;
+      trustTier: string;
+      originKey?: string | null;
+    }>;
+    documents?: Array<{ evidenceId: string; cleanedText?: string; status: string }>;
     skillTrace?: {
       selected?: Array<{ slug: string; displayName: string; reason: string }>;
       skipped?: Array<{ slug: string; displayName: string; reason: string; notice?: string }>;
@@ -54,7 +87,7 @@ function EventDetailPage() {
     <>
       <PageHeader
         title={data.event.title}
-        description="Evidence clustered for one possible happening. Independent count is distinct hosts, not how many times a story was copied. A candidate is not a recommendation to buy, sell, or trade."
+        description="Evidence clustered for one possible happening. Independent origins are not reprints. A candidate is not a recommendation to buy, sell, or trade."
       />
       <p className="record-meta">
         <StatusBadge label={eventStatusLabel(data.event.status)} />
@@ -65,8 +98,12 @@ function EventDetailPage() {
         {data.event.epistemicStatus ? (
           <span>{epistemicStatusLabel(data.event.epistemicStatus)}</span>
         ) : null}
-        {data.event.materialityReason ? (
-          <span>Materiality: {data.event.materialityReason.replaceAll("_", " ")}</span>
+        {data.event.reliabilityStatus ? (
+          <span>{data.event.reliabilityStatus.replaceAll("_", " ")}</span>
+        ) : null}
+        {data.event.impactLevel ? <span>Impact {data.event.impactLevel}</span> : null}
+        {data.event.contentCompleteness ? (
+          <span>{data.event.contentCompleteness.replaceAll("_", " ")}</span>
         ) : null}
       </p>
       {data.event.status === "candidate" ? (
@@ -77,6 +114,83 @@ function EventDetailPage() {
       ) : null}
       {data.event.discoveryReason ? (
         <p className="field-note">{data.event.discoveryReason}</p>
+      ) : null}
+      {data.assessment ? (
+        <p className="field-note">
+          Reliability {data.assessment.reliabilityStatus.replaceAll("_", " ")} · Impact{" "}
+          {data.assessment.impactLevel} · {data.assessment.independentOriginCount} independent
+          origins
+        </p>
+      ) : null}
+      {data.assessments && data.assessments.length > 0 ? (
+        <Card>
+          <h2>Assessment history</h2>
+          <ul className="data-list">
+            {data.assessments.map((item) => (
+              <li key={item.revision}>
+                <span>
+                  Revision {item.revision}: {item.reliabilityStatus.replaceAll("_", " ")} · Impact{" "}
+                  {item.impactLevel}
+                </span>
+                <small>
+                  {item.independentOriginCount} independent origins
+                  {item.reasons && item.reasons.length > 0
+                    ? ` · ${item.reasons.map((reason) => reason.detail || reason.code).join("; ")}`
+                    : ""}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {data.trustSnapshot && data.trustSnapshot.length > 0 ? (
+        <Card>
+          <h2>Source trust</h2>
+          <ul className="data-list">
+            {data.trustSnapshot.map((item) => (
+              <li key={item.evidenceId}>
+                <span>
+                  {item.displayName ||
+                    item.originKey ||
+                    item.hostname ||
+                    data.independence?.nodes.find((node) => node.evidenceId === item.evidenceId)
+                      ?.hostname ||
+                    "Unknown source"}
+                </span>
+                <small>{item.trustTier.replaceAll("_", " ")}</small>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {data.claims && data.claims.length > 0 ? (
+        <Card>
+          <h2>Claims</h2>
+          <ul className="data-list">
+            {[...new Map(data.claims.map((item) => [item.claimId, item])).values()].map((item) => (
+              <li key={item.claimId}>
+                <span>{item.title}</span>
+                <small>
+                  {item.kind} · {item.stance}
+                  {item.excerpt ? ` · “${item.excerpt}”` : ""}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {data.documents && data.documents.length > 0 ? (
+        <Card>
+          <h2>Cleaned content</h2>
+          <ul className="data-list">
+            {data.documents.map((item) => (
+              <li key={item.evidenceId}>
+                <span>{item.cleanedText?.slice(0, 280) || item.status}</span>
+                <small>{item.status}</small>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
       {data.assets && data.assets.length > 0 ? (
         <Card>
@@ -146,6 +260,9 @@ function EventDetailPage() {
                   {data.roles.find((role) => role.evidenceId === item.id)?.role ?? "primary"}
                   {data.independence?.nodes.find((node) => node.evidenceId === item.id)
                     ? ` · ${data.independence.nodes.find((node) => node.evidenceId === item.id)?.hostname}`
+                    : ""}
+                  {item.contentCompleteness
+                    ? ` · ${item.contentCompleteness.replaceAll("_", " ")}`
                     : ""}
                 </small>
               </span>

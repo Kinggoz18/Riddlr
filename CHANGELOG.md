@@ -4,6 +4,39 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Discord invite URLs include the Application ID (`client_id`). Discord returns
+  Invalid Form Body without it. The Discord source form no longer uses a
+  password-manager username/password pair for the bot token and server id.
+
+- Settings → Security stores a Resend API key for password reset and security
+  mail. Local Compose still uses Mailpit. Without email and without authenticator
+  recovery codes, `cmd/reset-password` prints a one-hour reset URL.
+
+- Settings shows the saved LLM provider, base URL, and model. The API key
+  is still never returned.
+
+- LLM base URLs accept the origin, a `/v1` path, or the full
+  `/chat/completions` or `/messages` URL. Saving a model checks that it answers
+  without requiring JSON Schema structured output.
+
+- Events cluster on matching claim fingerprints or similar document text, not
+  on “any bitcoin market-move today.” HTML extraction drops page chrome; search
+  titles win over truncated page titles. Watchlist price quotes alone do not
+  make a cluster material. CoinGecko snapshots absorbed into a news cluster are
+  observations, not independent origins.
+
+- Claim-level corroboration: search snippets stay mentions until eligible pages
+  are enriched; reliability and impact are application-computed; signals
+  prove claims to event-owned evidence. Notification eligibility follows impact,
+  not model risk. Unverified early warnings are off unless enabled in
+  notification policy. Shadow assessments persist reliability without sending
+  notifications. New sources attach to the default agent or an explicit agent
+  list, not every agent.
+
+- OpenAI-compatible and Anthropic-compatible base URLs accept either the origin
+  (`https://api.openai.com`) or a path that already ends in `/v1`
+  (`https://openrouter.ai/api/v1`).
+
 - By default the dashboard is only at `127.0.0.1:8080` on the machine that
   runs Docker. A remote server uses the SSH command printed by
   `./scripts/riddlr-up.sh`. Other devices without SSH require `--public` and a

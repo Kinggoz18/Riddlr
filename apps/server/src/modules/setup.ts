@@ -257,6 +257,24 @@ export async function assertLlmReachable(
   }
 }
 
+export function isLlmProviderKind(kind: string) {
+  return kind.includes("compatible") || kind.includes("openai") || kind.includes("anthropic");
+}
+
+export function toPublicLlm(providers: Array<{ kind: string; settings: unknown }>) {
+  const row = providers.find((item) => isLlmProviderKind(item.kind));
+  if (!row) {
+    return { configured: false as const };
+  }
+  const settings = row.settings as { baseUrl?: unknown; model?: unknown };
+  return {
+    configured: true as const,
+    provider: row.kind,
+    ...(typeof settings.baseUrl === "string" ? { baseUrl: settings.baseUrl } : {}),
+    ...(typeof settings.model === "string" ? { model: settings.model } : {}),
+  };
+}
+
 export async function saveLlmProvider(
   ctx: AppContext,
   body: { provider: string; baseUrl: string; model: string; apiKey: string },
@@ -272,11 +290,7 @@ export async function saveLlmProvider(
   });
   const existing = await ctx.db.select().from(providerConfigs);
   for (const row of existing) {
-    if (
-      row.kind.includes("compatible") ||
-      row.kind.includes("openai") ||
-      row.kind.includes("anthropic")
-    ) {
+    if (isLlmProviderKind(row.kind)) {
       await ctx.db.delete(providerConfigs).where(eq(providerConfigs.id, row.id));
     }
   }

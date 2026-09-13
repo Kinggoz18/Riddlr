@@ -1,0 +1,31 @@
+import { describe, expect, it } from "vitest";
+import { toPublicLlm } from "../../src/modules/setup.js";
+
+describe("public LLM settings", () => {
+  it("returns provider, base URL, and model without a secret", () => {
+    expect(
+      toPublicLlm([
+        {
+          kind: "openai_compatible",
+          settings: {
+            baseUrl: "https://openrouter.ai/api/v1",
+            model: "meta-llama/llama-3.1-8b-instruct",
+            configured: true,
+            apiKey: "sk-must-never-appear",
+          },
+        },
+      ]),
+    ).toEqual({
+      configured: true,
+      provider: "openai_compatible",
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "meta-llama/llama-3.1-8b-instruct",
+    });
+  });
+
+  it("reports unconfigured when no LLM provider exists", () => {
+    expect(toPublicLlm([{ kind: "telegram", settings: { chatId: "1" } }])).toEqual({
+      configured: false,
+    });
+  });
+});

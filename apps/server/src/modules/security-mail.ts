@@ -1,5 +1,5 @@
-import type { AppConfig } from "@riddlr/config";
-import { sendTransactionalEmail } from "./email.js";
+import type { AppContext } from "../context.js";
+import { resolveEmailTransport, sendTransactionalEmail } from "./email.js";
 
 export type SecurityMailKind =
   | "password_changed"
@@ -19,20 +19,22 @@ const SUBJECTS: Record<SecurityMailKind, string> = {
 };
 
 export async function sendSecurityMail(input: {
-  config: AppConfig;
+  ctx: AppContext;
   to: string;
   kind: SecurityMailKind;
   text: string;
-  logger?: { warn: (obj: unknown, msg: string) => void };
-}): Promise<void> {
+}): Promise<{ sent: boolean; transport: "resend" | "smtp" | "none" }> {
+  const transport = await resolveEmailTransport(input.ctx);
   try {
-    await sendTransactionalEmail({
-      config: input.config,
+    return await sendTransactionalEmail({
+      transport,
       to: input.to,
       subject: SUBJECTS[input.kind],
       text: input.text,
+      env: input.ctx.config.RIDDLR_ENV,
     });
   } catch (error) {
-    input.logger?.warn({ err: error, kind: input.kind }, "security email failed");
+    input.ctx.logger.warn({ err: error, kind: input.kind }, "security email failed");
+    return { sent: false, transport: transport.transport };
   }
 }

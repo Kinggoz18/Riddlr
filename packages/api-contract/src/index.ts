@@ -117,6 +117,8 @@ export const notificationPolicySchema = z.object({
       endHour: z.number().int().min(0).max(23),
     })
     .optional(),
+  earlyWarnings: z.boolean().optional(),
+  shadowAssessments: z.boolean().optional(),
 });
 
 export const agentUpdateSchema = z.object({
@@ -231,11 +233,34 @@ export const telegramSetupSchema = z.object({
   chatId: z.string().min(1).max(64),
 });
 
+export const emailSetupSchema = z.object({
+  apiKey: z.string().min(8).max(200),
+  from: z
+    .string()
+    .min(3)
+    .max(200)
+    .refine((value) => value.includes("@"), { message: "From must include an email address." }),
+});
+
+export const sourceIdentityPolicySchema = z.object({
+  trustTier: z.enum(["unknown", "community", "known_analyst", "official_firsthand", "blocked"]),
+  allowedUses: z.array(z.enum(["discovery", "analysis", "early_warning", "confirmation"])).min(1),
+  notes: z.string().max(280).optional(),
+});
+
+export const publisherHostPolicySchema = z.object({
+  hostname: z.string().min(1).max(253),
+  trustTier: z.enum(["unknown", "community", "known_analyst", "official_firsthand", "blocked"]),
+  blocked: z.boolean().optional(),
+  notes: z.string().max(280).optional(),
+});
+
 export const sourcePatchSchema = z.object({
   name: z.string().min(3).max(80).optional(),
   enabled: z.boolean().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   token: z.string().min(8).max(512).optional(),
+  agentIds: z.array(z.string().uuid()).max(16).optional(),
 });
 
 export const agentCreateSchema = z.object({

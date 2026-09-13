@@ -1,6 +1,7 @@
 import type { MarketObservation } from "./domain-module.js";
-import type { EvidenceRole } from "./evidence.js";
+import { type EvidenceRole, lineageOriginKey } from "./evidence.js";
 import { takeBounded } from "./limits.js";
+import type { ContentCompleteness, ReliabilityStatus, TrustTier } from "./reliability.js";
 import type { SkillApplicabilityFacts, SkillDataKind } from "./skill-catalog.js";
 
 export type MarketReaction = "unavailable" | "weak" | "strong";
@@ -19,6 +20,14 @@ export type EventFacts = {
   watchlistOverlap: boolean;
   portfolioOverlap: boolean;
   hasAuthoritativePrimary: boolean;
+  hasTrustedFirsthand: boolean;
+  independentOriginCount: number;
+  independentActorCount: number;
+  retractingCount?: number;
+  contentCompleteness: ContentCompleteness;
+  hasValidatedClaim: boolean;
+  headlineMismatch?: boolean;
+  reliabilityStatus?: ReliabilityStatus;
   priceChangePct?: number;
   volumeUsd?: number;
   marketCapUsd?: number;
@@ -122,6 +131,16 @@ export function buildEventFacts(input: {
     publishedAt?: Date;
     role: EvidenceRole;
     adapterPayload?: Record<string, unknown> | null;
+    originKey?: string;
+    actorKey?: string;
+    outboundUrls?: string[];
+    attributedOrigin?: string;
+    referencedOriginKey?: string;
+    trustTier?: TrustTier;
+    contentCompleteness?: ContentCompleteness;
+    hasValidatedClaim?: boolean;
+    headlineMismatch?: boolean;
+    retracting?: boolean;
   }>;
   assets: Array<{ assetClass: string; canonicalId: string }>;
   observations: MarketObservation[];
@@ -143,9 +162,38 @@ export function buildEventFacts(input: {
     ),
   ];
   const independent = input.evidence.filter(
-    (item) => item.role === "primary" || item.role === "supporting",
+    (item) =>
+      (item.role === "primary" || item.role === "supporting") &&
+      item.sourceFamily !== "market_data",
   );
   const independentHosts = new Set(independent.map((item) => item.hostname ?? "unknown-host"));
+  const independentOrigins = new Set(
+    independent.map((item) =>
+      lineageOriginKey({
+        originKey: item.originKey,
+        referencedOriginKey: item.referencedOriginKey,
+        outboundUrls: item.outboundUrls,
+        attributedOrigin: item.attributedOrigin,
+        hostname: item.hostname,
+      }),
+    ),
+  );
+  const actorKeys = new Set(
+    independent.map((item) => item.actorKey).filter((item): item is string => Boolean(item)),
+  );
+  const completeness: ContentCompleteness = input.evidence.some(
+    (item) =>
+      item.contentCompleteness === "full_document" ||
+      item.contentCompleteness === "native_complete",
+  )
+    ? input.evidence.some((item) => item.contentCompleteness === "full_document")
+      ? "full_document"
+      : "native_complete"
+    : (input.evidence[0]?.contentCompleteness ?? "native_complete");
+  const hasValidatedClaim = input.evidence.some((item) => item.hasValidatedClaim);
+  const headlineMismatch = input.evidence.some((item) => item.headlineMismatch);
+  const retractingCount = input.evidence.filter((item) => item.retracting).length;
+  const hasTrustedFirsthand = independent.some((item) => item.trustTier === "official_firsthand");
   const text = input.evidence.map((item) => item.text).join("\n");
   const change = numberObservation(input.observations, "price_change_24h");
   const volume = numberObservation(input.observations, "quoted_volume");
@@ -160,19 +208,24 @@ export function buildEventFacts(input: {
   return {
     evidenceCount: input.evidence.length,
     independentHostCount: independentHosts.size,
+    independentOriginCount: independentOrigins.size || independentHosts.size,
+    independentActorCount: actorKeys.size,
     independentFamilyCount: new Set(independent.map((item) => item.sourceFamily ?? "unknown")).size,
     primaryCount: primary,
     derivedCount: derived,
     contradictingCount: input.evidence.filter((item) => item.role === "contradicting").length,
+    retractingCount,
+    headlineMismatch,
     hostnames,
     sourceFamilies: families,
     assetClasses: [...new Set(input.assets.map((item) => item.assetClass))],
     assetIds: input.assets.map((item) => item.canonicalId),
     watchlistOverlap: input.watchlistOverlap,
     portfolioOverlap: input.portfolioOverlap,
-    hasAuthoritativePrimary: independent.some(
-      (item) => item.sourceFamily === "x" || item.sourceFamily === "discord",
-    ),
+    hasAuthoritativePrimary: hasTrustedFirsthand,
+    hasTrustedFirsthand,
+    contentCompleteness: completeness,
+    hasValidatedClaim,
     priceChangePct: change,
     volumeUsd: volume,
     marketCapUsd: marketCap,
@@ -235,7 +288,10 @@ export function factsToApplicability(facts: EventFacts): SkillApplicabilityFacts
 
 export function formatAnalysisFacts(facts: EventFacts): string[] {
   return [
-    `Independent hosts: ${facts.independentHostCount}`,
+    `Independent origins: ${facts.independentOriginCount}`,
+    `Content completeness: ${facts.contentCompleteness}`,
+    `Validated claim: ${facts.hasValidatedClaim ? "yes" : "none"}`,
+    `Trusted firsthand: ${facts.hasTrustedFirsthand ? "yes" : "no"}`,
     `Primary evidence: ${facts.primaryCount}`,
     `Derived reprints: ${facts.derivedCount}`,
     `Contradicting evidence: ${facts.contradictingCount}`,

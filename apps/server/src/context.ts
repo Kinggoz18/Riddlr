@@ -13,8 +13,12 @@ export type AppContext = {
   db: Database;
   redis: Redis;
   scanQueue: Queue;
-  analyzeQueue: Queue;
-  notifyQueue: Queue;
+  ingestQueue?: Queue;
+  enrichQueue?: Queue;
+  understandQueue?: Queue;
+  clusterQueue?: Queue;
+  analyzeQueue?: Queue;
+  notifyQueue?: Queue;
   logger: ReturnType<typeof createLogger>;
   metrics: ReturnType<typeof createMetrics>;
   masterKey: Buffer;
@@ -29,6 +33,10 @@ export async function createContext(): Promise<AppContext> {
   const redis = new Redis(config.RIDDLR_REDIS_URL, { maxRetriesPerRequest: null });
   const queueOptions = { connection: redis };
   const scanQueue = new Queue(QUEUE_NAMES.scanRun, { connection: redis });
+  const ingestQueue = new Queue(QUEUE_NAMES.ingestSource, queueOptions);
+  const enrichQueue = new Queue(QUEUE_NAMES.enrichEvidence, queueOptions);
+  const understandQueue = new Queue(QUEUE_NAMES.understandEvidence, queueOptions);
+  const clusterQueue = new Queue(QUEUE_NAMES.clusterEvents, queueOptions);
   const analyzeQueue = new Queue(QUEUE_NAMES.analyzeEvent, queueOptions);
   const notifyQueue = new Queue(QUEUE_NAMES.notifyDeliver, queueOptions);
   const logger = createLogger({
@@ -47,6 +55,10 @@ export async function createContext(): Promise<AppContext> {
     db,
     redis,
     scanQueue,
+    ingestQueue,
+    enrichQueue,
+    understandQueue,
+    clusterQueue,
     analyzeQueue,
     notifyQueue,
     logger,

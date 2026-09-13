@@ -153,4 +153,16 @@ describe("notification policy", () => {
     expect(body).toContain("RISK:");
     expect(body).toContain("INVALIDATION:");
   });
+
+  it("labels unverified early warnings distinctly", () => {
+    const body = formatSignalNotification({
+      headline: "Official channel reports outage",
+      kind: "early_warning",
+      sourceLabel: "discord announcements",
+      ageLabel: "12 minutes",
+      proofSummary: "Single trusted post",
+    });
+    expect(body).toContain("UNVERIFIED EARLY WARNING");
+    expect(body).toContain("not confirmed");
+  });
 });

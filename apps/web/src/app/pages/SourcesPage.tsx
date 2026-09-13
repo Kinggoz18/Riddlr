@@ -20,13 +20,54 @@ type SourceRow = {
   config?: Record<string, unknown>;
 };
 
+type IdentityRow = {
+  id: string;
+  platform: string;
+  externalId: string;
+  displayName?: string | null;
+  hostname?: string | null;
+  policy?: { trustTier: string; allowedUses: string[] };
+};
+
+type HostPolicyRow = {
+  id: string;
+  hostname: string;
+  trustTier: string;
+  blocked: boolean;
+  notes?: string | null;
+};
+
 type Adapter = {
   id: string;
   capabilities?: { lookbackNotes?: string };
-  inviteUrl?: string;
   botPermissions?: number;
   comingSoon?: boolean;
 };
+
+const DISCORD_SNOWFLAKE = /^\d{17,20}$/;
+
+function applicationIdFromBotToken(token: string): string | undefined {
+  const first = token.trim().split(".")[0];
+  if (!first) {
+    return undefined;
+  }
+  try {
+    const padded =
+      first.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (first.length % 4)) % 4);
+    const decoded = atob(padded);
+    return DISCORD_SNOWFLAKE.test(decoded) ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function discordBotInviteUrl(clientId: string, permissions: number) {
+  const url = new URL("https://discord.com/oauth2/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("permissions", String(permissions));
+  url.searchParams.set("scope", "bot");
+  return url.toString();
+}
 
 const ADAPTERS = [
   {
@@ -130,6 +171,160 @@ function SourcesList() {
           ))}
         </section>
       )}
+      <IdentityPolicies />
+    </>
+  );
+}
+
+function IdentityPolicies() {
+  const toast = useToast();
+  const [identities, setIdentities] = useState<IdentityRow[]>([]);
+  const [hosts, setHosts] = useState<HostPolicyRow[]>([]);
+  const [hostname, setHostname] = useState("");
+  const [hostTrust, setHostTrust] = useState("unknown");
+  const [hostBlocked, setHostBlocked] = useState(false);
+  async function refresh() {
+    const [identityBody, hostBody] = await Promise.all([
+      api<{ identities: IdentityRow[] }>("/api/v1/source-identities"),
+      api<{ hosts: HostPolicyRow[] }>("/api/v1/publisher-hosts"),
+    ]);
+    setIdentities(identityBody.identities);
+    setHosts(hostBody.hosts);
+  }
+  useEffect(() => {
+    void refresh().catch(() => undefined);
+  }, []);
+  return (
+    <>
+      <Card>
+        <h2>Source identities</h2>
+        <p className="field-note">
+          Trust is assigned to a publisher, X actor, or Discord author—not to the platform. X and
+          Discord are not authoritative by family.
+        </p>
+        {identities.length === 0 ? (
+          <EmptyState
+            title="No identities yet"
+            body="Identities appear after a scan observes a publisher or actor."
+          />
+        ) : (
+          <ul className="data-list">
+            {identities.map((identity) => (
+              <li key={identity.id}>
+                <span>
+                  {identity.displayName || identity.externalId}
+                  <small>
+                    {identity.platform}
+                    {identity.hostname ? ` · ${identity.hostname}` : ""} ·{" "}
+                    {(identity.policy?.trustTier ?? "unknown").replaceAll("_", " ")}
+                  </small>
+                </span>
+                <select
+                  aria-label={`Trust for ${identity.displayName || identity.externalId}`}
+                  value={identity.policy?.trustTier ?? "unknown"}
+                  onChange={async (event) => {
+                    try {
+                      await api(`/api/v1/source-identities/${identity.id}/policy`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          trustTier: event.target.value,
+                          allowedUses:
+                            event.target.value === "blocked"
+                              ? ["discovery"]
+                              : ["discovery", "analysis", "early_warning", "confirmation"],
+                        }),
+                      });
+                      await refresh();
+                      toast("Trust saved");
+                    } catch (err: unknown) {
+                      toast(toastFail(err, "Couldn’t save trust"), "danger");
+                    }
+                  }}
+                >
+                  <option value="unknown">unknown</option>
+                  <option value="community">community</option>
+                  <option value="known_analyst">known analyst</option>
+                  <option value="official_firsthand">official firsthand</option>
+                  <option value="blocked">blocked</option>
+                </select>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <Card>
+        <h2>Publisher hosts</h2>
+        <p className="field-note">
+          Blocked hosts skip SearXNG enrichment. Trust does not make a snippet corroborated.
+        </p>
+        {hosts.length > 0 ? (
+          <ul className="data-list">
+            {hosts.map((host) => (
+              <li key={host.id}>
+                <span>
+                  {host.hostname}
+                  <small>{host.blocked ? "blocked" : host.trustTier.replaceAll("_", " ")}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/publisher-hosts", {
+                method: "POST",
+                body: JSON.stringify({
+                  hostname,
+                  trustTier: hostTrust,
+                  blocked: hostBlocked,
+                }),
+              });
+              setHostname("");
+              setHostBlocked(false);
+              await refresh();
+              toast("Host policy saved");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save host policy"), "danger");
+            }
+          }}
+        >
+          <Field label="Hostname">
+            <input
+              id="publisher-hostname"
+              value={hostname}
+              onChange={(e) => setHostname(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Trust">
+            <select
+              id="publisher-trust"
+              value={hostTrust}
+              onChange={(e) => setHostTrust(e.target.value)}
+            >
+              <option value="unknown">unknown</option>
+              <option value="community">community</option>
+              <option value="known_analyst">known analyst</option>
+              <option value="official_firsthand">official firsthand</option>
+              <option value="blocked">blocked</option>
+            </select>
+          </Field>
+          <label className="check-row" htmlFor="publisher-blocked">
+            <input
+              id="publisher-blocked"
+              type="checkbox"
+              checked={hostBlocked}
+              onChange={(e) => setHostBlocked(e.target.checked)}
+            />
+            Block enrichment
+          </label>
+          <p className="ui-actions">
+            <Button type="submit">Save host policy</Button>
+          </p>
+        </form>
+      </Card>
     </>
   );
 }
@@ -177,21 +372,25 @@ function DiscordForm() {
   const [name, setName] = useState("Discord");
   const [botToken, setBotToken] = useState("");
   const [guildId, setGuildId] = useState("");
+  const [applicationId, setApplicationId] = useState("");
   const [channelIds, setChannelIds] = useState<string[]>([]);
   const [excludeChannelIds, setExcludeChannelIds] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [lookbackHours, setLookbackHours] = useState("6");
   const [notes, setNotes] = useState<string>();
-  const [inviteUrl, setInviteUrl] = useState<string>();
   const [botPermissions, setBotPermissions] = useState<number>();
   useEffect(() => {
     void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
       const discord = body.adapters.find((item) => item.id === "discord");
       setNotes(discord?.capabilities?.lookbackNotes);
-      setInviteUrl(discord?.inviteUrl);
       setBotPermissions(discord?.botPermissions);
     });
   }, []);
+  const clientId = DISCORD_SNOWFLAKE.test(applicationId)
+    ? applicationId
+    : applicationIdFromBotToken(botToken);
+  const inviteUrl =
+    clientId && botPermissions ? discordBotInviteUrl(clientId, botPermissions) : undefined;
   return (
     <>
       <PageHeader
@@ -200,10 +399,19 @@ function DiscordForm() {
         actions={<SourcesSubnav />}
       />
       <Card>
-        {inviteUrl ? <ExternalLink href={inviteUrl}>Open invite template</ExternalLink> : null}
+        {inviteUrl ? (
+          <ExternalLink href={inviteUrl}>Invite bot with required permissions</ExternalLink>
+        ) : (
+          <p className="field-note">
+            Discord’s invite URL needs an Application ID (`client_id`). Without it Discord returns
+            “Invalid Form Body”. Paste the Application ID from Developer Portal → General
+            Information, or paste the bot token first.
+          </p>
+        )}
         {botPermissions ? <code>Permissions: {botPermissions}</code> : null}
         {notes ? <p className="field-note">{notes}</p> : null}
         <form
+          autoComplete="off"
           onSubmit={async (event) => {
             event.preventDefault();
             try {
@@ -228,27 +436,39 @@ function DiscordForm() {
         >
           <Field label="Source name">
             <input
-              id="source-name"
+              id="discord-source-name"
+              name="discord-source-name"
+              autoComplete="off"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
           </Field>
-          <Field label="Bot token" hint="Stored encrypted. Never shown again.">
+          <Field
+            label="Application id"
+            hint="Developer Portal → General Information. Builds the invite link. Not required to save the source."
+          >
             <input
-              id="bot-token"
-              type="password"
+              id="discord-application-id"
+              name="discord-application-id"
+              inputMode="numeric"
               autoComplete="off"
-              value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
-              required
+              value={applicationId}
+              onChange={(e) => setApplicationId(e.target.value)}
             />
           </Field>
           <Field
             label="Server id"
             hint="Optional if channel IDs are enough. Enable Developer Mode in Discord to copy IDs."
           >
-            <input id="server-id" value={guildId} onChange={(e) => setGuildId(e.target.value)} />
+            <input
+              id="discord-server-id"
+              name="discord-server-id"
+              inputMode="numeric"
+              autoComplete="off"
+              value={guildId}
+              onChange={(e) => setGuildId(e.target.value)}
+            />
           </Field>
           <Field
             label="Channels"
@@ -287,12 +507,25 @@ function DiscordForm() {
             hint="1–24. Discord does not provide message-search archive access here."
           >
             <input
-              id="lookback-hours"
+              id="discord-lookback-hours"
+              name="discord-lookback-hours"
               type="number"
               min={1}
               max={24}
+              autoComplete="off"
               value={lookbackHours}
               onChange={(e) => setLookbackHours(e.target.value)}
+            />
+          </Field>
+          <Field label="Bot token" hint="Stored encrypted. Never shown again.">
+            <input
+              id="discord-bot-token"
+              name="discord-bot-token"
+              type="password"
+              autoComplete="new-password"
+              value={botToken}
+              onChange={(e) => setBotToken(e.target.value)}
+              required
             />
           </Field>
           <p className="ui-actions">
@@ -608,6 +841,16 @@ function SourceDetail() {
         <StatusBadge label={row.enabled ? "Enabled" : "Paused"} />
         <span>{adapterLabel(row.adapterId)}</span>
       </p>
+      {row.adapterId === "searxng" ? (
+        <Card>
+          <h2>Enrichment</h2>
+          <p className="field-note">
+            Search results start as snippets. Eligible public pages are fetched with SSRF and robots
+            checks, cleaned once, and understood once per content version. Blocked hosts stay
+            discovery-only.
+          </p>
+        </Card>
+      ) : null}
       {row.adapterId === "discord" ? (
         <Card>
           <h2>Channels</h2>

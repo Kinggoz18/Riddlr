@@ -26,6 +26,7 @@
     "docker:down": "docker compose down",
     "up": "bash scripts/riddlr-up.sh",
     "onboard": "pnpm --filter @riddlr/server exec node dist/cmd/onboard.js",
+    "reset-password": "pnpm --filter @riddlr/server exec node dist/cmd/reset-password.js",
     "compose:reset": "docker compose down -v --remove-orphans && bash scripts/riddlr-up.sh",
     "licenses:check": "node scripts/check-licenses.mjs",
     "compose:smoke": "node scripts/compose-smoke.mjs",

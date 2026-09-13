@@ -25,7 +25,9 @@ type XTweet = {
   created_at?: unknown;
   author_id?: unknown;
   lang?: unknown;
+  conversation_id?: unknown;
   public_metrics?: Record<string, unknown>;
+  referenced_tweets?: Array<{ type?: unknown; id?: unknown }>;
 };
 
 function parseUsernames(value: unknown): string[] {
@@ -75,9 +77,6 @@ export function buildRecentSearchQuery(input: {
     clauses.push(`(${keywords.map(quoteTerm).join(" OR ")})`);
   }
   const joined = clauses.join(" ");
-  if (!joined) {
-    return "crypto";
-  }
   return joined.slice(0, MAX_X_QUERY_CHARS);
 }
 
@@ -174,6 +173,13 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
     }
     const authorId = typeof tweet.author_id === "string" ? tweet.author_id : undefined;
     const username = authorId ? users.get(authorId) : undefined;
+    const referenced = Array.isArray(tweet.referenced_tweets) ? tweet.referenced_tweets : [];
+    const originRef = referenced.find(
+      (item) =>
+        item && (item.type === "retweeted" || item.type === "quoted" || item.type === "replied_to"),
+    );
+    const referencedId = typeof originRef?.id === "string" ? originRef.id : undefined;
+    const outbound = [...text.matchAll(/https?:\/\/[^\s]+/g)].map((item) => item[0]);
     evidence.push({
       sourceFamily: "x",
       adapterId: "x",
@@ -185,9 +191,19 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
       publishedAt: typeof tweet.created_at === "string" ? new Date(tweet.created_at) : undefined,
       fetchedAt,
       language: typeof tweet.lang === "string" ? tweet.lang : undefined,
+      contentCompleteness: "native_complete",
+      sourceIdentity: authorId
+        ? { platform: "x", externalId: authorId, displayName: username }
+        : undefined,
+      originKey: referencedId ? `x:${referencedId}` : authorId ? `x:${authorId}` : `x:${id}`,
+      referencedOriginKey: referencedId ? `x:${referencedId}` : undefined,
+      outboundUrls: outbound.slice(0, 8),
       adapterPayload: {
         tweetId: id,
         authorId,
+        conversationId:
+          typeof tweet.conversation_id === "string" ? tweet.conversation_id : undefined,
+        referencedTweets: referenced,
         publicMetrics:
           tweet.public_metrics && typeof tweet.public_metrics === "object"
             ? tweet.public_metrics
@@ -248,7 +264,7 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
         authors: config.authors,
         mentions: config.mentions,
         keywords: config.keywords,
-        query: "crypto",
+        query: "",
       });
       const url = new URL(`${X_API_BASE}${X_RECENT_SEARCH_PATH}`);
       url.searchParams.set("query", query);
@@ -316,8 +332,11 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
         String(Math.max(10, Math.min(query.limit ?? MAX_X_RESULTS, MAX_X_RESULTS))),
       );
       url.searchParams.set("start_time", clampedStart.toISOString());
-      url.searchParams.set("tweet.fields", "created_at,author_id,lang,public_metrics");
-      url.searchParams.set("expansions", "author_id");
+      url.searchParams.set(
+        "tweet.fields",
+        "created_at,author_id,lang,public_metrics,referenced_tweets,conversation_id",
+      );
+      url.searchParams.set("expansions", "author_id,referenced_tweets.id");
       url.searchParams.set("user.fields", "username");
       const limit = query.limit ?? MAX_X_RESULTS;
       const merged: FetchResult = {
@@ -370,6 +389,9 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
           ...merged,
           evidence: takeBounded(merged.evidence, limit),
           partial: merged.partial || merged.errors.length > 0,
+          requestUrl: "https://api.x.com/2/tweets/search/recent",
+          paginationCursor: nextToken,
+          adapterMetadata: nextToken ? { nextToken } : undefined,
         };
       } catch (error) {
         return {

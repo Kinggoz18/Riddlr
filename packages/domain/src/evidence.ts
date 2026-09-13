@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ContentCompleteness, SourceIdentityCandidate } from "./reliability.js";
 
 export type EvidenceRole = "primary" | "supporting" | "derived" | "contradicting";
 
@@ -13,8 +14,14 @@ export type RawEvidence = {
   author?: string;
   publishedAt?: Date;
   fetchedAt: Date;
+  editedAt?: Date;
   language?: string;
   adapterPayload?: Record<string, unknown>;
+  contentCompleteness?: ContentCompleteness;
+  sourceIdentity?: SourceIdentityCandidate;
+  originKey?: string;
+  referencedOriginKey?: string;
+  outboundUrls?: string[];
 };
 
 export type NormalizedEvidence = RawEvidence & {
@@ -23,6 +30,8 @@ export type NormalizedEvidence = RawEvidence & {
   fingerprint: string;
   normalizedTitle: string;
   normalizedText: string;
+  contentCompleteness: ContentCompleteness;
+  originKey?: string;
 };
 
 const TRACKING_PARAMS = new Set([
@@ -94,11 +103,22 @@ export function normalizeEvidence(raw: RawEvidence): NormalizedEvidence {
   }
   const normalizedTitle = normalizeText(raw.title);
   const normalizedText = normalizeText(raw.bodyText);
+  const origin =
+    raw.originKey ??
+    (raw.sourceIdentity
+      ? `${raw.sourceIdentity.platform}:${raw.sourceIdentity.externalId}`
+      : hostname
+        ? `host:${hostname}`
+        : undefined);
   return {
     ...raw,
     canonicalUrl,
     normalizedTitle,
     normalizedText,
+    contentCompleteness:
+      raw.contentCompleteness ??
+      (raw.bodyText && raw.bodyText.length >= 80 ? "native_complete" : "snippet"),
+    originKey: origin,
     contentHash: contentHash(
       normalizedText || normalizedTitle || canonicalUrl || raw.externalId || "",
     ),
@@ -129,8 +149,10 @@ export function classifyReprint(params: {
   sameCanonicalUrl: boolean;
   sameContentHash: boolean;
   nearDuplicate?: boolean;
-  sameHostnameSameDay?: boolean;
+  sameOrigin?: boolean;
+  snippetOnly?: boolean;
   opposingClaims?: boolean;
+  sharedOutbound?: boolean;
 }): EvidenceRole {
   if (params.opposingClaims) {
     return "contradicting";
@@ -138,10 +160,51 @@ export function classifyReprint(params: {
   if (params.sameCanonicalUrl || params.sameContentHash || params.nearDuplicate) {
     return "derived";
   }
-  if (params.sameHostnameSameDay) {
+  if (params.sameOrigin || params.sharedOutbound) {
     return "derived";
   }
+  if (params.snippetOnly) {
+    return "supporting";
+  }
   return "primary";
+}
+
+export function lineageOriginKey(input: {
+  originKey?: string;
+  referencedOriginKey?: string;
+  outboundUrls?: string[];
+  attributedOrigin?: string;
+  hostname?: string;
+}): string {
+  if (input.referencedOriginKey) {
+    return input.referencedOriginKey;
+  }
+  if (input.attributedOrigin?.trim()) {
+    return `attr:${normalizeText(input.attributedOrigin)}`;
+  }
+  if (input.originKey) {
+    return input.originKey;
+  }
+  if (input.hostname) {
+    return `host:${input.hostname.toLowerCase()}`;
+  }
+  return "unknown-origin";
+}
+
+export function overlappingOutbound(
+  left: string[] | undefined,
+  right: string[] | undefined,
+): boolean {
+  const leftKeys = new Set(
+    (left ?? []).map((url) => canonicalizeUrl(url)).filter((item): item is string => Boolean(item)),
+  );
+  for (const url of right ?? []) {
+    const canonical = canonicalizeUrl(url);
+    if (canonical && leftKeys.has(canonical)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function uniqueIndependentHostCount(

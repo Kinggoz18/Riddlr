@@ -5,6 +5,7 @@ import {
   type FetchQuery,
   type FetchResult,
   hostMatchesSuffix,
+  redactRequestUrl,
   type SourceAdapter,
 } from "./types.js";
 
@@ -42,6 +43,14 @@ export function parseSearxngPayload(
       errors.push({ class: "malformed", message: "Result missing url and title" });
       continue;
     }
+    let hostname: string | undefined;
+    if (typeof row.url === "string") {
+      try {
+        hostname = new URL(row.url).hostname.toLowerCase();
+      } catch {
+        hostname = undefined;
+      }
+    }
     evidence.push({
       sourceFamily: "search",
       adapterId: "searxng",
@@ -51,6 +60,15 @@ export function parseSearxngPayload(
       publishedAt: typeof row.publishedDate === "string" ? new Date(row.publishedDate) : undefined,
       fetchedAt,
       adapterPayload: { engine: row.engine },
+      contentCompleteness: "snippet",
+      sourceIdentity: hostname
+        ? {
+            platform: "web",
+            externalId: hostname,
+            displayName: hostname,
+            hostname,
+          }
+        : undefined,
     });
   }
   return {
@@ -167,7 +185,16 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
         const payload = (await response.json()) as SearxPayload;
         const parsed = parseSearxngPayload(payload, fetchedAt, limit);
         const filtered = parsed.evidence.filter((item) => hostAllowed(item.url, query));
-        return { ...parsed, evidence: takeBounded(filtered, limit) };
+        return {
+          ...parsed,
+          evidence: takeBounded(filtered, limit),
+          requestUrl: redactRequestUrl(url.toString()),
+          responseStatus: response.status,
+          adapterMetadata:
+            parsed.unresponsiveEngines.length > 0
+              ? { unresponsiveEngines: parsed.unresponsiveEngines }
+              : undefined,
+        };
       } catch (error) {
         return {
           evidence: [],
