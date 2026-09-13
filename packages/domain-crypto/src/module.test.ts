@@ -1,21 +1,52 @@
-import { normalizeEvidence } from "@riddlr/domain";
+import { normalizeEvidence, type RegistryAsset } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import { cryptoDomainModule } from "./module.js";
 
+function registryAsset(
+  id: string,
+  symbol: string,
+  name: string,
+  assetClass: RegistryAsset["assetClass"] = "cryptocurrency",
+): RegistryAsset {
+  return {
+    assetClass,
+    canonicalId: `coingecko:${id}`,
+    symbol,
+    name,
+    aliases: [symbol.toLowerCase(), name.toLowerCase(), `$${symbol.toLowerCase()}`, id],
+    externalIds: { coingeckoId: id },
+    marketCapRank: 1,
+    status: "active",
+  };
+}
+
+const CRYPTO_REGISTRY: RegistryAsset[] = [
+  registryAsset("bitcoin", "BTC", "Bitcoin"),
+  registryAsset("ethereum", "ETH", "Ethereum"),
+  registryAsset("tether", "USDT", "Tether", "stablecoin"),
+  registryAsset("solana", "SOL", "Solana"),
+];
+
 describe("crypto domain module", () => {
   it("canonicalizes BTC to a coingecko id, not a ticker-only identity", () => {
-    expect(cryptoDomainModule.canonicalizeAsset({ symbol: "BTC" })?.canonicalId).toBe(
-      "coingecko:bitcoin",
-    );
     expect(
-      cryptoDomainModule.canonicalizeAsset({ canonicalId: "coingecko:unknown-coin" }),
+      cryptoDomainModule.canonicalizeAsset({ symbol: "BTC" }, CRYPTO_REGISTRY)?.canonicalId,
+    ).toBe("coingecko:bitcoin");
+    expect(
+      cryptoDomainModule.canonicalizeAsset(
+        { canonicalId: "coingecko:unknown-coin" },
+        CRYPTO_REGISTRY,
+      ),
     ).toBeUndefined();
     expect(
-      cryptoDomainModule.canonicalizeAsset({
-        canonicalId: "coingecko:unknown-coin",
-        name: "Unknown Coin",
-      })?.canonicalId,
-    ).toBe("coingecko:unknown-coin");
+      cryptoDomainModule.canonicalizeAsset(
+        {
+          canonicalId: "coingecko:unknown-coin",
+          name: "Unknown Coin",
+        },
+        CRYPTO_REGISTRY,
+      ),
+    ).toBeUndefined();
   });
 
   it("includes watchlist canonical ids in assembled context", () => {
@@ -45,7 +76,7 @@ describe("crypto domain module", () => {
         url: "https://news.example/funding",
       }),
     ];
-    const observations = cryptoDomainModule.extractObservations(evidence);
+    const observations = cryptoDomainModule.extractObservations(evidence, CRYPTO_REGISTRY);
     expect(observations.some((item) => item.kind === "funding_rate" && item.value === 0.01)).toBe(
       true,
     );
@@ -65,7 +96,7 @@ describe("crypto domain module", () => {
         url: "https://news.example/usdt",
       }),
     ];
-    const observations = cryptoDomainModule.extractObservations(evidence);
+    const observations = cryptoDomainModule.extractObservations(evidence, CRYPTO_REGISTRY);
     expect(observations.some((item) => item.kind === "quoted_price" && item.value === 1)).toBe(
       true,
     );
@@ -82,7 +113,7 @@ describe("crypto domain module", () => {
         fetchedAt: new Date(),
       }),
     ];
-    const assets = cryptoDomainModule.extractAssets(evidence);
+    const assets = cryptoDomainModule.extractAssets(evidence, CRYPTO_REGISTRY);
     expect(assets.map((item) => item.canonicalId).sort()).toEqual([
       "coingecko:bitcoin",
       "coingecko:ethereum",
@@ -262,5 +293,21 @@ describe("crypto domain module", () => {
       "cryptocurrency bitcoin ethereum stablecoin news",
     );
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
+  });
+
+  it("has no hardcoded token list and extracts a registry-only asset", () => {
+    const evidence = [
+      normalizeEvidence({
+        sourceFamily: "search",
+        adapterId: "searxng",
+        title: "Solana outage",
+        bodyText: "SOL validators halted.",
+        fetchedAt: new Date(),
+      }),
+    ];
+    expect(cryptoDomainModule.extractAssets(evidence).map((item) => item.canonicalId)).toEqual([]);
+    expect(
+      cryptoDomainModule.extractAssets(evidence, CRYPTO_REGISTRY).map((item) => item.canonicalId),
+    ).toEqual(["coingecko:solana"]);
   });
 });

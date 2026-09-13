@@ -5,6 +5,7 @@ import { QUEUE_NAMES } from "@riddlr/queue";
 import { Worker } from "bullmq";
 import { eq } from "drizzle-orm";
 import { createContext } from "../context.js";
+import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
 import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
@@ -143,6 +144,9 @@ const scheduler = setInterval(() => {
   void enqueueDueScans().catch((error) => {
     ctx.logger.warn({ err: error }, "scheduler tick failed");
   });
+  void seedAssetRegistryIfDue(ctx).catch((error) => {
+    ctx.logger.warn({ err: error }, "registry seed tick failed");
+  });
 }, 60_000);
 
 const shutdown = async () => {
@@ -169,6 +173,9 @@ process.on("SIGINT", () => void shutdown());
 
 void enqueueDueScans().catch((error) => {
   ctx.logger.warn({ err: error }, "scheduler start failed");
+});
+void seedAssetRegistryIfDue(ctx).catch((error) => {
+  ctx.logger.warn({ err: error }, "registry seed start failed");
 });
 
 ctx.logger.info(

@@ -95,6 +95,7 @@ import {
 } from "@riddlr/source-adapters";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { listRegistryAssets } from "./asset-registry.js";
 import { enrichAndUnderstandScan, loadTrustMaps, upsertSourceIdentity } from "./intelligence.js";
 import { maybeNotify } from "./notify.js";
 
@@ -501,6 +502,7 @@ export async function clusterScanEvents(
       : [];
   const holdings = await ctx.db.select().from(portfolioHoldings).limit(50);
   const holdingIds = new Set(holdings.map((item) => item.canonicalId));
+  const registry = await listRegistryAssets(ctx);
   const trustMaps = await loadTrustMaps(ctx);
   const claimLinks =
     usedIds.length > 0
@@ -574,7 +576,9 @@ export async function clusterScanEvents(
         }),
       ),
       marketDomainId: module.id,
-      assetCanonicalIds: module.extractAssets([normalized]).map((item) => item.canonicalId),
+      assetCanonicalIds: module
+        .extractAssets([normalized], registry)
+        .map((item) => item.canonicalId),
       text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
     };
   });
@@ -690,7 +694,7 @@ export async function clusterScanEvents(
   for (const cluster of clusters) {
     const clusterRows = cluster.map((item) => item.row);
     const clusterNorm = cluster.map((item) => item.normalized);
-    const extracted = module.extractAssets(clusterNorm);
+    const extracted = module.extractAssets(clusterNorm, registry);
     const sourced = takeBounded(
       [
         ...cluster.flatMap((item) =>
@@ -700,7 +704,7 @@ export async function clusterScanEvents(
             item.publishedAt ?? item.row.fetchedAt,
           ),
         ),
-        ...module.extractObservations(clusterNorm),
+        ...module.extractObservations(clusterNorm, registry),
       ],
       MAX_OBSERVATIONS_PER_EVENT,
     );
@@ -1145,14 +1149,18 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
     | "commodities"
     | "macro";
   const module = ctx.domains.require(domainId);
+  const registry = await listRegistryAssets(ctx);
   const resolved = items
     .map((item) =>
-      module.canonicalizeAsset({
-        canonicalId: item.canonicalId,
-        symbol: item.symbol ?? undefined,
-        name: item.name ?? undefined,
-        assetClass: item.assetClass as "cryptocurrency" | "meme_coin" | "stablecoin",
-      }),
+      module.canonicalizeAsset(
+        {
+          canonicalId: item.canonicalId,
+          symbol: item.symbol ?? undefined,
+          name: item.name ?? undefined,
+          assetClass: item.assetClass as "cryptocurrency" | "meme_coin" | "stablecoin",
+        },
+        registry,
+      ),
     )
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   return {

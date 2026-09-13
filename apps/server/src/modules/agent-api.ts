@@ -1,6 +1,7 @@
 import {
   agentCreateSchema,
   agentUpdateSchema,
+  assetSearchQuerySchema,
   skillCreateSchema,
   skillUpdateSchema,
   type watchlistItemSchema,
@@ -26,6 +27,7 @@ import {
   assertSupportedMarketDomains,
   DEFAULT_AGENT_DESCRIPTION,
   InvalidWatchlistItemError,
+  MAX_ASSET_SEARCH_RESULTS,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
   resolveDailyTokenBudget,
@@ -38,6 +40,7 @@ import { asc, count, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { AppContext } from "../context.js";
+import { findRegistryAsset, searchAssets } from "./asset-registry.js";
 import { enqueueAgentScan } from "./scans.js";
 
 const DEFAULT_SEARCH_NAME = "Watchlist";
@@ -94,7 +97,7 @@ function failSkill(error: unknown, reply: FastifyReply) {
   throw error;
 }
 
-function resolveWatchlistItem(ctx: AppContext, item: z.infer<typeof watchlistItemSchema>) {
+async function resolveWatchlistItem(ctx: AppContext, item: z.infer<typeof watchlistItemSchema>) {
   const canonicalId = assertCanonicalAssetId(item.canonicalId.trim().toLowerCase());
   const module = ctx.domains.require("crypto");
   if (item.assetClass && !module.assetClasses.includes(item.assetClass)) {
@@ -102,12 +105,19 @@ function resolveWatchlistItem(ctx: AppContext, item: z.infer<typeof watchlistIte
       "Watchlist asset class is not available on the Crypto domain.",
     );
   }
-  const resolved = module.canonicalizeAsset({
-    canonicalId,
-    symbol: item.symbol,
-    name: item.name,
-    assetClass: item.assetClass,
-  });
+  const found = await findRegistryAsset(ctx, canonicalId);
+  if (!found || found.status === "inactive") {
+    throw new InvalidWatchlistItemError(`Unknown asset ${canonicalId}.`);
+  }
+  const resolved = module.canonicalizeAsset(
+    {
+      canonicalId,
+      symbol: item.symbol,
+      name: item.name,
+      assetClass: item.assetClass,
+    },
+    [found],
+  );
   if (!resolved) {
     throw new InvalidWatchlistItemError(`Unknown asset ${canonicalId}.`);
   }
@@ -142,9 +152,10 @@ async function replaceWatchlist(
   items: z.infer<typeof watchlistItemSchema>[],
 ) {
   const watchlist = await ensureWatchlist(ctx, agentId, name);
-  const resolved = takeBounded(items, MAX_WATCHLIST_ITEMS).map((item) =>
-    resolveWatchlistItem(ctx, item),
-  );
+  const resolved = [];
+  for (const item of takeBounded(items, MAX_WATCHLIST_ITEMS)) {
+    resolved.push(await resolveWatchlistItem(ctx, item));
+  }
   await ctx.db.delete(watchlistItems).where(eq(watchlistItems.watchlistId, watchlist.id));
   for (const item of resolved) {
     await ctx.db
@@ -340,6 +351,20 @@ export function registerAgentRoutes(
             : undefined,
         )
         .filter(Boolean),
+    };
+  });
+
+  app.get("/api/v1/assets", { preHandler: authed }, async (request) => {
+    const query = assetSearchQuerySchema.parse(request.query);
+    const items = await searchAssets(ctx, query.q ?? "", query.limit ?? MAX_ASSET_SEARCH_RESULTS);
+    return {
+      assets: items.map((item) => ({
+        canonicalId: item.canonicalId,
+        assetClass: item.assetClass,
+        symbol: item.symbol,
+        name: item.name,
+        marketCapRank: item.marketCapRank,
+      })),
     };
   });
 

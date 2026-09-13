@@ -228,8 +228,19 @@ export const assets = pgTable(
     canonicalId: text("canonical_id").notNull(),
     symbol: text("symbol"),
     name: text("name"),
+    aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+    externalIds: jsonb("external_ids")
+      .$type<{ coingeckoId?: string; caip19?: string[] }>()
+      .notNull()
+      .default({}),
+    marketCapRank: integer("market_cap_rank"),
+    status: text("status").notNull().default("active"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("assets_class_canonical_idx").on(table.assetClass, table.canonicalId)],
+  (table) => [
+    uniqueIndex("assets_class_canonical_idx").on(table.assetClass, table.canonicalId),
+    uniqueIndex("assets_canonical_idx").on(table.canonicalId),
+  ],
 );
 
 export const sources = pgTable("sources", {

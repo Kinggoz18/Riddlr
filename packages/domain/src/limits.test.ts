@@ -3,7 +3,10 @@ import {
   clampPageSize,
   clampPositiveInt,
   DEFAULT_PAGE_SIZE,
+  DEFAULT_REGISTRY_TOP_N,
+  MAX_ASSETS_PER_DOCUMENT,
   MAX_PAGE_SIZE,
+  MAX_REGISTRY_TOP_N,
   parsePageCursor,
   takeBounded,
 } from "./limits.js";
@@ -33,5 +36,12 @@ describe("bounded resource limits", () => {
     );
     expect(parsePageCursor("not-a-date")).toBeUndefined();
     expect(parsePageCursor()).toBeUndefined();
+  });
+
+  it("keeps the CoinGecko registry seed at the documented top-N bound", () => {
+    expect(DEFAULT_REGISTRY_TOP_N).toBe(1_000);
+    expect(MAX_REGISTRY_TOP_N).toBe(2_000);
+    expect(MAX_ASSETS_PER_DOCUMENT).toBe(12);
+    expect(clampPositiveInt(5_000, DEFAULT_REGISTRY_TOP_N, MAX_REGISTRY_TOP_N)).toBe(2_000);
   });
 });

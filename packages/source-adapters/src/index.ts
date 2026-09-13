@@ -1,4 +1,14 @@
-export { createCoinGeckoAdapter, parseCoinGeckoMarkets } from "./coingecko.js";
+export {
+  COINGECKO_API_BASE,
+  type CoinGeckoRegistryJoin,
+  type CoinGeckoRegistryListItem,
+  type CoinGeckoRegistryMarket,
+  createCoinGeckoAdapter,
+  joinCoinGeckoRegistry,
+  parseCoinGeckoMarkets,
+  parseCoinGeckoRegistryList,
+  parseCoinGeckoRegistryMarkets,
+} from "./coingecko.js";
 export {
   COINMARKETCAP_API_BASE,
   createCoinMarketCapAdapter,

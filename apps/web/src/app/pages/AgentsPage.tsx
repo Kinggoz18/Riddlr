@@ -318,12 +318,17 @@ function AgentForm(props: {
           </Field>
           <Field
             label="Watchlist"
-            hint="Pick named assets. Canonical IDs such as coingecko:bitcoin are stored underneath."
+            hint="Search the CoinGecko registry by name, symbol, or cashtag. Canonical IDs are stored underneath."
           >
             <AssetPicker
               id="canonical-asset-ids"
               values={canonicalIds}
               onChange={setCanonicalIds}
+              known={(props.agent?.watchlist?.items ?? []).map((item) => ({
+                canonicalId: item.canonicalId,
+                symbol: item.symbol ?? "",
+                name: item.name ?? "",
+              }))}
             />
           </Field>
           <fieldset className="check-list">

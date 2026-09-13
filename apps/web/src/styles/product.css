@@ -1355,6 +1355,40 @@ a.ui-button {
   color: var(--mint);
 }
 
+.asset-picker {
+  position: relative;
+}
+
+.asset-picker-list {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  margin: 0.3rem 0 0;
+  padding: 0.25rem;
+  max-height: 16rem;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.asset-picker-option {
+  padding: 0.4rem 0.55rem;
+  border-radius: calc(var(--radius-control) - 2px);
+  cursor: pointer;
+}
+
+.asset-picker-option.active,
+.asset-picker-option[aria-selected="true"] {
+  background: var(--mint-wash);
+}
+
+.asset-picker-empty {
+  padding: 0.45rem 0.55rem;
+  color: var(--muted);
+}
+
 .next-steps {
   display: grid;
   gap: 0.55rem;

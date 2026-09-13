@@ -37,8 +37,9 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0019](adr/0019-read-only-portfolios.md),
 [ADR 0020](adr/0020-skill-composition.md),
 [ADR 0021](adr/0021-discovery-candidates.md), and
-[ADR 0022](adr/0022-first-run-access.md), and
-[ADR 0023](adr/0023-claim-corroboration.md).
+[ADR 0022](adr/0022-first-run-access.md),
+[ADR 0023](adr/0023-claim-corroboration.md), and
+[ADR 0024](adr/0024-registry-driven-resolution.md).
 
 ## Trust boundaries
 
@@ -70,8 +71,9 @@ or unlimited), skills, and a watchlist. Coming-soon domains cannot execute. See
 Live sources are SearXNG (bundled), Discord (operator-configured bot; more
 than one Discord source is allowed), X (operator-configured recent search with
 bounded `next_token`), and one active market-data source: CoinGecko,
-CoinMarketCap, or Crypto.com Exchange public tickers. On-chain scanning is not
-implemented.
+CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
+seed fills `assets` for watchlist search and text extraction. On-chain scanning
+is not implemented.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.
