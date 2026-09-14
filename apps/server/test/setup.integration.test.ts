@@ -23,6 +23,7 @@ import {
   claims,
   createDb,
   encryptedSecrets,
+  eventAssets,
   eventClaims,
   eventEvidence,
   events,
@@ -78,7 +79,7 @@ import {
 import { processInboundReceipt } from "../src/modules/inbound-webhooks.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
 import { recordDueOutcomes } from "../src/modules/outcomes.js";
-import { runScan } from "../src/modules/pipeline.js";
+import { analyzeQueuedEvent, runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
 
 function cookieHeader(setCookie: string | string[] | undefined): string {
@@ -777,6 +778,9 @@ describe("setup, auth, and domain persistence", () => {
     const proofIds = produced?.proof.evidenceIds ?? [];
     expect(proofIds.length).toBeGreaterThan(0);
     expect((produced?.proof.claimIds ?? []).length).toBeGreaterThan(0);
+    expect(produced?.typedSignal).toBe("listing_or_delisting");
+    expect(produced?.outputKind).toBe("unverified_early_warning");
+    expect(produced?.anticipated).toBe(false);
     const proofs = produced?.id
       ? await ctx.db
           .select()
@@ -855,6 +859,149 @@ describe("setup, auth, and domain persistence", () => {
     const memory = snapshotProcessMemory();
     expect(memory.rss).toBeGreaterThan(1_000_000);
     expect(memory.peakRss).toBeGreaterThanOrEqual(memory.rss);
+  });
+
+  it("persists perp stress as an observed early warning, never a fundamental signal", async () => {
+    const agentRows = await ctx.db.select().from(agents);
+    const agentId = agentRows[0]?.id as string;
+    const sourceRows = await ctx.db.select().from(sources).limit(1);
+    const sourceId = sourceRows[0]?.id as string;
+    const [btc] = await ctx.db
+      .select()
+      .from(assets)
+      .where(eq(assets.canonicalId, "coingecko:bitcoin"))
+      .limit(1);
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId,
+        status: "succeeded",
+        windowStart: new Date("2026-09-14T12:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:perp-stress",
+      })
+      .returning();
+    const [evidence] = await ctx.db
+      .insert(evidenceItems)
+      .values({
+        sourceId,
+        scanId: scan?.id as string,
+        fingerprint: "perp-stress-evidence",
+        contentHash: "perp-stress-hash",
+        title: "Bitcoin perpetual funding z-score",
+        bodyText: "market_stress.v1 on coingecko:bitcoin: z=4.20 over 20 funding_rate_apr samples.",
+        fetchedAt: new Date("2026-09-14T12:00:00.000Z"),
+        sourceFamily: "observation",
+        adapterId: "hyperliquid",
+        contentCompleteness: "native_complete",
+      })
+      .returning();
+    const [claim] = await ctx.db
+      .insert(claims)
+      .values({
+        marketDomainId: "crypto",
+        kind: "crypto:market_stress",
+        predicate: "market_stress",
+        objectText: "funding z=4.20",
+        polarity: "asserted",
+        modality: "asserted",
+        fingerprint: "perp-stress-claim",
+        title: "Bitcoin perpetual funding z-score",
+      })
+      .returning();
+    await ctx.db.insert(claimEvidence).values({
+      claimId: claim?.id as string,
+      evidenceId: evidence?.id as string,
+      stance: "supports",
+      excerpt: "market_stress.v1",
+      excerptHash: "perp-stress-excerpt",
+    });
+    const [event] = await ctx.db
+      .insert(events)
+      .values({
+        agentId,
+        scanId: scan?.id as string,
+        title: "Bitcoin perpetual funding z-score",
+        status: "needs_analysis",
+        windowStart: new Date("2026-09-14T12:00:00.000Z"),
+        marketDomainId: "crypto",
+        reliabilityStatus: "observed",
+        impactLevel: "informational",
+        catalystKind: "market_stress",
+        subjectCanonicalId: "coingecko:bitcoin",
+        materialityReason: "observed_anomaly",
+        contentCompleteness: "native_complete",
+      })
+      .returning();
+    await ctx.db.insert(eventEvidence).values({
+      eventId: event?.id as string,
+      evidenceId: evidence?.id as string,
+      role: "primary",
+    });
+    await ctx.db.insert(eventClaims).values({
+      eventId: event?.id as string,
+      claimId: claim?.id as string,
+      stance: "supports",
+    });
+    if (btc?.id) {
+      await ctx.db.insert(eventAssets).values({
+        eventId: event?.id as string,
+        assetId: btc.id,
+      });
+    }
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/chat/completions") || url.includes("/v1/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          messages?: Array<{ role: string; content: string }>;
+        };
+        const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
+        const ids = proofIdsFromAnalysisPrompt(user);
+        return Response.json({
+          id: "chatcmpl-perp",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  headline: "Perp funding stress on Bitcoin",
+                  whyItMatters: "Funding z-score tripped the market-stress detector.",
+                  proof: {
+                    evidenceIds: ids.evidenceIds.slice(0, 1),
+                    claimIds: ids.claimIds.slice(0, 1),
+                    summary: "Hyperliquid funding detector.",
+                  },
+                  action: "Treat as a market observation; do not trade.",
+                  risk: "high",
+                  confidence: 0.7,
+                  assets: ["coingecko:bitcoin"],
+                  eventType: "market_stress",
+                  marketContext: "Perp book.",
+                  contradictoryEvidence: "none",
+                  invalidationConditions: "funding mean-reverts.",
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 40, completion_tokens: 20 },
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await analyzeQueuedEvent(ctx, event?.id as string, fetchImpl);
+    const [saved] = await ctx.db
+      .select()
+      .from(signals)
+      .where(eq(signals.eventId, event?.id as string));
+    expect(saved?.typedSignal).toBe("perp_stress");
+    expect(saved?.outputKind).toBe("unverified_early_warning");
+    expect(saved?.epistemicStatus).toBe("observed");
+    expect(saved?.notifyKind).toBe("early_warning");
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/v1/signals/${saved?.id}`,
+      headers: { cookie },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().signal.typedSignal).toBe("perp_stress");
   });
 
   it("does not corroborate two hosts that syndicate the same outbound origin", async () => {

@@ -51,10 +51,12 @@ import {
   classifyReprint,
   clusterEventTitle,
   clusterEvidence,
+  collectSignalProofFacts,
   decideSignalGate,
   discoverCandidate,
   earliestTimestamp,
   estimatePromptTokens,
+  evaluateTypedSignal,
   eventClusterFingerprint,
   factsToApplicability,
   formatAnalysisFacts,
@@ -87,6 +89,7 @@ import {
   shouldSkipForDailyTokenBudget,
   skippedSkillNotice,
   sourceHostname,
+  type TrustTier,
   takeBounded,
   textOpposes,
   uniqueIndependentHosts,
@@ -1539,6 +1542,16 @@ export async function clusterScanEvents(
             impact: impact.level,
             claimIds,
             claimKinds: [...new Set(clusterClaims.map((item) => item.kind))],
+            claimDetails: [...uniqueClaims.values()].map((item) => ({
+              kind: item.kind,
+              predicate: item.predicate,
+              objectText: item.objectText,
+              value: item.value,
+            })),
+            proofEvidence: cluster.map((item) => ({
+              sourceFamily: item.sourceFamily ?? item.row.sourceFamily ?? undefined,
+              trustTier: trustMaps.forEvidence(item.row.sourceIdentityId, item.hostname),
+            })),
             earlyWarningsEnabled,
             previousReliability,
             shadowAssessments,
@@ -1736,6 +1749,33 @@ async function reserveDailyAnalysisTokens(
   return row;
 }
 
+function typedSignalEvaluation(input: {
+  eventType: string;
+  proofEvidence?: Array<{ sourceFamily?: string | null; trustTier?: TrustTier }>;
+  claimDetails?: Array<{
+    kind?: string;
+    predicate?: string;
+    objectText?: string | null;
+    value?: number | string | boolean | null;
+  }>;
+}) {
+  return evaluateTypedSignal({
+    eventType: input.eventType,
+    proof: collectSignalProofFacts({
+      evidence: (input.proofEvidence ?? []).map((item) => ({
+        sourceFamily: item.sourceFamily ?? undefined,
+        trustTier: item.trustTier,
+      })),
+      claims: (input.claimDetails ?? []).map((item) => ({
+        kind: item.kind,
+        predicate: item.predicate,
+        objectText: item.objectText ?? undefined,
+        value: item.value,
+      })),
+    }),
+  });
+}
+
 async function maybeAnalyze(
   ctx: AppContext,
   eventId: string,
@@ -1759,6 +1799,13 @@ async function maybeAnalyze(
     impact?: "informational" | "low" | "moderate" | "high" | "critical";
     claimIds?: string[];
     claimKinds?: string[];
+    claimDetails?: Array<{
+      kind: string;
+      predicate: string;
+      objectText?: string | null;
+      value?: number | string | boolean | null;
+    }>;
+    proofEvidence?: Array<{ sourceFamily?: string | null; trustTier?: TrustTier }>;
     earlyWarningsEnabled?: boolean;
     previousReliability?: ReliabilityStatus;
     shadowAssessments?: boolean;
@@ -1944,6 +1991,11 @@ async function maybeAnalyze(
       material: true,
       reason: "independent_origins",
     };
+    const typed = typedSignalEvaluation({
+      eventType: signal.eventType,
+      proofEvidence: hint?.proofEvidence,
+      claimDetails: hint?.claimDetails,
+    });
     const gate = decideSignalGate({
       facts: hint?.facts ?? fallbackFacts(evidenceRows, notes),
       risk: signal.risk,
@@ -1954,6 +2006,7 @@ async function maybeAnalyze(
       earlyWarningsEnabled: hint?.earlyWarningsEnabled,
       previousReliability: hint?.previousReliability,
       shadowAssessments: hint?.shadowAssessments ?? (await instanceShadowAssessments(ctx)),
+      typed,
     });
     const notifyEligible =
       gate.notifyKind === "early_warning" && hint?.earlyWarningAllowed === false
@@ -2030,9 +2083,11 @@ async function maybeAnalyze(
           invalidationConditions: signal.invalidationConditions,
           schemaVersion: "1",
           notifyEligible,
-          epistemicStatus: "signal",
+          epistemicStatus: gate.epistemicStatus ?? "signal",
           outputKind: gate.outputKind,
           notifyKind: gate.notifyKind,
+          typedSignal: gate.typedSignalId,
+          anticipated: Boolean(gate.anticipated),
         })
         .onConflictDoNothing()
         .returning();
@@ -2131,7 +2186,13 @@ export async function analyzeQueuedEvent(
       ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(50)
       : [];
   const claimRows = await ctx.db
-    .select({ claimId: eventClaims.claimId, kind: claims.kind })
+    .select({
+      claimId: eventClaims.claimId,
+      kind: claims.kind,
+      predicate: claims.predicate,
+      objectText: claims.objectText,
+      value: claims.value,
+    })
     .from(eventClaims)
     .innerJoin(claims, eq(eventClaims.claimId, claims.id))
     .where(eq(eventClaims.eventId, eventId))
@@ -2236,6 +2297,16 @@ export async function analyzeQueuedEvent(
         | undefined,
       claimIds: claimRows.map((item) => item.claimId),
       claimKinds: claimRows.map((item) => item.kind),
+      claimDetails: claimRows.map((item) => ({
+        kind: item.kind,
+        predicate: item.predicate,
+        objectText: item.objectText,
+        value: item.value,
+      })),
+      proofEvidence: linked.map((row) => ({
+        sourceFamily: row.sourceFamily,
+        trustTier: trustMaps.forEvidence(row.sourceIdentityId, sourceHostname(row.canonicalUrl)),
+      })),
       earlyWarningsEnabled: await instanceEarlyWarningsEnabled(ctx),
       previousReliability: event.reliabilityStatus as ReliabilityStatus | undefined,
       shadowAssessments: await instanceShadowAssessments(ctx),

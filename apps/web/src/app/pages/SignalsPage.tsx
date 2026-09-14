@@ -2,7 +2,7 @@ import { Button, Card, EmptyState, PageHeader } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
-import { catalystKindLabel } from "../format.js";
+import { catalystKindLabel, typedSignalLabel } from "../format.js";
 
 function SignalsPage() {
   const [rows, setRows] = useState<
@@ -13,6 +13,9 @@ function SignalsPage() {
       whyItMatters: string;
       createdAt: string;
       catalystKind?: string | null;
+      typedSignal?: string | null;
+      anticipated?: boolean;
+      outputKind?: string;
     }>
   >([]);
   const [hasMore, setHasMore] = useState(false);
@@ -37,7 +40,7 @@ function SignalsPage() {
     return (
       <EmptyState
         title="No signals"
-        body="Signals appear after a material Crypto event is analyzed with proof."
+        body="Typed signals appear after a material Crypto event is analyzed with proof. Perp stress stays a market observation."
       />
     );
   }
@@ -45,14 +48,21 @@ function SignalsPage() {
     <>
       <PageHeader
         title="Signals"
-        description="Validated intelligence with proof. Empty until a material Crypto event is analyzed."
+        description="Eight typed policies with proof: exploit, peg, unlock, listing, governance, regulatory, macro, and perp stress."
       />
       <section className="record-list">
         {rows.map((row) => (
           <Card key={row.id} className="record-row">
             <NavLink to={`/signals/${row.id}`}>{row.headline}</NavLink>
             <span className="badge danger">{row.risk}</span>
-            {row.catalystKind ? (
+            {row.typedSignal ? (
+              <p className="record-meta">
+                <span>{typedSignalLabel(row.typedSignal, row.anticipated)}</span>
+                {row.outputKind === "unverified_early_warning" ? (
+                  <span>Unverified early warning</span>
+                ) : null}
+              </p>
+            ) : row.catalystKind ? (
               <p className="record-meta">
                 <span>{catalystKindLabel(row.catalystKind)}</span>
               </p>

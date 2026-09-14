@@ -7,6 +7,7 @@ import {
   type ReliabilityStatus,
 } from "./reliability.js";
 import type { RiskLevel } from "./signal.js";
+import type { TypedSignalEvaluation, TypedSignalId } from "./signal-types.js";
 
 export const SIGNAL_DISPOSITIONS = [
   "no_signal",
@@ -25,6 +26,9 @@ export type SignalGateDecision = {
   outputKind: "signal" | "unverified_early_warning";
   notifyKind: "signal" | "early_warning" | "confirmation" | "dispute" | "retraction";
   cappedConfidence: number;
+  typedSignalId?: TypedSignalId;
+  anticipated?: boolean;
+  epistemicStatus?: "signal" | "observed";
 };
 
 const IMPACT_RANK: Record<ImpactLevel, number> = {
@@ -62,6 +66,7 @@ export function decideSignalGate(input: {
   earlyWarningsEnabled?: boolean;
   previousReliability?: ReliabilityStatus;
   shadowAssessments?: boolean;
+  typed?: TypedSignalEvaluation;
 }): SignalGateDecision {
   const reliability = input.reliability ?? reliabilityFromFacts(input.facts, input.material);
   const impact = input.impact ?? "moderate";
@@ -109,6 +114,57 @@ export function decideSignalGate(input: {
       outputKind: "signal",
       notifyKind: "signal",
       cappedConfidence,
+    };
+  }
+  const typed = input.typed;
+  if (typed?.typedSignalId) {
+    if (!typed.persist) {
+      return {
+        persist: false,
+        notifyEligible: false,
+        disposition: "no_signal",
+        reason: typed.reason,
+        outputKind: typed.outputKind,
+        notifyKind: "signal",
+        cappedConfidence,
+        typedSignalId: typed.typedSignalId,
+        anticipated: typed.anticipated,
+        epistemicStatus: typed.epistemicStatus,
+      };
+    }
+    if (typed.outputKind === "unverified_early_warning") {
+      const notify = Boolean(input.earlyWarningsEnabled) && typed.notifyAsEarlyWarning;
+      return {
+        persist: true,
+        notifyEligible: allowNotify(notify, shadow),
+        disposition: IMPACT_RANK[impact] >= IMPACT_RANK.high ? "high" : impactDisposition(impact),
+        reason: typed.reason,
+        outputKind: "unverified_early_warning",
+        notifyKind: "early_warning",
+        cappedConfidence,
+        typedSignalId: typed.typedSignalId,
+        anticipated: typed.anticipated,
+        epistemicStatus: typed.epistemicStatus,
+      };
+    }
+    const previous = input.previousReliability;
+    const confirmation =
+      (previous === "primary_confirmed" ||
+        previous === "single_source" ||
+        previous === "observed") &&
+      reliability === "corroborated";
+    const impactOk = IMPACT_RANK[impact] >= IMPACT_RANK.moderate;
+    return {
+      persist: true,
+      notifyEligible: allowNotify(typed.allowValidatedNotify && impactOk, shadow),
+      disposition: impactDisposition(impact),
+      reason: confirmation ? "confirmation" : typed.reason,
+      outputKind: "signal",
+      notifyKind: confirmation ? "confirmation" : "signal",
+      cappedConfidence,
+      typedSignalId: typed.typedSignalId,
+      anticipated: typed.anticipated,
+      epistemicStatus: typed.epistemicStatus,
     };
   }
   if (reliability === "single_source") {

@@ -1,3 +1,5 @@
+import { isTypedSignalId, TYPED_SIGNAL_LABELS } from "@riddlr/domain";
+
 export const DEFAULT_DAILY_TOKEN_BUDGET = 100_000;
 export const MIN_DAILY_TOKEN_BUDGET = 500;
 export const MAX_DAILY_TOKEN_BUDGET = 200_000;
@@ -244,6 +246,11 @@ export function catalystKindLabel(kind: string) {
     default:
       return kind.replaceAll("_", " ").replaceAll(":", " ");
   }
+}
+
+export function typedSignalLabel(id: string, anticipated?: boolean) {
+  const base = isTypedSignalId(id) ? TYPED_SIGNAL_LABELS[id] : id.replaceAll("_", " ");
+  return anticipated ? `${base} · Anticipated` : base;
 }
 
 export function candidateKindLabel(kind: string) {

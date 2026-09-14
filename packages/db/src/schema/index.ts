@@ -730,6 +730,8 @@ export const signals = pgTable(
     epistemicStatus: text("epistemic_status").notNull().default("signal"),
     outputKind: text("output_kind").notNull().default("signal"),
     notifyKind: text("notify_kind").notNull().default("signal"),
+    typedSignal: text("typed_signal"),
+    anticipated: boolean("anticipated").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

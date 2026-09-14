@@ -86,6 +86,49 @@ describe("signal gate confirmation and shadow", () => {
     expect(gate.notifyEligible).toBe(false);
   });
 
+  it("persists typed perp stress as an observed early warning, not a fundamental signal", () => {
+    const facts = buildEventFacts({
+      evidence: [
+        {
+          hostname: "unknown-host",
+          sourceFamily: "observation",
+          text: "market_stress.v1 on coingecko:bitcoin: funding z=4 over 20 samples.",
+          role: "primary",
+          contentCompleteness: "native_complete",
+          hasValidatedClaim: true,
+        },
+      ],
+      assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+    });
+    const gate = decideSignalGate({
+      facts,
+      risk: "high",
+      confidence: 0.9,
+      material: { material: true, reason: "observed_anomaly" },
+      reliability: "observed",
+      impact: "informational",
+      earlyWarningsEnabled: true,
+      typed: {
+        typedSignalId: "perp_stress",
+        persist: true,
+        outputKind: "unverified_early_warning",
+        anticipated: false,
+        notifyAsEarlyWarning: true,
+        allowValidatedNotify: false,
+        reason: "perp_stress_detector",
+        epistemicStatus: "observed",
+      },
+    });
+    expect(gate.persist).toBe(true);
+    expect(gate.outputKind).toBe("unverified_early_warning");
+    expect(gate.notifyKind).toBe("early_warning");
+    expect(gate.epistemicStatus).toBe("observed");
+    expect(gate.typedSignalId).toBe("perp_stress");
+  });
+
   it("does not persist a detector observation as a signal", () => {
     const facts = buildEventFacts({
       evidence: [

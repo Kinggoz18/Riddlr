@@ -185,6 +185,7 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByText(/Never enter a seed phrase/i)).toBeVisible();
   await page.getByRole("link", { name: "Signals" }).click();
   await expect(page.getByText(/No signals|Signals/)).toBeVisible();
+  await expect(page.getByText(/typed signals|Eight typed policies/i)).toBeVisible();
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page.getByText("Connected").first()).toBeVisible();
   await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();

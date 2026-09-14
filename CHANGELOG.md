@@ -4,6 +4,14 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Eight typed signals persist only when their proof bar is met: exploit or
+  bridge drain, stablecoin peg deviation, token unlock (always anticipated),
+  listing or delisting, governance proposal, regulatory/legal/sanction, macro
+  policy catalyst, and perp stress (market observation, never a fundamental
+  signal). Signals shows the type. See
+  [docs/signals.md](docs/signals.md) and
+  [docs/adr/0028-typed-signal-policies.md](docs/adr/0028-typed-signal-policies.md).
+
 - Event identity is a rolling window of market domain, catalyst kind, and
   subject instead of a UTC day. Lifecycle (`open`, `developing`, `confirmed`,
   `disputed`, `retracted`, `resolved`, `superseded`), lead time, and +1h/+24h/+7d

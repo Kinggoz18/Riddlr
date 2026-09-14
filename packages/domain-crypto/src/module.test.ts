@@ -552,6 +552,32 @@ describe("crypto domain module", () => {
     ).toBe("high");
   });
 
+  it("keeps perp stress informational so it is never a fundamental signal", () => {
+    const assessment = cryptoDomainModule.assessImpact({
+      claims: [
+        {
+          marketDomainId: "crypto",
+          kind: "crypto:market_stress",
+          predicate: "market_stress",
+          polarity: "asserted",
+          modality: "asserted",
+          fingerprint: "stress",
+          title: "funding z-score",
+        },
+      ],
+      assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+      hasTrustedFirsthand: false,
+      stale: false,
+      contradicted: false,
+      retracted: false,
+    });
+    expect(assessment.level).toBe("informational");
+    expect(assessment.reason).toBe("perp_stress_observation");
+  });
+
   it("rejects observed-anomaly kinds on the document claim path", () => {
     const evidence = normalizeEvidence({
       sourceFamily: "search",

@@ -54,7 +54,10 @@ with a detector claim is material (`observed_anomaly`). Reliability is `observed
 a sourced fact, not `single_source`. The event title is the detector claim. Per-event
 `observations` store the last series point the detector used. The same subject on
 the same UTC day is one event; a reversed polarity or a second detector adds claims
-to that event. `observed` reliability does not persist a signal.
+to that event. `observed` reliability does not persist a generic signal. Typed
+detector trips persist as unverified early warnings when the type allows it
+(peg, exploit, macro odds, perp stress). Perp stress is never a fundamental
+signal.
 
 ## Operator surfaces
 

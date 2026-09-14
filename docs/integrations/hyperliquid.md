@@ -41,7 +41,8 @@ Hourly funding is stored at the UTC hour so a 7-day z-score fits in
 window 168 ≈ 7 days), or when `open_interest_usd` moves at least 20% in 1h.
 `funding_divergence.v1` compares Hyperliquid and Binance annualised APR (10
 percentage points). Findings are `crypto:market_stress` observed events, impact
-`moderate` on a watched asset, never a validated signal. Open-event merge of
+`informational`, never a validated signal. Detector trip is an unverified early
+warning (perp stress). Open-event merge of
 liquidation bursts waits on event lifecycle; this source still emits the
 observation.
 

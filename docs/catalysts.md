@@ -71,4 +71,5 @@ and Signals.
 `earnings_or_guidance`) have no Crypto mapping and are dropped on the Crypto
 document path.
 
-See [ADR 0026](adr/0026-catalyst-taxonomy.md).
+See [ADR 0026](adr/0026-catalyst-taxonomy.md) and
+[ADR 0028](adr/0028-typed-signal-policies.md).

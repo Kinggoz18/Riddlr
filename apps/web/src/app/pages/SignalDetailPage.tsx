@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { ExternalLink } from "../Brand.js";
-import { catalystKindLabel } from "../format.js";
+import { catalystKindLabel, typedSignalLabel } from "../format.js";
 
 function SignalDetailPage() {
   const { id } = useParams();
@@ -22,6 +22,8 @@ function SignalDetailPage() {
       outputKind?: string;
       notifyKind?: string;
       catalystKind?: string | null;
+      typedSignal?: string | null;
+      anticipated?: boolean;
     };
     evidence: Array<{ id: string; title?: string; canonicalUrl?: string; bodyText?: string }>;
     proofLinks?: Array<{
@@ -56,12 +58,17 @@ function SignalDetailPage() {
     <>
       <PageHeader
         title={s.headline}
-        description="Validated output with proof evidence IDs on the event. A signal is not a candidate and not a trade."
+        description={
+          s.typedSignal === "perp_stress"
+            ? "Market observation with proof. Perp stress is not a fundamental signal and not a trade."
+            : "Typed output with proof evidence IDs on the event. A signal is not a candidate and not a trade."
+        }
       />
       <p className="record-meta">
         <StatusBadge label={s.risk} tone="risk" />
         <span>Confidence {s.confidence}</span>
-        {s.catalystKind ? <span>{catalystKindLabel(s.catalystKind)}</span> : null}
+        {s.typedSignal ? <span>{typedSignalLabel(s.typedSignal, s.anticipated)}</span> : null}
+        {s.catalystKind && !s.typedSignal ? <span>{catalystKindLabel(s.catalystKind)}</span> : null}
         <span>
           {s.outputKind === "unverified_early_warning" || s.notifyKind === "early_warning"
             ? "Unverified early warning"
@@ -74,6 +81,14 @@ function SignalDetailPage() {
         <p className="field-note">
           Unverified early warning. Independent corroboration is absent. This is not confirmed.
         </p>
+      ) : null}
+      {s.typedSignal === "perp_stress" ? (
+        <p className="field-note">
+          Perp stress is a market observation. It is never a fundamental signal.
+        </p>
+      ) : null}
+      {s.anticipated ? (
+        <p className="field-note">Anticipated. Scheduled; not an early warning.</p>
       ) : null}
       <div className="proof-stack">
         <Card>

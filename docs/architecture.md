@@ -43,8 +43,9 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0023](adr/0023-claim-corroboration.md), and
 [ADR 0024](adr/0024-registry-driven-resolution.md), and
 [ADR 0025](adr/0025-observation-layer.md), and
-[ADR 0026](adr/0026-catalyst-taxonomy.md), and
-[ADR 0027](adr/0027-event-lifecycle-outcomes.md).
+[ADR 0026](adr/0026-catalyst-taxonomy.md),
+[ADR 0027](adr/0027-event-lifecycle-outcomes.md), and
+[ADR 0028](adr/0028-typed-signal-policies.md).
 
 ## Trust boundaries
 
@@ -95,7 +96,9 @@ volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence, and odds
 reliability `observed` when a watched or pinned subject trips the threshold.
 Events thread across scans by rolling-window identity (market domain, catalyst
 kind, subject). Lifecycle, lead time, and +1h/+24h/+7d outcomes live on the
-event. Scorecard is Overview-adjacent at `/scorecard`.
+event. Scorecard is Overview-adjacent at `/scorecard`. Typed signals (exploit,
+peg, unlock, listing, governance, regulatory, macro, perp stress) persist only
+when the type's proof bar is met. Perp stress is a market observation.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

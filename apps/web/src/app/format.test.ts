@@ -23,6 +23,7 @@ import {
   reliabilityStatusLabel,
   scheduleLabel,
   tokenBudgetLabel,
+  typedSignalLabel,
 } from "./format.js";
 
 describe("clock hour formatting", () => {
@@ -81,6 +82,9 @@ describe("agent labels", () => {
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
     expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
+    expect(typedSignalLabel("exploit_or_bridge_drain")).toBe("Exploit or bridge drain");
+    expect(typedSignalLabel("token_unlock", true)).toBe("Token unlock · Anticipated");
+    expect(typedSignalLabel("perp_stress")).toBe("Perp stress");
     expect(adapterLabel("feeds")).toBe("RSS/Atom");
     expect(adapterLabel("defillama")).toBe("DefiLlama");
     expect(adapterLabel("polymarket")).toBe("Polymarket");

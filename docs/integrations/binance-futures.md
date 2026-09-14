@@ -54,7 +54,8 @@ also store `funding_rate_apr` (365×24 / period hours). `market_stress.v1` and
 `funding_divergence.v1` are described in
 [hyperliquid.md](hyperliquid.md). Cross-venue liquidation bursts attach to an
 open fundamental event only after event lifecycle exists; v1 still emits
-observation evidence and a `market_stress` observed event (impact `moderate`)
+observation evidence and a `market_stress` observed event (impact
+`informational`, typed perp-stress early warning)
 when 1-minute liquidation notional is at least $10,000,000 on a watched asset.
 
 Dropped WebSocket frames are counted on `riddlr_observe_ws_drops_total`.

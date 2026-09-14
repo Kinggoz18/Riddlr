@@ -519,6 +519,19 @@ export {
   type SignalGateDecision,
 } from "./signal-gate.js";
 export {
+  collectSignalProofFacts,
+  evaluateTypedSignal,
+  isTypedSignalId,
+  type SignalProofClaim,
+  type SignalProofEvidence,
+  type SignalProofFacts,
+  TYPED_SIGNAL_IDS,
+  TYPED_SIGNAL_LABELS,
+  type TypedSignalEvaluation,
+  type TypedSignalId,
+  typedSignalForCatalyst,
+} from "./signal-types.js";
+export {
   SHIPPED_CRYPTO_SKILL_SLUGS,
   SHIPPED_CRYPTO_SKILLS,
   SKILL_CATEGORIES,

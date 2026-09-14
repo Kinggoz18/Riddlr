@@ -778,16 +778,9 @@ export const cryptoDomainModule: DomainModule = {
       };
     }
     if (kinds.has("crypto:market_stress") || principal === "market_stress") {
-      if (input.watchlistOverlap || input.portfolioOverlap) {
-        return {
-          level: "moderate",
-          reason: "market_stress",
-          reasonCodes: ["crypto:market_stress"],
-        };
-      }
       return {
         level: "informational",
-        reason: "market_stress_unwatched",
+        reason: "perp_stress_observation",
         reasonCodes: ["crypto:market_stress"],
       };
     }
