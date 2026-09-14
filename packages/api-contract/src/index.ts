@@ -7,6 +7,7 @@ import {
   MAX_DEFILLAMA_PROTOCOL_FETCHES,
   MAX_FEED_POLL_INTERVAL_SECONDS,
   MAX_PREDICTION_MARKETS,
+  MAX_SNAPSHOT_SPACES,
   MIN_DAILY_TOKEN_BUDGET,
   MIN_FEED_POLL_INTERVAL_SECONDS,
   SETUP_STEPS,
@@ -261,6 +262,14 @@ export const kalshiSourceSchema = z.object({
   marketTickers: z
     .array(z.string().regex(/^[A-Za-z0-9._-]{2,128}$/))
     .max(MAX_PREDICTION_MARKETS)
+    .optional(),
+});
+
+export const snapshotSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Snapshot"),
+  spaces: z
+    .array(z.string().regex(/^[A-Za-z0-9._-]{3,80}$/))
+    .max(MAX_SNAPSHOT_SPACES)
     .optional(),
 });
 

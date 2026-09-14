@@ -79,6 +79,7 @@ describe("agent labels", () => {
     expect(adapterLabel("defillama")).toBe("DefiLlama");
     expect(adapterLabel("polymarket")).toBe("Polymarket");
     expect(adapterLabel("kalshi")).toBe("Kalshi");
+    expect(adapterLabel("snapshot")).toBe("Snapshot");
   });
 });
 

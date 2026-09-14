@@ -232,7 +232,7 @@ export const assets = pgTable(
     name: text("name"),
     aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
     externalIds: jsonb("external_ids")
-      .$type<{ coingeckoId?: string; caip19?: string[] }>()
+      .$type<{ coingeckoId?: string; caip19?: string[]; snapshotSpaces?: string[] }>()
       .notNull()
       .default({}),
     marketCapRank: integer("market_cap_rank"),

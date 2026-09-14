@@ -58,3 +58,8 @@ Captured from live provider responses. Secrets are not present in these files.
 | `kalshi/orderbook-kxcpi-26sep-t0.6.json` | `GET https://external-api.kalshi.com/trade-api/v2/markets/KXCPI-26SEP-T0.6/orderbook?depth=5` | 2026-09-14 |
 | `kalshi/empty-markets.json` | `{"markets":[]}` | 2026-09-14 |
 | `kalshi/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `snapshot/proposals-grove-truncated.json` | `POST https://hub.snapshot.org/graphql` `proposals` for `grovefinance.eth` (two active proposals; bodies truncated to 500 characters) | 2026-09-14 |
+| `snapshot/proposals-drift-missing-id.json` | Same capture with the first proposal `id` removed to represent schema drift | 2026-09-14 |
+| `snapshot/empty-proposals.json` | `{"data":{"proposals":[]}}`, the documented empty list | 2026-09-14 |
+| `snapshot/errors-unknown-argument.json` | GraphQL `errors[]` for unknown argument `bogus` (HTTP 400) | 2026-09-14 |
+| `snapshot/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |

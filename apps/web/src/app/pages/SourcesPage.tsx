@@ -102,6 +102,11 @@ const ADAPTERS = [
     body: "US-regulated prediction-market odds. Opt-in. Public Trade API, no key. Pin series tickers such as KXCPI. Same odds-jump detector as Polymarket.",
   },
   {
+    id: "snapshot",
+    name: "Snapshot",
+    body: "Governance proposals from Snapshot GraphQL. Opt-in. No API key. Pin space ids. Official trust for the space itself. Tally is not shipped.",
+  },
+  {
     id: "discord",
     name: "Discord",
     body: "Recent channel messages. You can add more than one Discord source.",
@@ -161,7 +166,7 @@ function SourcesList() {
     <>
       <PageHeader
         title="Sources"
-        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, and Kalshi are opt-in observation."
+        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, and Snapshot are opt-in."
         actions={<SourcesSubnav />}
       />
       {rows.length === 0 ? (
@@ -371,7 +376,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, and Kalshi are single opt-in observation sources."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, and Snapshot are single opt-in sources."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -875,6 +880,74 @@ function KalshiForm() {
   );
 }
 
+function SnapshotForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Snapshot");
+  const [spaces, setSpaces] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "snapshot");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Snapshot source"
+        description="Opt-in governance proposals from Snapshot GraphQL. No API key. Pin space ids such as grovefinance.eth. Watched assets also map through a maintained space list. Tally is not shipped."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/snapshot", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  spaces,
+                }),
+              });
+              toast("Snapshot saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Snapshot"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="snapshot-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Spaces"
+            hint="Snapshot space ids such as grovefinance.eth. Cap 16. Aave, Uniswap, Compound, and ENS map from the watchlist automatically."
+          >
+            <ChipInput
+              id="snapshot-spaces"
+              values={spaces}
+              onChange={setSpaces}
+              placeholder="grovefinance.eth"
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Snapshot source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
 function DiscordForm() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -1274,6 +1347,9 @@ function SourceCreate() {
   if (adapter === "kalshi") {
     return <KalshiForm />;
   }
+  if (adapter === "snapshot") {
+    return <SnapshotForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -1497,6 +1573,21 @@ function SourceDetail() {
           <ChipList
             values={Array.isArray(config.marketTickers) ? config.marketTickers.map(String) : []}
             empty="Every open market in the pinned series"
+          />
+        </Card>
+      ) : null}
+      {row.adapterId === "snapshot" ? (
+        <Card>
+          <h2>Snapshot</h2>
+          <p className="field-note">
+            Free GraphQL at hub.snapshot.org, no key. Hub rate limit 100/min. Spaces on this form
+            plus watchlist mapping (Aave, Uniswap, Compound, ENS). Native-complete proposals. Tally
+            is not shipped.
+          </p>
+          <h2>Spaces</h2>
+          <ChipList
+            values={Array.isArray(config.spaces) ? config.spaces.map(String) : []}
+            empty="Watchlist mapping only"
           />
         </Card>
       ) : null}

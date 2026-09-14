@@ -1,6 +1,10 @@
 import { normalizeEvidence, type RegistryAsset } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
-import { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "./module.js";
+import {
+  cryptoDomainModule,
+  DEFAULT_CRYPTO_WATCHLIST,
+  snapshotSpacesForWatchlist,
+} from "./module.js";
 
 function registryAsset(
   id: string,
@@ -174,6 +178,30 @@ describe("crypto domain module", () => {
     expect(claims.some((item) => item.kind === "crypto:listing_or_delisting")).toBe(true);
     expect(cryptoDomainModule.mapClaimKindToCatalyst("crypto:listing_or_delisting")).toBe(
       "listing_or_delisting",
+    );
+  });
+
+  it("extracts a governance proposal with votes from native-complete Snapshot evidence", () => {
+    const claims = cryptoDomainModule.extractClaims(
+      [
+        normalizeEvidence({
+          sourceFamily: "governance",
+          adapterId: "snapshot",
+          title: "Snapshot vote in Grove",
+          bodyText:
+            "Snapshot vote in Grove (grovefinance.eth). Governance proposal state active. 12 votes. A proposal body.",
+          fetchedAt: new Date("2026-09-14T00:00:00Z"),
+          url: "https://snapshot.box/#/s:grovefinance.eth/proposal/0xabc",
+          contentCompleteness: "native_complete",
+        }),
+      ],
+      CRYPTO_REGISTRY,
+    );
+    const gov = claims.find((item) => item.kind === "crypto:governance_proposal");
+    expect(gov?.value).toBe(12);
+    expect(gov?.unit).toBe("votes");
+    expect(cryptoDomainModule.mapClaimKindToCatalyst("crypto:governance_proposal")).toBe(
+      "governance_proposal",
     );
   });
 
@@ -352,6 +380,22 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "hyperliquid", watchlist: [] })).toBe("");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "polymarket", watchlist: [] })).toBe("");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "kalshi", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "snapshot", watchlist: [] })).toBe("");
+  });
+
+  it("maps Snapshot spaces from the watchlist and registry external ids", () => {
+    const derived = snapshotSpacesForWatchlist(
+      [{ canonicalId: "coingecko:aave" }, { canonicalId: "coingecko:bitcoin" }],
+      [
+        {
+          ...registryAsset("bitcoin", "BTC", "Bitcoin"),
+          externalIds: { coingeckoId: "bitcoin", snapshotSpaces: ["customdao.eth"] },
+        },
+      ],
+    );
+    expect(derived.spaces).toEqual(["aave.eth", "customdao.eth"]);
+    expect(derived.spaceAssets["aave.eth"]).toBe("coingecko:aave");
+    expect(derived.spaceAssets["customdao.eth"]).toBe("coingecko:bitcoin");
   });
 
   it("keeps odds_jump impact low unless both venues agree on a watched asset", () => {
@@ -397,6 +441,45 @@ describe("crypto domain module", () => {
         claims: [{ ...claim, objectText: "up z=16.00 agreed" }],
       }).level,
     ).toBe("low");
+  });
+
+  it("keeps Snapshot governance impact moderate unless the title is treasury-scale", () => {
+    const claim = {
+      marketDomainId: "crypto" as const,
+      kind: "crypto:governance_proposal",
+      predicate: "governance_proposal",
+      polarity: "asserted" as const,
+      modality: "asserted" as const,
+      fingerprint: "gov",
+      title: "Snapshot vote in Grove",
+      objectText: "governance proposal",
+    };
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [claim],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("moderate");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [{ ...claim, title: "Treasury emission upgrade and fee-switch" }],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("high");
   });
 
   it("rejects observed-anomaly kinds on the document claim path", () => {

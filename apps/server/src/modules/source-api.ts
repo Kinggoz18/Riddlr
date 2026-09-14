@@ -11,6 +11,7 @@ import {
   pageQuerySchema,
   polymarketSourceSchema,
   publisherHostPolicySchema,
+  snapshotSourceSchema,
   sourceIdentityPolicySchema,
   sourcePatchSchema,
   xSourceSchema,
@@ -41,16 +42,22 @@ import {
   createKalshiAdapter,
   createPolymarketAdapter,
   createSearxngAdapter,
+  createSnapshotAdapter,
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
   defaultTrustForFeedUrl,
   parseSearxngEngines,
+  parseSnapshotSpaces,
   SUGGESTED_FEEDS,
 } from "@riddlr/source-adapters";
 import { and, count, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
-import { ensureDefaultPriceTrackerHostPolicies, upsertSourceIdentity } from "./intelligence.js";
+import {
+  ensureDefaultPriceTrackerHostPolicies,
+  ensureOfficialSnapshotSpace,
+  upsertSourceIdentity,
+} from "./intelligence.js";
 import {
   attachSourceToAgents,
   isMarketDataAdapter,
@@ -94,6 +101,7 @@ export function registerSourceRoutes(
   const binanceFutures = createBinanceFuturesAdapter();
   const polymarket = createPolymarketAdapter();
   const kalshi = createKalshiAdapter();
+  const snapshot = createSnapshotAdapter();
 
   function adapterForHealth(adapterId: string) {
     switch (adapterId) {
@@ -113,6 +121,8 @@ export function registerSourceRoutes(
         return polymarket;
       case "kalshi":
         return kalshi;
+      case "snapshot":
+        return snapshot;
       default:
         return marketAdapter(adapterId) ?? searxng;
     }
@@ -169,6 +179,11 @@ export function registerSourceRoutes(
           id: kalshi.id,
           family: kalshi.family,
           capabilities: kalshi.capabilities,
+        },
+        {
+          id: snapshot.id,
+          family: snapshot.family,
+          capabilities: snapshot.capabilities,
         },
         {
           id: coingecko.id,
@@ -431,6 +446,54 @@ export function registerSourceRoutes(
         ...(marketTickers.length > 0 ? { marketTickers } : {}),
       },
     });
+  });
+
+  app.post("/api/v1/sources/snapshot", { preHandler: authed }, async (request, reply) => {
+    const body = snapshotSourceSchema.parse(request.body);
+    const spaces = parseSnapshotSpaces(body.spaces ?? []);
+    const validated = await snapshot.validate({ spaces });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+      return reply.code(400).send({
+        error: {
+          code: "source_limit",
+          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+        },
+      });
+    }
+    if (existing.some((row) => row.adapterId === "snapshot")) {
+      return reply.code(409).send({
+        error: { code: "source_exists", message: "Snapshot is already configured." },
+      });
+    }
+    const [source] = await ctx.db
+      .insert(sources)
+      .values({
+        family: "governance",
+        adapterId: "snapshot",
+        enabled: true,
+        name: body.name,
+        config: spaces.length > 0 ? { spaces } : {},
+      })
+      .returning();
+    if (source) {
+      await attachSourceToAgents(ctx, source.id);
+      for (const space of spaces) {
+        await ensureOfficialSnapshotSpace(ctx, space);
+      }
+    }
+    const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth?.user.id,
+      action: "source.create",
+      resource: source?.id,
+    });
+    return { source: source ? publicSource(source) : undefined };
   });
 
   app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {

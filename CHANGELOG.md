@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Snapshot opt-in governance evidence: GraphQL proposals from hub.snapshot.org,
+  native-complete rows, official-firsthand space identities. Tally is not
+  shipped. Sources → Add source → Configure Snapshot. See
+  [docs/integrations/snapshot.md](docs/integrations/snapshot.md).
+
 - Polymarket and Kalshi opt-in observation sources: YES odds, 1h/24h change, and
   an odds-jump detector (15 pp / 1h or 25 pp / 24h with a $10,000 liquidity
   floor). Always an early warning. Sources → Add source → Configure Polymarket /

@@ -18,6 +18,7 @@ import {
   isCatalystKind,
   MARKET_STRESS_V1,
   MAX_SEARXNG_ASSET_QUERIES,
+  MAX_SNAPSHOT_SPACES,
   type MarketObservation,
   type NormalizedEvidence,
   ODDS_JUMP_V1,
@@ -54,6 +55,42 @@ export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
     displayName: "Tether",
   },
 ];
+
+export const CRYPTO_SNAPSHOT_SPACES: Readonly<Record<string, string>> = {
+  "coingecko:aave": "aave.eth",
+  "coingecko:uniswap": "uniswapgovernance.eth",
+  "coingecko:compound-governance-token": "compound-governance.eth",
+  "coingecko:ethereum-name-service": "ens.eth",
+};
+
+export function snapshotSpacesForWatchlist(
+  watchlist: readonly { canonicalId: string }[],
+  registry: readonly RegistryAsset[] = [],
+): { spaces: string[]; spaceAssets: Record<string, string> } {
+  const spaces: string[] = [];
+  const spaceAssets: Record<string, string> = {};
+  for (const item of takeBounded(watchlist, MAX_SNAPSHOT_SPACES)) {
+    const mapped = CRYPTO_SNAPSHOT_SPACES[item.canonicalId];
+    if (mapped) {
+      spaces.push(mapped);
+      spaceAssets[mapped] = item.canonicalId;
+    }
+    const extra = registry.find((asset) => asset.canonicalId === item.canonicalId)?.externalIds
+      .snapshotSpaces;
+    for (const space of extra ?? []) {
+      if (typeof space === "string" && space.trim()) {
+        const id = space.trim().toLowerCase();
+        spaces.push(id);
+        spaceAssets[id] = item.canonicalId;
+      }
+    }
+  }
+  const unique = [...new Set(spaces)];
+  return {
+    spaces: takeBounded(unique, MAX_SNAPSHOT_SPACES),
+    spaceAssets,
+  };
+}
 
 const CRYPTO_ASSET_CLASSES = ["cryptocurrency", "meme_coin", "stablecoin"] as const;
 
@@ -214,6 +251,7 @@ const CLAIM_PATTERNS: Array<{
     kind: "crypto:governance_proposal",
     predicate: "governance_proposal",
     re: /\b(governance proposal|snapshot vote)\b/i,
+    quantitative: true,
   },
   {
     kind: "crypto:regulatory_action",
@@ -270,6 +308,10 @@ function quantityFromText(content: string): { value: number; unit: string } | un
   const usd = /(?:usd|usdt|\$)\s?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/i.exec(content);
   if (usd?.[1]) {
     return { value: Number(usd[1].replaceAll(",", "")), unit: "usd" };
+  }
+  const votes = /(\d+(?:\.\d+)?)\s*votes\b/i.exec(content);
+  if (votes?.[1]) {
+    return { value: Number(votes[1]), unit: "votes" };
   }
   return undefined;
 }
@@ -360,7 +402,8 @@ export const cryptoDomainModule: DomainModule = {
       input.adapterId === "hyperliquid" ||
       input.adapterId === "binance-futures" ||
       input.adapterId === "polymarket" ||
-      input.adapterId === "kalshi"
+      input.adapterId === "kalshi" ||
+      input.adapterId === "snapshot"
     ) {
       return [""];
     }
@@ -649,6 +692,15 @@ export const cryptoDomainModule: DomainModule = {
         level: input.watchlistOverlap || input.portfolioOverlap ? "high" : "moderate",
         reason: "regulatory_action",
         reasonCodes: ["crypto:regulatory_action"],
+      };
+    }
+    if (kinds.has("crypto:governance_proposal") || principal === "governance_proposal") {
+      const hay = input.claims.map((item) => `${item.title} ${item.objectText ?? ""}`).join(" ");
+      const material = /\b(treasury|emission|fee-switch|fee switch|upgrade)\b/i.test(hay);
+      return {
+        level: material ? "high" : "moderate",
+        reason: material ? "governance_material" : "governance_proposal",
+        reasonCodes: ["crypto:governance_proposal"],
       };
     }
     if (

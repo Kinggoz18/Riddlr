@@ -2819,6 +2819,75 @@ describe("setup, auth, and domain persistence", () => {
     expect(series.some((row) => row.metric === "volume" && row.value === 55474.97)).toBe(true);
   });
 
+  it("creates an opt-in Snapshot source and persists captured Grove proposals", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/snapshot",
+      headers: { cookie },
+      payload: { name: "Snapshot", spaces: ["grovefinance.eth"] },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("snapshot");
+    expect(created.json().source?.config?.spaces).toEqual(["grovefinance.eth"]);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/snapshot",
+      headers: { cookie },
+      payload: { name: "Snapshot again" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const adapter = listed.json().adapters.find((item: { id: string }) => item.id === "snapshot");
+    expect(adapter.capabilities.lookbackNotes).toMatch(/hub.snapshot.org/);
+    const grove = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "packages/source-adapters/test/fixtures/snapshot/proposals-grove-truncated.json",
+        ),
+        "utf8",
+      ),
+    );
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-09-14T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:snapshot-1",
+      })
+      .returning();
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      if (url.includes("/search")) {
+        return Response.json({ results: [] });
+      }
+      if (url.includes("hub.snapshot.org/graphql")) {
+        return Response.json(grove);
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    const evidence = await ctx.db.select().from(evidenceItems);
+    expect(
+      evidence.some(
+        (row) =>
+          row.adapterId === "snapshot" &&
+          row.sourceFamily === "governance" &&
+          row.contentCompleteness === "native_complete" &&
+          row.canonicalUrl?.includes("grovefinance.eth/proposal/"),
+      ),
+    ).toBe(true);
+  });
+
   it("invalidates unused sibling password-reset tokens", async () => {
     const [user] = await ctx.db.select().from(users);
     expect(user?.id).toBeDefined();

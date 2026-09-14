@@ -106,16 +106,25 @@ import {
   createDiscordAdapter,
   createFeedsAdapter,
   createHyperliquidAdapter,
+  createKalshiAdapter,
+  createPolymarketAdapter,
   createSearxngAdapter,
+  createSnapshotAdapter,
   createXAdapter,
   type FetchResult,
+  parseSnapshotSpaces,
   redactRequestUrl,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
-import { listRegistryAssets } from "./asset-registry.js";
-import { enrichAndUnderstandScan, loadTrustMaps, upsertSourceIdentity } from "./intelligence.js";
+import { listRegistryAssets, snapshotSpacesForAgent } from "./asset-registry.js";
+import {
+  enrichAndUnderstandScan,
+  ensureOfficialSnapshotSpace,
+  loadTrustMaps,
+  upsertSourceIdentity,
+} from "./intelligence.js";
 import { maybeNotify } from "./notify.js";
 
 async function instanceEarlyWarningsEnabled(ctx: AppContext): Promise<boolean> {
@@ -375,6 +384,9 @@ export async function runScan(
     adapters.register(createDefiLlamaAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createHyperliquidAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createBinanceFuturesAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createPolymarketAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createKalshiAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createSnapshotAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
@@ -411,6 +423,23 @@ export async function runScan(
         break;
       }
       const runtimeConfig: Record<string, unknown> = { ...source.config };
+      if (source.adapterId === "snapshot") {
+        const derived = await snapshotSpacesForAgent(ctx, agentContext.watchlist);
+        const existingAssets =
+          source.config.spaceAssets &&
+          typeof source.config.spaceAssets === "object" &&
+          !Array.isArray(source.config.spaceAssets)
+            ? (source.config.spaceAssets as Record<string, string>)
+            : {};
+        runtimeConfig.derivedSpaces = derived.spaces;
+        runtimeConfig.spaceAssets = { ...existingAssets, ...derived.spaceAssets };
+        for (const space of parseSnapshotSpaces([
+          ...(Array.isArray(source.config.spaces) ? source.config.spaces : []),
+          ...derived.spaces,
+        ])) {
+          await ensureOfficialSnapshotSpace(ctx, space);
+        }
+      }
       if (source.secretId) {
         const secretRows = await ctx.db
           .select()

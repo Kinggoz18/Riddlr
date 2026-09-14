@@ -375,6 +375,8 @@ export function adapterLabel(adapterId: string) {
       return "Polymarket";
     case "kalshi":
       return "Kalshi";
+    case "snapshot":
+      return "Snapshot";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

@@ -16,6 +16,7 @@ export type AssetRegistryStatus = "active" | "inactive";
 export type AssetExternalIds = {
   coingeckoId?: string;
   caip19?: string[];
+  snapshotSpaces?: string[];
 };
 
 export type RegistryAsset = {

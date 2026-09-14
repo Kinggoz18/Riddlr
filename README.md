@@ -81,6 +81,7 @@ See [docs/architecture.md](docs/architecture.md).
 - [Binance USD-M Futures](docs/sources/binance-futures.md)
 - [Polymarket](docs/sources/polymarket.md)
 - [Kalshi](docs/sources/kalshi.md)
+- [Snapshot](docs/sources/snapshot.md)
 - [Discord](docs/sources/discord.md)
 - [X](docs/sources/x.md)
 - [CoinGecko](docs/sources/coingecko.md)

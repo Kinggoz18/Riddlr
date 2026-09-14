@@ -102,6 +102,18 @@ export {
   parseSearxngPayload,
 } from "./searxng.js";
 export {
+  createSnapshotAdapter,
+  parseSnapshotGraphQL,
+  parseSnapshotProposal,
+  parseSnapshotSpaces,
+  SNAPSHOT_ADAPTER_ID,
+  SNAPSHOT_FAMILY,
+  SNAPSHOT_GRAPHQL_URL,
+  SNAPSHOT_USER_AGENT,
+  snapshotEvidenceFromProposal,
+  snapshotProposalUrl,
+} from "./snapshot.js";
+export {
   assertSafeHttpUrl,
   assertSafeResolvedHttpUrl,
   classifyHttpStatus,

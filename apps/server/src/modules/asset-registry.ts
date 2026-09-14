@@ -13,7 +13,11 @@ import {
   searchRegistry,
   takeBounded,
 } from "@riddlr/domain";
-import { caip19FromPlatforms, cryptoAssetClassFor } from "@riddlr/domain-crypto";
+import {
+  caip19FromPlatforms,
+  cryptoAssetClassFor,
+  snapshotSpacesForWatchlist,
+} from "@riddlr/domain-crypto";
 import {
   assertSafeHttpUrl,
   COINGECKO_API_BASE,
@@ -36,7 +40,7 @@ export function asRegistryAsset(row: {
   symbol: string | null;
   name: string | null;
   aliases: string[] | null;
-  externalIds: { coingeckoId?: string; caip19?: string[] } | null;
+  externalIds: { coingeckoId?: string; caip19?: string[]; snapshotSpaces?: string[] } | null;
   marketCapRank: number | null;
   status: string;
 }): RegistryAsset {
@@ -80,6 +84,14 @@ export async function listRegistryAssets(ctx: AppContext): Promise<RegistryAsset
     (item) => item.status === "active" || watched.has(item.canonicalId),
   );
   return takeBounded(included, MAX_REGISTRY_ASSETS);
+}
+
+export async function snapshotSpacesForAgent(
+  ctx: AppContext,
+  watchlist: readonly { canonicalId: string }[],
+): Promise<{ spaces: string[]; spaceAssets: Record<string, string> }> {
+  const registry = await listRegistryAssets(ctx);
+  return snapshotSpacesForWatchlist(watchlist, registry);
 }
 
 export async function findRegistryAsset(
