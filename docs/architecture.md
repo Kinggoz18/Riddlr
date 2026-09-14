@@ -77,17 +77,20 @@ asset plus one general query), RSS/Atom feeds (operator-pasted URLs; more
 than one feed is allowed), Discord (operator-configured bot; more
 than one Discord source is allowed), X (operator-configured recent search with
 bounded `next_token`), opt-in DefiLlama observations (TVL, stablecoins, hacks), opt-in Hyperliquid and
-Binance USD-M Futures perp observations, opt-in Polymarket and Kalshi prediction-market odds, opt-in Snapshot governance proposals, and one active market-data source: CoinGecko,
+Binance USD-M Futures perp observations, opt-in Polymarket and Kalshi prediction-market odds, opt-in Snapshot governance proposals, opt-in Alchemy and Helius address-activity webhooks, and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
 seed fills `assets` for watchlist search and text extraction. The observe worker
 polls CoinGecko `/simple/price` into `observation_series` for watched, held, and
 pinned assets. DefiLlama, when enabled, polls on a 15-minute interval. Hyperliquid
 and Binance USD-M Futures, when enabled, poll on a 1-minute interval. Polymarket
 and Kalshi, when enabled, poll on a 15-minute interval. Snapshot, when enabled,
-polls once per scan (first 50 proposals after the stored `created` cursor). Return-shock,
+polls once per scan (first 50 proposals after the stored `created` cursor). Opt-in
+Alchemy and Helius inbound webhooks persist large transfers on labeled addresses
+and portfolio wallets (`POST /hooks/alchemy/:sourceId` and
+`POST /hooks/helius/:sourceId`; Caddy proxies `/hooks/*` to the API). Balance
+snapshots are not shipped. Return-shock,
 volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence, and odds-jump detectors open material events with
-reliability `observed` when a watched or pinned subject trips the threshold. On-chain scanning
-is not implemented.
+reliability `observed` when a watched or pinned subject trips the threshold.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

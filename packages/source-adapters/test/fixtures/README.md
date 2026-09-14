@@ -63,3 +63,11 @@ Captured from live provider responses. Secrets are not present in these files.
 | `snapshot/empty-proposals.json` | `{"data":{"proposals":[]}}`, the documented empty list | 2026-09-14 |
 | `snapshot/errors-unknown-argument.json` | GraphQL `errors[]` for unknown argument `bogus` (HTTP 400) | 2026-09-14 |
 | `snapshot/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `alchemy/address-activity.json` | Documented ADDRESS_ACTIVITY example from https://www.alchemy.com/docs/reference/address-activity-webhook.md (two transfers: USDC 293.092129 and 2400; not three) | 2026-09-14 |
+| `alchemy/address-activity-drift-missing-hash.json` | Same capture with the first activity `hash` removed to represent schema drift | 2026-09-14 |
+| `alchemy/empty-activity.json` | Documented envelope with `event.activity: []` | 2026-09-14 |
+| `alchemy/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `helius/enhanced-transfer.json` | Documented enhanced TRANSFER example (0.1 SOL, signature `5rfFLBUp5YPr6rC2g1KBBW8LGZBcZ8Lvs7gKAdgrBjmQvFf6EKkgc5cpAQUTwGxDJbNqtLYkjV5vS5zVK4tb6JtP`) | 2026-09-14 |
+| `helius/enhanced-transfer-drift-missing-signature.json` | Same capture with `signature` removed to represent schema drift | 2026-09-14 |
+| `helius/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `helius/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |

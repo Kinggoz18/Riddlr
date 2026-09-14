@@ -569,6 +569,44 @@ export const portfolioSnapshots = pgTable("portfolio_snapshots", {
   note: text("note"),
 });
 
+export const labeledAddresses = pgTable(
+  "labeled_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chain: text("chain").notNull(),
+    address: text("address").notNull(),
+    label: text("label").notNull(),
+    role: text("role").notNull(),
+    shipped: boolean("shipped").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("labeled_addresses_chain_addr_idx").on(table.chain, table.address)],
+);
+
+export const inboundWebhookReceipts = pgTable(
+  "inbound_webhook_receipts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    adapterId: text("adapter_id").notNull(),
+    webhookId: text("webhook_id").notNull(),
+    eventId: text("event_id").notNull(),
+    eventCreatedAt: timestamp("event_created_at", { withTimezone: true }),
+    payload: jsonb("payload").$type<unknown>().notNull(),
+    processedOffset: integer("processed_offset").notNull().default(0),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("inbound_webhook_receipts_event_idx").on(
+      table.sourceId,
+      table.webhookId,
+      table.eventId,
+    ),
+  ],
+);
+
 export const entities = pgTable(
   "entities",
   {

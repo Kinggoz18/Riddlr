@@ -21,5 +21,7 @@ export {
   hmacSha256,
   hmacSha256Utf8,
   timingSafeEqualHex,
+  verifyAlchemySignature,
+  verifyExactHeader,
   verifyMetaSignature,
 } from "./envelope.js";

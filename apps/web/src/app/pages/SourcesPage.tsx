@@ -107,6 +107,16 @@ const ADAPTERS = [
     body: "Governance proposals from Snapshot GraphQL. Opt-in. No API key. Pin space ids. Official trust for the space itself. Tally is not shipped.",
   },
   {
+    id: "alchemy",
+    name: "Alchemy",
+    body: "EVM address-activity webhooks. Opt-in. Notify token required. Signing key stored encrypted. Never paste a seed phrase or private key.",
+  },
+  {
+    id: "helius",
+    name: "Helius",
+    body: "Solana transfer webhooks. Opt-in. API key required. Auth header stored encrypted. Never paste a seed phrase or private key.",
+  },
+  {
     id: "discord",
     name: "Discord",
     body: "Recent channel messages. You can add more than one Discord source.",
@@ -166,7 +176,7 @@ function SourcesList() {
     <>
       <PageHeader
         title="Sources"
-        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, and Snapshot are opt-in."
+        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, Snapshot, Alchemy, and Helius are opt-in."
         actions={<SourcesSubnav />}
       />
       {rows.length === 0 ? (
@@ -208,7 +218,105 @@ function SourcesList() {
         </section>
       )}
       <IdentityPolicies />
+      <LabeledAddresses />
     </>
+  );
+}
+
+function LabeledAddresses() {
+  const toast = useToast();
+  const [rows, setRows] = useState<
+    { id: string; chain: string; address: string; role: string; label: string }[]
+  >([]);
+  const [chain, setChain] = useState("ethereum");
+  const [address, setAddress] = useState("");
+  const [role, setRole] = useState("exchange");
+  const [label, setLabel] = useState("");
+  async function refresh() {
+    const body = await api<{
+      addresses: { id: string; chain: string; address: string; role: string; label: string }[];
+    }>("/api/v1/labeled-addresses");
+    setRows(body.addresses);
+  }
+  useEffect(() => {
+    void refresh().catch(() => undefined);
+  }, []);
+  return (
+    <Card>
+      <h2>Labeled addresses</h2>
+      <p className="field-note">
+        Exchange, bridge, and treasury labels used for on-chain reason codes. Shipped Binance 14,
+        Coinbase 10, and Wormhole Token Bridge. Never enter a seed phrase or private key.
+      </p>
+      {rows.length === 0 ? (
+        <p className="field-note">No labels yet.</p>
+      ) : (
+        <ul>
+          {rows.map((row) => (
+            <li key={row.id}>
+              {row.chain} {row.address} {row.role} {row.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="stack-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          try {
+            await api("/api/v1/labeled-addresses", {
+              method: "POST",
+              body: JSON.stringify({
+                chain,
+                address,
+                role,
+                label: label.trim(),
+              }),
+            });
+            setAddress("");
+            setLabel("");
+            toast("Labeled address saved");
+            await refresh();
+          } catch (err: unknown) {
+            toast(toastFail(err, "Couldn’t save labeled address"), "danger");
+          }
+        }}
+      >
+        <Field label="Chain">
+          <select id="labeled-chain" value={chain} onChange={(e) => setChain(e.target.value)}>
+            <option value="ethereum">ethereum</option>
+            <option value="solana">solana</option>
+          </select>
+        </Field>
+        <Field label="Address">
+          <input
+            id="labeled-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Kind">
+          <select id="labeled-kind" value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="exchange">exchange</option>
+            <option value="bridge">bridge</option>
+            <option value="treasury">treasury</option>
+            <option value="other">other</option>
+          </select>
+        </Field>
+        <Field label="Label">
+          <input
+            id="labeled-label"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            required
+          />
+        </Field>
+        <p className="ui-actions">
+          <Button type="submit">Save labeled address</Button>
+        </p>
+      </form>
+    </Card>
   );
 }
 
@@ -376,7 +484,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, and Snapshot are single opt-in sources."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, Snapshot, Alchemy, and Helius are single opt-in sources."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -948,6 +1056,143 @@ function SnapshotForm() {
   );
 }
 
+function AlchemyForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Alchemy");
+  const [notifyToken, setNotifyToken] = useState("");
+  const [network, setNetwork] = useState("ETH_MAINNET");
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "alchemy");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Alchemy source"
+        description="Opt-in EVM address-activity webhooks. Paste the Notify auth token. Never paste a seed phrase or private key. Caddy must proxy /hooks/* to the API."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/alchemy", {
+                method: "POST",
+                body: JSON.stringify({ name, notifyToken, network }),
+              });
+              toast("Alchemy saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Alchemy"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="alchemy-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Notify token" hint="X-Alchemy-Token. Stored encrypted. Never shown again.">
+            <input
+              id="alchemy-notify-token"
+              type="password"
+              autoComplete="off"
+              value={notifyToken}
+              onChange={(e) => setNotifyToken(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Network">
+            <input
+              id="alchemy-network"
+              value={network}
+              onChange={(e) => setNetwork(e.target.value)}
+              required
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Alchemy source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function HeliusForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Helius");
+  const [apiKey, setApiKey] = useState("");
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "helius");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Helius source"
+        description="Opt-in Solana transfer webhooks. Paste the Helius API key. Never paste a seed phrase or private key."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/helius", {
+                method: "POST",
+                body: JSON.stringify({ name, apiKey }),
+              });
+              toast("Helius saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Helius"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="helius-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="API key" hint="Stored encrypted. Never shown again.">
+            <input
+              id="helius-api-key"
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Helius source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
 function DiscordForm() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -1350,6 +1595,12 @@ function SourceCreate() {
   if (adapter === "snapshot") {
     return <SnapshotForm />;
   }
+  if (adapter === "alchemy") {
+    return <AlchemyForm />;
+  }
+  if (adapter === "helius") {
+    return <HeliusForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -1589,6 +1840,25 @@ function SourceDetail() {
             values={Array.isArray(config.spaces) ? config.spaces.map(String) : []}
             empty="Watchlist mapping only"
           />
+        </Card>
+      ) : null}
+      {row.adapterId === "alchemy" ? (
+        <Card>
+          <h2>Alchemy</h2>
+          <p className="field-note">
+            ADDRESS_ACTIVITY inbound webhooks. Notify token encrypted. Signing key encrypted.
+            Webhook URL is {window.location.origin}/hooks/alchemy/{row.id}. Caddy must proxy
+            /hooks/* to the API. Balances are not shipped.
+          </p>
+        </Card>
+      ) : null}
+      {row.adapterId === "helius" ? (
+        <Card>
+          <h2>Helius</h2>
+          <p className="field-note">
+            Enhanced TRANSFER inbound webhooks. API key encrypted. Auth header encrypted. Webhook
+            URL is {window.location.origin}/hooks/helius/{row.id}. Balances are not shipped.
+          </p>
         </Card>
       ) : null}
       {["coingecko", "coinmarketcap", "cryptocom"].includes(row.adapterId) ? (

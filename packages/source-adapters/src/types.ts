@@ -20,7 +20,7 @@ export type SourceErrorClass =
   | "extraction_failed";
 
 export type SourceCapability = {
-  modes: Array<"search" | "poll" | "stream">;
+  modes: Array<"search" | "poll" | "stream" | "webhook">;
   supportsTimeRange: boolean;
   supportsPagination: boolean;
   supportsDomainFilter: boolean;

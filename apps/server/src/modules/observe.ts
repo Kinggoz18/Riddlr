@@ -368,7 +368,7 @@ async function fundingDivergenceSeries(ctx: AppContext, subjectCanonicalId: stri
   };
 }
 
-async function selectObserveAgent(ctx: AppContext, subjectCanonicalId: string) {
+export async function selectObserveAgent(ctx: AppContext, subjectCanonicalId: string) {
   const [fromWatchlist] = await ctx.db
     .select({ agent: agents })
     .from(agents)

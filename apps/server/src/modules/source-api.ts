@@ -1,4 +1,5 @@
 import {
+  alchemySourceSchema,
   binanceFuturesSourceSchema,
   coingeckoSourceSchema,
   coinmarketcapSourceSchema,
@@ -6,8 +7,10 @@ import {
   defillamaSourceSchema,
   discordSourceSchema,
   feedSourceSchema,
+  heliusSourceSchema,
   hyperliquidSourceSchema,
   kalshiSourceSchema,
+  labeledAddressSchema,
   pageQuerySchema,
   polymarketSourceSchema,
   publisherHostPolicySchema,
@@ -16,21 +19,30 @@ import {
   sourcePatchSchema,
   xSourceSchema,
 } from "@riddlr/api-contract";
-import { encryptSecret } from "@riddlr/crypto";
+import { encryptSecret, randomToken } from "@riddlr/crypto";
 import {
   auditLogs,
   encryptedSecrets,
   evidenceItems,
   instanceSettings,
+  labeledAddresses,
   publisherHostPolicies,
   scanSourceRuns,
   sourceIdentities,
   sourceIdentityPolicies,
   sources,
 } from "@riddlr/db";
-import { clampPageSize, parsePageCursor, type TrustTier } from "@riddlr/domain";
+import {
+  assertPublicWalletAddress,
+  clampPageSize,
+  MAX_LABELED_ADDRESSES,
+  parsePageCursor,
+  type TrustTier,
+} from "@riddlr/domain";
 import {
   clampFeedPollIntervalSeconds,
+  createAlchemyAdapter,
+  createAlchemyAddressWebhook,
   createBinanceFuturesAdapter,
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
@@ -38,6 +50,8 @@ import {
   createDefiLlamaAdapter,
   createDiscordAdapter,
   createFeedsAdapter,
+  createHeliusAdapter,
+  createHeliusTransferWebhook,
   createHyperliquidAdapter,
   createKalshiAdapter,
   createPolymarketAdapter,
@@ -53,6 +67,7 @@ import {
 import { and, count, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import { monitoredAddresses, syncAddressActivityWebhooks } from "./inbound-webhooks.js";
 import {
   ensureDefaultPriceTrackerHostPolicies,
   ensureOfficialSnapshotSpace,
@@ -70,6 +85,8 @@ import {
 export function publicSource(row: typeof sources.$inferSelect) {
   const config = { ...(row.config ?? {}) };
   delete config.token;
+  delete config.notifySecretId;
+  delete config.authHeaderSecretId;
   return {
     id: row.id,
     family: row.family,
@@ -102,6 +119,8 @@ export function registerSourceRoutes(
   const polymarket = createPolymarketAdapter();
   const kalshi = createKalshiAdapter();
   const snapshot = createSnapshotAdapter();
+  const alchemy = createAlchemyAdapter();
+  const helius = createHeliusAdapter();
 
   function adapterForHealth(adapterId: string) {
     switch (adapterId) {
@@ -123,6 +142,10 @@ export function registerSourceRoutes(
         return kalshi;
       case "snapshot":
         return snapshot;
+      case "alchemy":
+        return alchemy;
+      case "helius":
+        return helius;
       default:
         return marketAdapter(adapterId) ?? searxng;
     }
@@ -186,6 +209,16 @@ export function registerSourceRoutes(
           capabilities: snapshot.capabilities,
         },
         {
+          id: alchemy.id,
+          family: alchemy.family,
+          capabilities: alchemy.capabilities,
+        },
+        {
+          id: helius.id,
+          family: helius.family,
+          capabilities: helius.capabilities,
+        },
+        {
           id: coingecko.id,
           family: coingecko.family,
           capabilities: coingecko.capabilities,
@@ -199,20 +232,6 @@ export function registerSourceRoutes(
           id: cryptocom.id,
           family: cryptocom.family,
           capabilities: cryptocom.capabilities,
-        },
-        {
-          id: "onchain",
-          family: "onchain",
-          comingSoon: true,
-          capabilities: {
-            modes: [],
-            supportsTimeRange: false,
-            supportsPagination: false,
-            supportsDomainFilter: false,
-            lookbackNotes:
-              "On-chain scanning is not implemented. Wallet addresses on Portfolios are identifiers only. Never paste a seed phrase or private key.",
-            partialResults: false,
-          },
         },
       ],
     };
@@ -494,6 +513,312 @@ export function registerSourceRoutes(
       resource: source?.id,
     });
     return { source: source ? publicSource(source) : undefined };
+  });
+
+  app.post("/api/v1/sources/alchemy", { preHandler: authed }, async (request, reply) => {
+    const body = alchemySourceSchema.parse(request.body);
+    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+      return reply.code(400).send({
+        error: {
+          code: "source_limit",
+          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+        },
+      });
+    }
+    if (existing.some((row) => row.adapterId === "alchemy")) {
+      return reply.code(409).send({
+        error: { code: "source_exists", message: "Alchemy is already configured." },
+      });
+    }
+    const notify = encryptSecret({
+      masterKey: ctx.masterKey,
+      plaintext: body.notifyToken,
+      purpose: "alchemy_notify",
+      keyVersion: 1,
+      aad: "alchemy_notify|1",
+    });
+    const [notifyRow] = await ctx.db
+      .insert(encryptedSecrets)
+      .values({
+        purpose: "alchemy_notify",
+        keyVersion: 1,
+        ciphertext: notify.ciphertext,
+        nonce: notify.nonce,
+        tag: notify.tag,
+        alg: notify.alg,
+      })
+      .returning();
+    const [source] = await ctx.db
+      .insert(sources)
+      .values({
+        family: "onchain",
+        adapterId: "alchemy",
+        enabled: true,
+        name: body.name,
+        config: {
+          network: body.network,
+          notifySecretId: notifyRow?.id,
+          webhookUrl: "",
+        },
+      })
+      .returning();
+    if (!source) {
+      return reply
+        .code(500)
+        .send({ error: { code: "internal", message: "Could not create source." } });
+    }
+    await attachSourceToAgents(ctx, source.id);
+    const webhookUrl = `${ctx.config.RIDDLR_PUBLIC_URL}/hooks/alchemy/${source.id}`;
+    const addresses = await monitoredAddresses(ctx, "ethereum");
+    let lastHealthOk: boolean | undefined;
+    let lastHealthMessage = "Alchemy source saved. Webhook registration pending addresses.";
+    let secretId: string | undefined;
+    if (addresses.length > 0 && ctx.config.RIDDLR_ENV !== "test") {
+      const created = await createAlchemyAddressWebhook({
+        notifyToken: body.notifyToken,
+        webhookUrl,
+        network: body.network,
+        addresses,
+      });
+      if (created.webhookId && created.signingKey) {
+        const signing = encryptSecret({
+          masterKey: ctx.masterKey,
+          plaintext: created.signingKey,
+          purpose: "alchemy_signing",
+          keyVersion: 1,
+          aad: "alchemy_signing|1",
+        });
+        const [signingRow] = await ctx.db
+          .insert(encryptedSecrets)
+          .values({
+            purpose: "alchemy_signing",
+            keyVersion: 1,
+            ciphertext: signing.ciphertext,
+            nonce: signing.nonce,
+            tag: signing.tag,
+            alg: signing.alg,
+          })
+          .returning();
+        secretId = signingRow?.id;
+        lastHealthOk = true;
+        lastHealthMessage = "Alchemy webhook registered.";
+        await ctx.db
+          .update(sources)
+          .set({
+            secretId,
+            lastHealthOk,
+            lastHealthMessage,
+            lastHealthAt: new Date(),
+            config: {
+              network: body.network,
+              notifySecretId: notifyRow?.id,
+              webhookId: created.webhookId,
+              webhookUrl,
+              syncedAddresses: addresses,
+            },
+          })
+          .where(eq(sources.id, source.id));
+      } else {
+        lastHealthOk = false;
+        lastHealthMessage = created.errors[0]?.message ?? "Alchemy create-webhook failed.";
+        await ctx.db
+          .update(sources)
+          .set({
+            lastHealthOk,
+            lastHealthMessage,
+            lastHealthAt: new Date(),
+            config: {
+              network: body.network,
+              notifySecretId: notifyRow?.id,
+              webhookUrl,
+            },
+          })
+          .where(eq(sources.id, source.id));
+      }
+    } else {
+      await ctx.db
+        .update(sources)
+        .set({
+          config: {
+            network: body.network,
+            notifySecretId: notifyRow?.id,
+            webhookUrl,
+          },
+        })
+        .where(eq(sources.id, source.id));
+    }
+    const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: auth?.user.id,
+      action: "source.create",
+      resource: source.id,
+    });
+    const [fresh] = await ctx.db.select().from(sources).where(eq(sources.id, source.id)).limit(1);
+    return { source: fresh ? publicSource(fresh) : publicSource(source) };
+  });
+
+  app.post("/api/v1/sources/helius", { preHandler: authed }, async (request, reply) => {
+    const body = heliusSourceSchema.parse(request.body);
+    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+      return reply.code(400).send({
+        error: {
+          code: "source_limit",
+          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+        },
+      });
+    }
+    if (existing.some((row) => row.adapterId === "helius")) {
+      return reply.code(409).send({
+        error: { code: "source_exists", message: "Helius is already configured." },
+      });
+    }
+    const apiKey = encryptSecret({
+      masterKey: ctx.masterKey,
+      plaintext: body.apiKey,
+      purpose: "helius",
+      keyVersion: 1,
+      aad: "helius|1",
+    });
+    const [apiRow] = await ctx.db
+      .insert(encryptedSecrets)
+      .values({
+        purpose: "helius",
+        keyVersion: 1,
+        ciphertext: apiKey.ciphertext,
+        nonce: apiKey.nonce,
+        tag: apiKey.tag,
+        alg: apiKey.alg,
+      })
+      .returning();
+    const authHeader = randomToken(24);
+    const auth = encryptSecret({
+      masterKey: ctx.masterKey,
+      plaintext: authHeader,
+      purpose: "helius_auth",
+      keyVersion: 1,
+      aad: "helius_auth|1",
+    });
+    const [authRow] = await ctx.db
+      .insert(encryptedSecrets)
+      .values({
+        purpose: "helius_auth",
+        keyVersion: 1,
+        ciphertext: auth.ciphertext,
+        nonce: auth.nonce,
+        tag: auth.tag,
+        alg: auth.alg,
+      })
+      .returning();
+    const [source] = await ctx.db
+      .insert(sources)
+      .values({
+        family: "onchain",
+        adapterId: "helius",
+        enabled: true,
+        name: body.name,
+        secretId: apiRow?.id,
+        config: { authHeaderSecretId: authRow?.id },
+      })
+      .returning();
+    if (!source) {
+      return reply
+        .code(500)
+        .send({ error: { code: "internal", message: "Could not create source." } });
+    }
+    await attachSourceToAgents(ctx, source.id);
+    const webhookUrl = `${ctx.config.RIDDLR_PUBLIC_URL}/hooks/helius/${source.id}`;
+    const addresses = await monitoredAddresses(ctx, "solana");
+    if (addresses.length > 0 && ctx.config.RIDDLR_ENV !== "test") {
+      const created = await createHeliusTransferWebhook({
+        apiKey: body.apiKey,
+        webhookUrl,
+        authHeader,
+        addresses,
+      });
+      await ctx.db
+        .update(sources)
+        .set({
+          lastHealthOk: Boolean(created.webhookId),
+          lastHealthMessage: created.webhookId
+            ? "Helius webhook registered."
+            : (created.errors[0]?.message ?? "Helius create-webhook failed."),
+          lastHealthAt: new Date(),
+          config: {
+            authHeaderSecretId: authRow?.id,
+            webhookUrl,
+            ...(created.webhookId ? { webhookId: created.webhookId } : {}),
+          },
+        })
+        .where(eq(sources.id, source.id));
+    } else {
+      await ctx.db
+        .update(sources)
+        .set({
+          config: { authHeaderSecretId: authRow?.id, webhookUrl },
+        })
+        .where(eq(sources.id, source.id));
+    }
+    const actor = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+    await ctx.db.insert(auditLogs).values({
+      actorUserId: actor?.user.id,
+      action: "source.create",
+      resource: source.id,
+    });
+    const [fresh] = await ctx.db.select().from(sources).where(eq(sources.id, source.id)).limit(1);
+    return { source: fresh ? publicSource(fresh) : publicSource(source) };
+  });
+
+  app.get("/api/v1/labeled-addresses", { preHandler: authed }, async () => {
+    const rows = await ctx.db.select().from(labeledAddresses).limit(MAX_LABELED_ADDRESSES);
+    return { addresses: rows };
+  });
+
+  app.post("/api/v1/labeled-addresses", { preHandler: authed }, async (request, reply) => {
+    const body = labeledAddressSchema.parse(request.body);
+    let address: string;
+    try {
+      address = assertPublicWalletAddress(body.chain, body.address);
+    } catch (error) {
+      return reply.code(400).send({
+        error: {
+          code: "invalid_address",
+          message: error instanceof Error ? error.message : "Invalid address",
+        },
+      });
+    }
+    const [{ value: existing } = { value: 0 }] = await ctx.db
+      .select({ value: count() })
+      .from(labeledAddresses);
+    if (Number(existing) >= MAX_LABELED_ADDRESSES) {
+      return reply.code(400).send({
+        error: {
+          code: "labeled_address_limit",
+          message: `At most ${MAX_LABELED_ADDRESSES} labeled addresses.`,
+        },
+      });
+    }
+    const [row] = await ctx.db
+      .insert(labeledAddresses)
+      .values({
+        chain: body.chain,
+        address,
+        label: body.label,
+        role: body.role,
+        shipped: false,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!row) {
+      return reply.code(409).send({
+        error: { code: "address_exists", message: "That labeled address already exists." },
+      });
+    }
+    if (ctx.config.RIDDLR_ENV !== "test") {
+      await syncAddressActivityWebhooks(ctx);
+    }
+    return { address: row };
   });
 
   app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {

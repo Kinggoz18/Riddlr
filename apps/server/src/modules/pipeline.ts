@@ -98,6 +98,7 @@ import {
   createOpenAiCompatibleProvider,
 } from "@riddlr/llm";
 import {
+  createAlchemyAdapter,
   createBinanceFuturesAdapter,
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
@@ -105,6 +106,7 @@ import {
   createDefiLlamaAdapter,
   createDiscordAdapter,
   createFeedsAdapter,
+  createHeliusAdapter,
   createHyperliquidAdapter,
   createKalshiAdapter,
   createPolymarketAdapter,
@@ -387,6 +389,8 @@ export async function runScan(
     adapters.register(createPolymarketAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createKalshiAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createSnapshotAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createAlchemyAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createHeliusAdapter());
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));

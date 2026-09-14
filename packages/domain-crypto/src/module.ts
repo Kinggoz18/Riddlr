@@ -9,6 +9,7 @@ import {
   classifyPageHeuristic,
   DEFAULT_AGENT_DESCRIPTION,
   DEFAULT_AGENT_NAME,
+  DEFAULT_EXPLOIT_TRANSFER_USD,
   type DetectorSpec,
   type DomainModule,
   type ExtractedAsset,
@@ -403,7 +404,9 @@ export const cryptoDomainModule: DomainModule = {
       input.adapterId === "binance-futures" ||
       input.adapterId === "polymarket" ||
       input.adapterId === "kalshi" ||
-      input.adapterId === "snapshot"
+      input.adapterId === "snapshot" ||
+      input.adapterId === "alchemy" ||
+      input.adapterId === "helius"
     ) {
       return [""];
     }
@@ -701,6 +704,33 @@ export const cryptoDomainModule: DomainModule = {
         level: material ? "high" : "moderate",
         reason: material ? "governance_material" : "governance_proposal",
         reasonCodes: ["crypto:governance_proposal"],
+      };
+    }
+    if (kinds.has("crypto:large_transfer") || principal === "large_transfer") {
+      const hay = input.claims.map((item) => `${item.title} ${item.objectText ?? ""}`).join(" ");
+      const outflow = /\b(bridge_outflow|treasury_outflow)\b/.test(hay);
+      const inflow = /\bexchange_inflow\b/.test(hay);
+      const exploit = input.claims.some(
+        (item) => typeof item.value === "number" && item.value >= DEFAULT_EXPLOIT_TRANSFER_USD,
+      );
+      if (outflow || exploit) {
+        return {
+          level: "high",
+          reason: outflow ? "bridge_or_treasury_outflow" : "exploit_transfer",
+          reasonCodes: ["crypto:large_transfer"],
+        };
+      }
+      if (inflow) {
+        return {
+          level: "low",
+          reason: "exchange_inflow",
+          reasonCodes: ["crypto:large_transfer"],
+        };
+      }
+      return {
+        level: "moderate",
+        reason: "large_transfer",
+        reasonCodes: ["crypto:large_transfer"],
       };
     }
     if (

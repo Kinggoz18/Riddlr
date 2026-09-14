@@ -1,0 +1,10 @@
+{
+  "webhookId": "wh_k63lg72rxda78gce",
+  "id": "whevt_empty",
+  "createdAt": "2024-01-23T07:42:26.411977228Z",
+  "type": "ADDRESS_ACTIVITY",
+  "event": {
+    "network": "ETH_MAINNET",
+    "activity": []
+  }
+}

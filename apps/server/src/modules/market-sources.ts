@@ -87,13 +87,17 @@ export async function sourceRuntimeConfig(
   row: typeof sources.$inferSelect,
 ): Promise<Record<string, unknown>> {
   const runtime: Record<string, unknown> = { ...row.config };
-  if (!row.secretId) {
+  const secretId =
+    row.adapterId === "alchemy" && typeof row.config.notifySecretId === "string"
+      ? row.config.notifySecretId
+      : row.secretId;
+  if (!secretId) {
     return runtime;
   }
   const [secret] = await ctx.db
     .select()
     .from(encryptedSecrets)
-    .where(eq(encryptedSecrets.id, row.secretId))
+    .where(eq(encryptedSecrets.id, secretId))
     .limit(1);
   if (!secret) {
     return runtime;

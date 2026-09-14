@@ -11,6 +11,8 @@ import {
   generateTotpSecret,
   hashPassword,
   hashRecoveryCode,
+  verifyAlchemySignature,
+  verifyExactHeader,
   verifyMetaSignature,
   verifyPassword,
   verifyTotp,
@@ -41,6 +43,17 @@ describe("envelope encryption", () => {
     expect(verifyMetaSignature({ appSecret, rawBody, header })).toBe(true);
     expect(verifyMetaSignature({ appSecret, rawBody, header: "sha256=00" })).toBe(false);
     expect(verifyMetaSignature({ appSecret, rawBody })).toBe(false);
+  });
+
+  it("verifies Alchemy X-Alchemy-Signature with a timing-safe compare", () => {
+    const rawBody = Buffer.from('{"type":"ADDRESS_ACTIVITY"}');
+    const signingKey = "alchemy-signing-key";
+    const header = createHmac("sha256", signingKey).update(rawBody).digest("hex");
+    expect(verifyAlchemySignature({ signingKey, rawBody, header })).toBe(true);
+    expect(verifyAlchemySignature({ signingKey, rawBody, header: "00" })).toBe(false);
+    expect(verifyAlchemySignature({ signingKey, rawBody })).toBe(false);
+    expect(verifyExactHeader({ expected: "riddlr-helius", header: "riddlr-helius" })).toBe(true);
+    expect(verifyExactHeader({ expected: "riddlr-helius", header: "nope" })).toBe(false);
   });
 
   it("decrypts with a previous master key then re-encrypts under the current key", () => {

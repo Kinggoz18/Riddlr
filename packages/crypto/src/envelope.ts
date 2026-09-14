@@ -131,3 +131,33 @@ export function verifyMetaSignature(input: {
   const expected = hmacSha256Utf8(input.appSecret, input.rawBody).toLowerCase();
   return timingSafeEqualHex(presented, expected);
 }
+
+export function verifyAlchemySignature(input: {
+  signingKey: string;
+  rawBody: string | Buffer;
+  header?: string | string[];
+}): boolean {
+  const header = Array.isArray(input.header) ? input.header[0] : input.header;
+  if (!header?.trim()) {
+    return false;
+  }
+  const presented = header.trim().toLowerCase();
+  const expected = hmacSha256Utf8(input.signingKey, input.rawBody).toLowerCase();
+  return timingSafeEqualHex(presented, expected);
+}
+
+export function verifyExactHeader(input: {
+  expected: string;
+  header?: string | string[];
+}): boolean {
+  const header = Array.isArray(input.header) ? input.header[0] : input.header;
+  if (!header) {
+    return false;
+  }
+  const presented = Buffer.from(header);
+  const expected = Buffer.from(input.expected);
+  if (presented.length === 0 || presented.length !== expected.length) {
+    return false;
+  }
+  return timingSafeEqual(presented, expected);
+}

@@ -1,4 +1,23 @@
 export {
+  addressActivityEvidence,
+  boundActivityItems,
+  classifyTransfer,
+  shouldPersistTransfer,
+  subjectCanonicalIdForTransfer,
+  usdNotionalForTransfer,
+} from "./address-activity.js";
+export {
+  ALCHEMY_ADAPTER_ID,
+  ALCHEMY_FAMILY,
+  ALCHEMY_NOTIFY_BASE,
+  createAlchemyAdapter,
+  createAlchemyAddressWebhook,
+  parseAlchemyAddressActivity,
+  parseAlchemyCreateWebhook,
+  parseAlchemyTeamWebhooks,
+  updateAlchemyWebhookAddresses,
+} from "./alchemy-activity.js";
+export {
   COINGECKO_API_BASE,
   type CoinGeckoRegistryJoin,
   type CoinGeckoRegistryListItem,
@@ -41,6 +60,16 @@ export {
   SUGGESTED_FEEDS,
   type SuggestedFeed,
 } from "./feeds.js";
+export {
+  createHeliusAdapter,
+  createHeliusTransferWebhook,
+  HELIUS_ADAPTER_ID,
+  HELIUS_API_BASE,
+  HELIUS_FAMILY,
+  parseHeliusCreateWebhook,
+  parseHeliusEnhancedPayload,
+  updateHeliusWebhookAddresses,
+} from "./helius-activity.js";
 export {
   BINANCE_FORCE_ORDER_WS_URL,
   BINANCE_FUTURES_API_BASE,

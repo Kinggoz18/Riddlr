@@ -80,6 +80,8 @@ describe("agent labels", () => {
     expect(adapterLabel("polymarket")).toBe("Polymarket");
     expect(adapterLabel("kalshi")).toBe("Kalshi");
     expect(adapterLabel("snapshot")).toBe("Snapshot");
+    expect(adapterLabel("alchemy")).toBe("Alchemy");
+    expect(adapterLabel("helius")).toBe("Helius");
   });
 });
 

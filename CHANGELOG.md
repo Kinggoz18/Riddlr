@@ -4,6 +4,13 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Alchemy and Helius opt-in address-activity webhooks: inbound HMAC (Alchemy)
+  and exact Authorization (Helius), labeled addresses, $1M large-transfer
+  evidence. Balance snapshots are not shipped. Caddy proxies `/hooks/*` to the
+  API. Sources → Add source → Configure Alchemy / Configure Helius. See
+  [docs/integrations/alchemy.md](docs/integrations/alchemy.md) and
+  [docs/integrations/helius.md](docs/integrations/helius.md).
+
 - Snapshot opt-in governance evidence: GraphQL proposals from hub.snapshot.org,
   native-complete rows, official-firsthand space identities. Tally is not
   shipped. Sources → Add source → Configure Snapshot. See

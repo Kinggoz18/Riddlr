@@ -11,6 +11,7 @@ import { Worker } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { createContext } from "../context.js";
 import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
+import { processInboundReceipt } from "../modules/inbound-webhooks.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
 import { enqueueObserveIfDue, pollObservationProvider } from "../modules/observe.js";
@@ -138,7 +139,17 @@ const clusterWorker = new Worker(
 const observeWorker = new Worker(
   QUEUE_NAMES.observePoll,
   async (job) => {
-    const providerId = String((job.data as { providerId?: string }).providerId ?? "");
+    const data = job.data as {
+      kind?: string;
+      receiptId?: string;
+      offset?: number;
+      providerId?: string;
+    };
+    if (data.kind === "inbound" && data.receiptId) {
+      await processInboundReceipt(ctx, data.receiptId, data.offset ?? 0);
+      return;
+    }
+    const providerId = String(data.providerId ?? "");
     if (!providerId) {
       return;
     }

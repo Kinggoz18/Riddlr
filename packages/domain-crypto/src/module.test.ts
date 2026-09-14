@@ -381,6 +381,8 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "polymarket", watchlist: [] })).toBe("");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "kalshi", watchlist: [] })).toBe("");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "snapshot", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "alchemy", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "helius", watchlist: [] })).toBe("");
   });
 
   it("maps Snapshot spaces from the watchlist and registry external ids", () => {
@@ -470,6 +472,73 @@ describe("crypto domain module", () => {
     expect(
       cryptoDomainModule.assessImpact({
         claims: [{ ...claim, title: "Treasury emission upgrade and fee-switch" }],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("high");
+  });
+
+  it("keeps exchange inflows low and unlabeled large transfers moderate", () => {
+    const base = {
+      marketDomainId: "crypto" as const,
+      kind: "crypto:large_transfer",
+      predicate: "large_transfer",
+      polarity: "asserted" as const,
+      modality: "asserted" as const,
+      fingerprint: "xfer",
+      title: "USDC transfer",
+      objectText: "0xabc → 0xdef",
+      value: 1_000_000,
+      unit: "usd",
+    };
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [{ ...base, objectText: "Binance 14 → labeled exchange_inflow" }],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("low");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [base],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("moderate");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [{ ...base, objectText: "treasury → unknown treasury_outflow", value: 2_000_000 }],
+        assets: [],
+        observations: [],
+        watchlistOverlap: true,
+        portfolioOverlap: false,
+        hasTrustedFirsthand: true,
+        stale: false,
+        contradicted: false,
+        retracted: false,
+      }).level,
+    ).toBe("high");
+    expect(
+      cryptoDomainModule.assessImpact({
+        claims: [{ ...base, objectText: "unknown → unknown", value: 10_000_000 }],
         assets: [],
         observations: [],
         watchlistOverlap: true,

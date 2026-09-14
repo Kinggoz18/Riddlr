@@ -9,7 +9,8 @@ table, and a one-minute `/simple/price` observation poll into `observation_serie
 Setup creates a CoinGecko source on the default agent. An optional demo API key
 is stored in `encrypted_secrets` and sent as `x-cg-demo-api-key`. Enabling
 CoinMarketCap or Crypto.com Exchange pauses the quote adapter. Only one
-market-data source is active at a time. On-chain scanning is not implemented.
+market-data source is active at a time. Address-activity webhooks are opt-in
+Alchemy and Helius sources. Balance snapshots are not shipped.
 
 ## Registry seed
 

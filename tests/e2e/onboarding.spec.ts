@@ -158,7 +158,17 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Configure Snapshot" }).click();
   await expect(page.getByRole("heading", { name: "Add Snapshot source" })).toBeVisible();
   await expect(page.getByText(/No API key/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure Alchemy" }).click();
+  await expect(page.getByRole("heading", { name: "Add Alchemy source" })).toBeVisible();
+  await expect(page.getByText(/Never paste a seed phrase or private key/i)).toBeVisible();
+  await expect(page.getByText(/\/hooks\/\*/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure Helius" }).click();
+  await expect(page.getByRole("heading", { name: "Add Helius source" })).toBeVisible();
+  await expect(page.getByText(/Never paste a seed phrase or private key/i)).toBeVisible();
   await page.getByRole("link", { name: "View sources" }).click();
+  await expect(page.getByRole("heading", { name: "Labeled addresses" })).toBeVisible();
   await expect(page.getByText("coingecko.com")).toBeVisible();
   await page.getByRole("link", { name: "SearXNG", exact: true }).click();
   await expect(page.getByRole("heading", { name: "News queries" })).toBeVisible();

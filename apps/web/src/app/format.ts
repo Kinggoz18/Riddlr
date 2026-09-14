@@ -377,6 +377,10 @@ export function adapterLabel(adapterId: string) {
       return "Kalshi";
     case "snapshot":
       return "Snapshot";
+    case "alchemy":
+      return "Alchemy";
+    case "helius":
+      return "Helius";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

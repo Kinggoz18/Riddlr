@@ -18,6 +18,7 @@ import {
   agents,
   aiUsageEvents,
   assets,
+  auditLogs,
   claimEvidence,
   claims,
   createDb,
@@ -26,6 +27,7 @@ import {
   eventEvidence,
   events,
   evidenceItems,
+  inboundWebhookReceipts,
   migrate,
   notificationDeliveries,
   observationSeries,
@@ -72,6 +74,7 @@ import {
   listRegistryAssets,
   seedAssetRegistry,
 } from "../src/modules/asset-registry.js";
+import { processInboundReceipt } from "../src/modules/inbound-webhooks.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
 import { runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
@@ -1668,8 +1671,16 @@ describe("setup, auth, and domain persistence", () => {
         .lookbackNotes,
     ).toMatch(/search\/all/);
     expect(
-      listed.json().adapters.find((item: { id: string }) => item.id === "onchain").comingSoon,
-    ).toBe(true);
+      listed.json().adapters.find((item: { id: string }) => item.id === "onchain"),
+    ).toBeUndefined();
+    expect(
+      listed.json().adapters.find((item: { id: string }) => item.id === "alchemy").capabilities
+        .lookbackNotes,
+    ).toMatch(/ADDRESS_ACTIVITY/);
+    expect(
+      listed.json().adapters.find((item: { id: string }) => item.id === "helius").capabilities
+        .lookbackNotes,
+    ).toMatch(/TRANSFER/);
     const secrets = await ctx.db.select().from(encryptedSecrets);
     expect(secrets.some((row) => row.purpose === "x" && !row.ciphertext.includes(token))).toBe(
       true,
@@ -2884,6 +2895,298 @@ describe("setup, auth, and domain persistence", () => {
           row.sourceFamily === "governance" &&
           row.contentCompleteness === "native_complete" &&
           row.canonicalUrl?.includes("grovefinance.eth/proposal/"),
+      ),
+    ).toBe(true);
+  });
+
+  it("creates Alchemy and Helius sources and verifies inbound webhooks", async () => {
+    const createdAlchemy = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/alchemy",
+      headers: { cookie },
+      payload: { name: "Alchemy", notifyToken: "notify-token-fixture", network: "ETH_MAINNET" },
+    });
+    expect(createdAlchemy.statusCode).toBe(200);
+    expect(createdAlchemy.json().source?.adapterId).toBe("alchemy");
+    expect(createdAlchemy.json().source?.config?.notifySecretId).toBeUndefined();
+    expect(createdAlchemy.json().source?.config?.webhookUrl).toMatch(/\/hooks\/alchemy\//);
+    const duplicateAlchemy = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/alchemy",
+      headers: { cookie },
+      payload: { name: "Alchemy again", notifyToken: "notify-token-fixture" },
+    });
+    expect(duplicateAlchemy.statusCode).toBe(409);
+    const createdHelius = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/helius",
+      headers: { cookie },
+      payload: { name: "Helius", apiKey: "helius-api-key-fixture" },
+    });
+    expect(createdHelius.statusCode).toBe(200);
+    expect(createdHelius.json().source?.adapterId).toBe("helius");
+    expect(createdHelius.json().source?.config?.authHeaderSecretId).toBeUndefined();
+    const duplicateHelius = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/helius",
+      headers: { cookie },
+      payload: { name: "Helius again", apiKey: "helius-api-key-fixture" },
+    });
+    expect(duplicateHelius.statusCode).toBe(409);
+    const labels = await app.inject({
+      method: "GET",
+      url: "/api/v1/labeled-addresses",
+      headers: { cookie },
+    });
+    expect(labels.statusCode).toBe(200);
+    expect(
+      labels
+        .json()
+        .addresses.some(
+          (row: { label: string; role: string }) =>
+            row.label === "Binance 14" && row.role === "exchange",
+        ),
+    ).toBe(true);
+    const duplicateLabel = await app.inject({
+      method: "POST",
+      url: "/api/v1/labeled-addresses",
+      headers: { cookie },
+      payload: {
+        chain: "ethereum",
+        address: "0x28c6c06298d514db089934071355e5743bf21d60",
+        label: "Binance 14",
+        role: "exchange",
+      },
+    });
+    expect(duplicateLabel.statusCode).toBe(409);
+    const addedLabel = await app.inject({
+      method: "POST",
+      url: "/api/v1/labeled-addresses",
+      headers: { cookie },
+      payload: {
+        chain: "ethereum",
+        address: "0x1111111111111111111111111111111111111111",
+        label: "Test desk",
+        role: "other",
+      },
+    });
+    expect(addedLabel.statusCode).toBe(200);
+    const [alchemySource] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "alchemy"))
+      .limit(1);
+    expect(alchemySource?.id).toBeDefined();
+    const signingPlain = "alchemy-signing-key-fixture";
+    const signing = encryptSecret({
+      masterKey: ctx.masterKey,
+      plaintext: signingPlain,
+      purpose: "alchemy_signing",
+      keyVersion: 1,
+      aad: "alchemy_signing|1",
+    });
+    const [signingRow] = await ctx.db
+      .insert(encryptedSecrets)
+      .values({
+        purpose: "alchemy_signing",
+        keyVersion: 1,
+        ciphertext: signing.ciphertext,
+        nonce: signing.nonce,
+        tag: signing.tag,
+        alg: signing.alg,
+      })
+      .returning();
+    await ctx.db
+      .update(sources)
+      .set({ secretId: signingRow?.id })
+      .where(eq(sources.id, alchemySource?.id as string));
+    const documented = JSON.parse(
+      readFileSync(
+        join(process.cwd(), "packages/source-adapters/test/fixtures/alchemy/address-activity.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    const staleRaw = JSON.stringify(documented);
+    const stale = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": hmacSha256Utf8(signingPlain, staleRaw),
+      },
+      payload: staleRaw,
+    });
+    expect(stale.statusCode).toBe(200);
+    expect(stale.json().ignored).toBe("stale");
+    const freshDocumented = {
+      ...documented,
+      id: "whevt_documented_fresh",
+      createdAt: new Date().toISOString(),
+    };
+    const freshRaw = JSON.stringify(freshDocumented);
+    const fresh = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": hmacSha256Utf8(signingPlain, freshRaw),
+      },
+      payload: freshRaw,
+    });
+    expect(fresh.statusCode).toBe(200);
+    const replay = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": hmacSha256Utf8(signingPlain, freshRaw),
+      },
+      payload: freshRaw,
+    });
+    expect(replay.statusCode).toBe(200);
+    const receipts = await ctx.db.select().from(inboundWebhookReceipts);
+    expect(receipts.filter((row) => row.eventId === "whevt_documented_fresh")).toHaveLength(1);
+    const documentedReceipt = receipts.find((row) => row.eventId === "whevt_documented_fresh");
+    await processInboundReceipt(ctx, documentedReceipt?.id as string);
+    const claimsAfterDocumented = await ctx.db.select().from(claims);
+    expect(claimsAfterDocumented.some((row) => row.kind === "crypto:large_transfer")).toBe(false);
+    const activity = (documented.event as { activity: Record<string, unknown>[] }).activity[0];
+    const largeBody = {
+      webhookId: documented.webhookId,
+      id: "whevt_usdc_1m",
+      createdAt: new Date().toISOString(),
+      type: "ADDRESS_ACTIVITY",
+      event: {
+        network: "ETH_MAINNET",
+        activity: [
+          {
+            ...activity,
+            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            toAddress: "0x28c6c06298d514db089934071355e5743bf21d60",
+            value: 1_000_000,
+          },
+        ],
+      },
+    };
+    const largeRaw = JSON.stringify(largeBody);
+    const large = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": hmacSha256Utf8(signingPlain, largeRaw),
+      },
+      payload: largeRaw,
+    });
+    expect(large.statusCode).toBe(200);
+    const largeReceipt = (
+      await ctx.db
+        .select()
+        .from(inboundWebhookReceipts)
+        .where(eq(inboundWebhookReceipts.eventId, "whevt_usdc_1m"))
+    )[0];
+    await processInboundReceipt(ctx, largeReceipt?.id as string);
+    const persistedClaims = await ctx.db.select().from(claims);
+    expect(
+      persistedClaims.some(
+        (row) =>
+          row.kind === "crypto:large_transfer" &&
+          row.value === 1_000_000 &&
+          row.unit === "usd" &&
+          (row.objectText ?? "").includes("exchange_inflow"),
+      ),
+    ).toBe(true);
+    const evidence = await ctx.db.select().from(evidenceItems);
+    expect(
+      evidence.some(
+        (row) =>
+          row.adapterId === "alchemy" &&
+          row.sourceFamily === "onchain" &&
+          row.contentCompleteness === "native_complete",
+      ),
+    ).toBe(true);
+    const badSig = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": "00",
+      },
+      payload: largeRaw,
+    });
+    expect(badSig.statusCode).toBe(401);
+    const audits = await ctx.db.select().from(auditLogs);
+    expect(audits.some((row) => row.action === "webhook.signature_mismatch")).toBe(true);
+    const oversized = await app.inject({
+      method: "POST",
+      url: `/hooks/alchemy/${alchemySource?.id}`,
+      headers: { "content-type": "application/json" },
+      payload: `{"x":"${"a".repeat(1_000_001)}"}`,
+    });
+    expect(oversized.statusCode).toBe(413);
+    const [heliusSource] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "helius"))
+      .limit(1);
+    const authHeaderId =
+      typeof heliusSource?.config.authHeaderSecretId === "string"
+        ? heliusSource.config.authHeaderSecretId
+        : undefined;
+    const [authSecret] = await ctx.db
+      .select()
+      .from(encryptedSecrets)
+      .where(eq(encryptedSecrets.id, authHeaderId as string))
+      .limit(1);
+    const authHeader = decryptSecretWithKeys({
+      keys: ctx.masterKeys,
+      secret: {
+        ciphertext: authSecret?.ciphertext as string,
+        nonce: authSecret?.nonce as string,
+        tag: authSecret?.tag as string,
+        alg: "aes-256-gcm",
+        keyVersion: authSecret?.keyVersion as number,
+      },
+      purpose: authSecret?.purpose as string,
+      aad: `${authSecret?.purpose}|${authSecret?.keyVersion}`,
+    });
+    const emptyHelius = await app.inject({
+      method: "POST",
+      url: `/hooks/helius/${heliusSource?.id}`,
+      headers: { "content-type": "application/json", authorization: authHeader },
+      payload: "[]",
+    });
+    expect(emptyHelius.statusCode).toBe(200);
+    expect(
+      (await ctx.db.select().from(inboundWebhookReceipts)).filter(
+        (row) => row.adapterId === "helius",
+      ),
+    ).toHaveLength(0);
+    const badHelius = await app.inject({
+      method: "POST",
+      url: `/hooks/helius/${heliusSource?.id}`,
+      headers: { "content-type": "application/json", authorization: "nope-nope-nope-nope" },
+      payload: "[]",
+    });
+    expect(badHelius.statusCode).toBe(401);
+    const heliusFixture = JSON.parse(
+      readFileSync(
+        join(process.cwd(), "packages/source-adapters/test/fixtures/helius/enhanced-transfer.json"),
+        "utf8",
+      ),
+    ) as Array<Record<string, unknown>>;
+    const heliusFresh = [{ ...heliusFixture[0], timestamp: Math.floor(Date.now() / 1000) }];
+    const heliusRaw = JSON.stringify(heliusFresh);
+    const heliusOk = await app.inject({
+      method: "POST",
+      url: `/hooks/helius/${heliusSource?.id}`,
+      headers: { "content-type": "application/json", authorization: authHeader },
+      payload: heliusRaw,
+    });
+    expect(heliusOk.statusCode).toBe(200);
+    expect(
+      (await ctx.db.select().from(inboundWebhookReceipts)).some(
+        (row) => row.adapterId === "helius",
       ),
     ).toBe(true);
   });

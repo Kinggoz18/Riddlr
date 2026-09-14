@@ -37,6 +37,7 @@ import { and, count, desc, eq, inArray, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import { findRegistryAsset } from "./asset-registry.js";
+import { syncAddressActivityWebhooks } from "./inbound-webhooks.js";
 import { loadEnabledMarketQuotes } from "./market-sources.js";
 
 export function registerPortfolioRoutes(
@@ -77,7 +78,7 @@ export function registerPortfolioRoutes(
       onchain: {
         implemented: false,
         message:
-          "On-chain scanning is not implemented. Holdings are operator-declared. Addresses are public identifiers only.",
+          "Balance snapshots are not shipped. Opt-in Alchemy and Helius address-activity webhooks persist large transfers. Holdings are operator-declared. Addresses are public identifiers only.",
       },
     };
   });
@@ -143,6 +144,9 @@ export function registerPortfolioRoutes(
       .values({ portfolioId: id, chain: body.chain, address })
       .onConflictDoNothing()
       .returning();
+    if (ctx.config.RIDDLR_ENV !== "test") {
+      await syncAddressActivityWebhooks(ctx);
+    }
     return { wallet };
   });
 
@@ -325,6 +329,9 @@ export function registerPortfolioRoutes(
         return reply.code(404).send({ error: { code: "not_found", message: "Wallet not found" } });
       }
       await ctx.db.delete(portfolioWallets).where(eq(portfolioWallets.id, walletId));
+      if (ctx.config.RIDDLR_ENV !== "test") {
+        await syncAddressActivityWebhooks(ctx);
+      }
       return { ok: true };
     },
   );

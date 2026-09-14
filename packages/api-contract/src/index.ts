@@ -273,6 +273,28 @@ export const snapshotSourceSchema = z.object({
     .optional(),
 });
 
+export const alchemySourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Alchemy"),
+  notifyToken: z.string().min(8).max(200),
+  apiKey: z.string().min(8).max(200).optional(),
+  network: z
+    .string()
+    .regex(/^[A-Z0-9_]{3,32}$/)
+    .default("ETH_MAINNET"),
+});
+
+export const heliusSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Helius"),
+  apiKey: z.string().min(8).max(200),
+});
+
+export const labeledAddressSchema = z.object({
+  chain: z.enum(["ethereum", "solana"]),
+  address: z.string().min(8).max(90),
+  label: z.string().min(1).max(80),
+  role: z.enum(["exchange", "bridge", "treasury", "other"]),
+});
+
 export const discordSourceSchema = z.object({
   name: z.string().min(3).max(80).default("Discord"),
   botToken: z.string().min(8).max(200),
