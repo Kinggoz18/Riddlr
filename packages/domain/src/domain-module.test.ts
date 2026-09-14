@@ -21,6 +21,9 @@ function createSyntheticModule(): DomainModule {
     sourceQuery(input) {
       return input.watchlist.map((item) => item.canonicalId).join(" ") || "listed company news";
     },
+    sourceQueries(input) {
+      return [input.watchlist.map((item) => item.canonicalId).join(" ") || "listed company news"];
+    },
     canonicalizeAsset(input) {
       const key = (input.canonicalId ?? input.symbol ?? "test").toLowerCase();
       return {
@@ -133,6 +136,9 @@ describe("domain module contract", () => {
     const claims = module.extractClaims(evidence);
     const context = module.assembleContext({ evidence, assets, observations: [] });
     expect(module.sourceQuery({ adapterId: "searxng", watchlist: [] })).toBe("listed company news");
+    expect(module.sourceQueries({ adapterId: "searxng", watchlist: [] })).toEqual([
+      "listed company news",
+    ]);
     expect(module.canonicalizeAsset({ symbol: "TEST" })?.canonicalId).toBe("test:test");
     expect(assets[0]?.canonicalId).toBe("test:testco");
     expect(claims[0]?.kind).toBe("equities:earnings");

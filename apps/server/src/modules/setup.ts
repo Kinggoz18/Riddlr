@@ -31,6 +31,7 @@ import {
 import { probeLlmProvider } from "@riddlr/llm";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { ensureDefaultPriceTrackerHostPolicies } from "./intelligence.js";
 
 const skillDir = join(dirname(fileURLToPath(import.meta.url)), "../../../../skills/crypto");
 
@@ -201,6 +202,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       .values({ agentId: agent.id, sourceId: source.id })
       .onConflictDoNothing();
   }
+  await ensureDefaultPriceTrackerHostPolicies(ctx);
   const existingMarket = await ctx.db
     .select()
     .from(sources)

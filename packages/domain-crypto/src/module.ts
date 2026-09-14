@@ -1,4 +1,6 @@
 import {
+  buildAssetNewsQuery,
+  buildDomainGeneralNewsQuery,
   CATALYST_SEVERITY_PRIOR,
   type CatalystKind,
   canonicalizeFromRegistry,
@@ -13,6 +15,7 @@ import {
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
   isCatalystKind,
+  MAX_SEARXNG_ASSET_QUERIES,
   type MarketObservation,
   type NormalizedEvidence,
   RETURN_SHOCK_V1,
@@ -48,6 +51,19 @@ export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
 ];
 
 const CRYPTO_ASSET_CLASSES = ["cryptocurrency", "meme_coin", "stablecoin"] as const;
+
+export const CRYPTO_SEARXNG_CATALYST_KEYWORDS = [
+  "hack",
+  "exploit",
+  "depeg",
+  "listing",
+  "SEC",
+  "lawsuit",
+  "outage",
+  "unlock",
+] as const;
+
+export const CRYPTO_SEARXNG_GENERAL_FALLBACK = "cryptocurrency bitcoin ethereum stablecoin news";
 
 export const DEFAULT_CRYPTO_OBJECTIVES = [
   "general_crypto_intelligence",
@@ -296,21 +312,37 @@ export const cryptoDomainModule: DomainModule = {
     return undefined;
   },
   sourceQuery(input) {
+    const queries = this.sourceQueries(input);
+    return queries[0] ?? "";
+  },
+  sourceQueries(input) {
     const watchlist = input.watchlist.map((item) => ({
       canonicalId: item.canonicalId,
       symbol: item.symbol,
       name: item.displayName,
     }));
     if (input.adapterId === "searxng") {
-      return watchlistSearchQuery(watchlist, "cryptocurrency bitcoin ethereum stablecoin news");
+      const perAsset = takeBounded(input.watchlist, MAX_SEARXNG_ASSET_QUERIES).map((item) =>
+        buildAssetNewsQuery({
+          name: item.displayName,
+          symbol: item.symbol,
+          canonicalId: item.canonicalId,
+          keywords: CRYPTO_SEARXNG_CATALYST_KEYWORDS,
+        }),
+      );
+      const general = buildDomainGeneralNewsQuery(
+        CRYPTO_SEARXNG_GENERAL_FALLBACK,
+        CRYPTO_SEARXNG_CATALYST_KEYWORDS,
+      );
+      return [...perAsset.filter(Boolean), general];
     }
     if (input.adapterId === "x" || input.adapterId === "discord") {
-      return watchlistSearchQuery(watchlist, "crypto");
+      return [watchlistSearchQuery(watchlist, "crypto")];
     }
     if (input.adapterId === "feeds") {
-      return "";
+      return [""];
     }
-    return watchlist.map((item) => item.canonicalId).join(" ");
+    return [watchlist.map((item) => item.canonicalId).join(" ")];
   },
   canonicalizeAsset(input, registry: readonly RegistryAsset[] = []) {
     return canonicalizeFromRegistry(input, registry);

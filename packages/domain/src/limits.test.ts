@@ -16,6 +16,9 @@ import {
   MAX_OBSERVE_SUBJECTS,
   MAX_PAGE_SIZE,
   MAX_REGISTRY_TOP_N,
+  MAX_SEARXNG_ASSET_QUERIES,
+  MAX_SEARXNG_BODY_BYTES,
+  MAX_SEARXNG_ENGINES,
   MIN_FEED_POLL_INTERVAL_SECONDS,
   parsePageCursor,
   takeBounded,
@@ -63,5 +66,8 @@ describe("bounded resource limits", () => {
     expect(MAX_FEED_POLL_INTERVAL_SECONDS).toBe(3_600);
     expect(MAX_FEED_BODY_BYTES).toBe(2_000_000);
     expect(MAX_FEED_ITEMS).toBe(50);
+    expect(MAX_SEARXNG_ASSET_QUERIES).toBe(12);
+    expect(MAX_SEARXNG_BODY_BYTES).toBe(1_000_000);
+    expect(MAX_SEARXNG_ENGINES).toBe(16);
   });
 });

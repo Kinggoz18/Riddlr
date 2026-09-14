@@ -75,6 +75,7 @@ See [docs/architecture.md](docs/architecture.md).
 - [Market domains](docs/market-domains.md)
 - [LLM providers](docs/llm-providers.md)
 - [SearXNG](docs/sources/searxng.md)
+- [RSS/Atom](docs/sources/feeds.md)
 - [Discord](docs/sources/discord.md)
 - [X](docs/sources/x.md)
 - [CoinGecko](docs/sources/coingecko.md)

@@ -32,6 +32,7 @@ import {
   observations,
   passwordResetTokens,
   portfolios,
+  publisherHostPolicies,
   scans,
   sessions,
   signalClaimProofs,
@@ -1795,6 +1796,123 @@ describe("setup, auth, and domain persistence", () => {
       .from(sources)
       .where(eq(sources.id, created.json().source?.id as string));
     expect(feedRow?.config.lastEtag).toBe('"feed-etag"');
+  });
+
+  it("runs per-asset SearXNG news queries, dedupes URLs, and drops price-tracker hosts", async () => {
+    const hosts = await app.inject({
+      method: "GET",
+      url: "/api/v1/publisher-hosts",
+      headers: { cookie },
+    });
+    expect(hosts.statusCode).toBe(200);
+    expect(
+      (hosts.json().hosts as Array<{ hostname: string; blocked: boolean }>).some(
+        (row) => row.hostname === "coingecko.com" && row.blocked,
+      ),
+    ).toBe(true);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const searx = (
+      listed.json().sources as Array<{
+        id: string;
+        adapterId: string;
+        config: { endpoint?: string; engines?: string[] };
+      }>
+    ).find((row) => row.adapterId === "searxng");
+    expect(searx?.id).toBeDefined();
+    const endpoint = searx?.config.endpoint;
+    const saved = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/sources/${searx?.id}`,
+      headers: { cookie },
+      payload: { config: { endpoint: "http://evil.example", engines: "bing news" } },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().source.config.endpoint).toBe(endpoint);
+    expect(saved.json().source.config.engines).toEqual(["bing news"]);
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/sources/${searx?.id}`,
+      headers: { cookie },
+      payload: { config: { engines: "bad;engine" } },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-04-01T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:searxng-news-1",
+      })
+      .returning();
+    const searchUrls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      let pathname = "";
+      try {
+        pathname = new URL(url).pathname;
+      } catch {
+        pathname = "";
+      }
+      if (pathname === "/search" || pathname === "/search/") {
+        searchUrls.push(url);
+        return Response.json({
+          results: [
+            {
+              url: "https://www.coingecko.com/en/coins/bitcoin",
+              title: "Bitcoin price today",
+              content: "Bitcoin is quoted at USD on the tracker page.",
+              engine: "fixture",
+            },
+            {
+              url: "https://news.example.com/per-asset-news",
+              title: "Bitcoin filing details today after the issuer update",
+              content: "The filing said Bitcoin demand rose after reported ETF inflows.",
+              engine: "fixture",
+            },
+          ],
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    expect(searchUrls).toHaveLength(4);
+    for (const url of searchUrls) {
+      expect(url).toContain("categories=news");
+      expect(url).toContain("language=en");
+      expect(url).toContain("time_range=day");
+      expect(url).toMatch(/engines=bing(\+|%20)news/);
+    }
+    const queries = searchUrls.map((url) => new URL(url).searchParams.get("q") ?? "");
+    expect(queries.some((query) => query.includes('"Bitcoin" OR "BTC"'))).toBe(true);
+    expect(queries.some((query) => query.includes('"Ethereum" OR "ETH"'))).toBe(true);
+    expect(queries.some((query) => query.includes('"Tether" OR "USDT"'))).toBe(true);
+    expect(
+      queries.some((query) => query.includes("cryptocurrency bitcoin ethereum stablecoin news")),
+    ).toBe(true);
+    const evidence = await ctx.db
+      .select()
+      .from(evidenceItems)
+      .where(eq(evidenceItems.scanId, scan?.id as string));
+    expect(
+      evidence.filter((row) => row.canonicalUrl?.includes("news.example.com/per-asset-news")),
+    ).toHaveLength(1);
+    expect(evidence.some((row) => row.canonicalUrl?.includes("coingecko.com"))).toBe(false);
+    const seeded = await ctx.db
+      .select()
+      .from(publisherHostPolicies)
+      .where(eq(publisherHostPolicies.hostname, "coingecko.com"))
+      .limit(1);
+    expect(seeded[0]?.blocked).toBe(true);
   });
 
   it("rejects seed phrases on portfolios and records WhatsApp inbound windows", async () => {

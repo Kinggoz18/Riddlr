@@ -55,6 +55,7 @@ export {
 export { pathDisallowedByRobots, robotsDenied } from "./robots.js";
 export {
   createSearxngAdapter,
+  parseSearxngEngines,
   parseSearxngPayload,
 } from "./searxng.js";
 export {

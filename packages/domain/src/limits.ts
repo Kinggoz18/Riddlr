@@ -51,6 +51,10 @@ export const DEFAULT_FEED_POLL_INTERVAL_SECONDS = 300;
 export const MIN_FEED_POLL_INTERVAL_SECONDS = 60;
 export const MAX_FEED_POLL_INTERVAL_SECONDS = 3_600;
 export const MAX_FEED_BACKOFF_SECONDS = 3_600;
+export const MAX_SEARXNG_ASSET_QUERIES = 12;
+export const MAX_SEARXNG_QUERY_CHARS = 512;
+export const MAX_SEARXNG_BODY_BYTES = 1_000_000;
+export const MAX_SEARXNG_ENGINES = 16;
 
 export function clampPageSize(value: unknown, fallback = DEFAULT_PAGE_SIZE): number {
   const parsed = Number(value);

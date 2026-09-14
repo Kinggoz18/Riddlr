@@ -62,6 +62,7 @@ export type DomainModule = {
   claimKinds(): string[];
   mapClaimKindToCatalyst(kind: string): CatalystKind | undefined;
   sourceQuery(input: { adapterId: string; watchlist: ExtractedAsset[] }): string;
+  sourceQueries(input: { adapterId: string; watchlist: ExtractedAsset[] }): string[];
   canonicalizeAsset(
     input: {
       symbol?: string;

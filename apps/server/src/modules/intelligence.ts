@@ -13,6 +13,7 @@ import {
   sourceIdentityPolicies,
 } from "@riddlr/db";
 import {
+  blockedPublisherHosts,
   buildUnderstandingPrompt,
   CATALYST_KINDS,
   CONTENT_UNDERSTANDING_JSON_SCHEMA,
@@ -20,6 +21,7 @@ import {
   claimSatisfiesCatalystContract,
   claimStanceFromExtraction,
   classifyPageHeuristic,
+  DEFAULT_PRICE_TRACKER_HOSTS,
   type DomainModule,
   EXTRACTOR_VERSION,
   enrichmentEligibility,
@@ -27,12 +29,15 @@ import {
   excerptOffsets,
   excerptPresent,
   headlineBodyMismatch,
+  hostMatchesPublisherPolicy,
   MAX_CATALYST_KINDS,
   type NormalizedEvidence,
   overlayNormalizedClaimNegation,
   preferEvidenceTitle,
   prioritizeEnrichment,
+  publisherHostIsBlocked,
   skipUnderstandingForPageClass,
+  sourceHostname,
   type TrustTier,
   type TrustUse,
   takeBounded,
@@ -144,6 +149,7 @@ export async function loadTrustMaps(ctx: AppContext) {
     }
   }
   return {
+    blockedHosts: blockedPublisherHosts(hosts),
     snapshot(identityId?: string | null, hostname?: string): TrustSnapshot {
       if (identityId) {
         const hit = byIdentity.get(identityId);
@@ -152,9 +158,24 @@ export async function loadTrustMaps(ctx: AppContext) {
         }
       }
       if (hostname) {
-        const host = byHost.get(hostname.toLowerCase());
+        const hostKey = hostname.toLowerCase();
+        let host: TrustSnapshot | undefined;
+        for (const [pattern, snap] of byHost) {
+          if (hostMatchesPublisherPolicy(hostKey, pattern)) {
+            host = snap;
+            break;
+          }
+        }
         if (host) {
           return host.blocked ? { ...host, trustTier: "blocked" } : host;
+        }
+        if (publisherHostIsBlocked(hostKey, hosts)) {
+          return {
+            revision: 0,
+            trustTier: "blocked",
+            allowedUses: ["discovery"],
+            blocked: true,
+          };
         }
       }
       return { revision: 0, trustTier: "unknown", allowedUses: ["discovery", "analysis"] };
@@ -173,6 +194,23 @@ export async function loadTrustMaps(ctx: AppContext) {
   };
 }
 
+export async function ensureDefaultPriceTrackerHostPolicies(ctx: AppContext) {
+  for (const hostname of DEFAULT_PRICE_TRACKER_HOSTS) {
+    await ctx.db
+      .insert(publisherHostPolicies)
+      .values({
+        hostname,
+        revision: 1,
+        trustTier: "blocked",
+        blocked: true,
+        allowedUses: ["discovery"],
+        notes:
+          "Default price-tracker host. Search hits cannot produce claims. Observation providers for this host still poll.",
+      })
+      .onConflictDoNothing();
+  }
+}
+
 export async function enrichAndUnderstandScan(input: {
   ctx: AppContext;
   module: DomainModule;
@@ -182,9 +220,8 @@ export async function enrichAndUnderstandScan(input: {
 }): Promise<void> {
   const { ctx, module, fetchImpl } = input;
   const registry = await listRegistryAssets(ctx);
-  const blocked = (await ctx.db.select().from(publisherHostPolicies).limit(64))
-    .filter((row) => row.blocked)
-    .map((item) => item.hostname);
+  const trustMaps = await loadTrustMaps(ctx);
+  const blocked = trustMaps.blockedHosts;
   const eligible = [];
   for (const row of input.evidenceRows) {
     if (row.sourceFamily !== "search") {
@@ -302,7 +339,7 @@ export async function enrichAndUnderstandScan(input: {
       .from(evidenceItems)
       .where(eq(evidenceItems.id, original.id))
       .limit(1);
-    await persistClaimsForEvidence(ctx, module, row ?? original, fetchImpl, registry);
+    await persistClaimsForEvidence(ctx, module, row ?? original, fetchImpl, registry, trustMaps);
   }
 }
 
@@ -312,7 +349,17 @@ async function persistClaimsForEvidence(
   row: typeof evidenceItems.$inferSelect,
   fetchImpl: typeof fetch | undefined,
   registry: Awaited<ReturnType<typeof listRegistryAssets>>,
+  trustMaps: Awaited<ReturnType<typeof loadTrustMaps>>,
 ) {
+  const hostname = row.canonicalUrl ? sourceHostname(row.canonicalUrl) : undefined;
+  if (
+    hostname &&
+    hostname !== "unknown-host" &&
+    !trustMaps.allows(row.sourceIdentityId, hostname, "analysis")
+  ) {
+    ctx.metrics.claims.inc({ result: "none" });
+    return;
+  }
   const payload = row.adapterPayload ?? {};
   const outboundUrls = Array.isArray(payload.outboundUrls)
     ? payload.outboundUrls.filter((item): item is string => typeof item === "string")

@@ -1,6 +1,6 @@
 import { normalizeEvidence, type RegistryAsset } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
-import { cryptoDomainModule } from "./module.js";
+import { cryptoDomainModule, DEFAULT_CRYPTO_WATCHLIST } from "./module.js";
 
 function registryAsset(
   id: string,
@@ -321,6 +321,31 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "searxng", watchlist: [] })).toContain(
       "cryptocurrency bitcoin ethereum stablecoin news",
     );
+    expect(cryptoDomainModule.sourceQueries({ adapterId: "searxng", watchlist: [] })).toEqual([
+      "cryptocurrency bitcoin ethereum stablecoin news (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)",
+    ]);
+    expect(
+      cryptoDomainModule.sourceQueries({
+        adapterId: "searxng",
+        watchlist: DEFAULT_CRYPTO_WATCHLIST,
+      }),
+    ).toEqual([
+      '"Bitcoin" OR "BTC" (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)',
+      '"Ethereum" OR "ETH" (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)',
+      '"Tether" OR "USDT" (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)',
+      "cryptocurrency bitcoin ethereum stablecoin news (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)",
+    ]);
+    expect(
+      cryptoDomainModule.sourceQueries({
+        adapterId: "searxng",
+        watchlist: Array.from({ length: 15 }, (_, index) => ({
+          assetClass: "cryptocurrency" as const,
+          canonicalId: `coingecko:asset-${index}`,
+          symbol: `A${index}`,
+          displayName: `Asset ${index}`,
+        })),
+      }),
+    ).toHaveLength(13);
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "feeds", watchlist: [] })).toBe("");
   });

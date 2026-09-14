@@ -1,0 +1,11 @@
+{
+  "query": "bitcoin",
+  "results": [
+    {
+      "content": "The Senate is set to hold a cloture vote on the Clarity Act on Tuesday. If the bill gets at least 60 votes, the bill will ...",
+      "engine": "bing news",
+      "category": "news"
+    }
+  ],
+  "unresponsive_engines": []
+}

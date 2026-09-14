@@ -188,6 +188,10 @@ export {
   MAX_REGISTRY_TOP_N,
   MAX_RETENTION_DELETE_BATCH,
   MAX_RETENTION_LOOPS,
+  MAX_SEARXNG_ASSET_QUERIES,
+  MAX_SEARXNG_BODY_BYTES,
+  MAX_SEARXNG_ENGINES,
+  MAX_SEARXNG_QUERY_CHARS,
   MAX_SERIES_WINDOW,
   MAX_WORKER_CONCURRENCY,
   MIN_FEED_POLL_INTERVAL_SECONDS,
@@ -237,6 +241,15 @@ export {
   rejectPrivateMaterial,
 } from "./portfolio.js";
 export {
+  blockedPublisherHosts,
+  DEFAULT_PRICE_TRACKER_HOSTS,
+  hostMatchesPublisherPolicy,
+  latestPublisherHostPolicies,
+  MAX_PUBLISHER_HOST_POLICIES,
+  type PublisherHostPolicyInput,
+  publisherHostIsBlocked,
+} from "./publisher-hosts.js";
+export {
   assessReliability,
   CLAIM_MODALITIES,
   CLAIM_POLARITIES,
@@ -277,6 +290,11 @@ export {
   searchRegistry,
   toExtractedAsset,
 } from "./resolve.js";
+export {
+  buildAssetNewsQuery,
+  buildDomainGeneralNewsQuery,
+  quoteSearchTerm,
+} from "./search-queries.js";
 export {
   AGENT_KINDS,
   AGENT_SCHEDULES,

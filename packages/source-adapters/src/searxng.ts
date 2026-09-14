@@ -1,12 +1,20 @@
-import { normalizeEvidence, type RawEvidence, takeBounded } from "@riddlr/domain";
+import {
+  MAX_SEARXNG_BODY_BYTES,
+  MAX_SEARXNG_ENGINES,
+  normalizeEvidence,
+  type RawEvidence,
+  takeBounded,
+} from "@riddlr/domain";
 import {
   assertSafeHttpUrl,
   classifyHttpStatus,
   type FetchQuery,
   type FetchResult,
   hostMatchesSuffix,
+  readBoundedBytes,
   redactRequestUrl,
   type SourceAdapter,
+  type SourceErrorClass,
 } from "./types.js";
 
 type SearxResult = {
@@ -22,6 +30,34 @@ type SearxPayload = {
   unresponsive_engines?: unknown;
 };
 
+const SEARXNG_ENGINE_RE = /^[a-z0-9][a-z0-9._ -]{0,63}$/;
+
+export function parseSearxngEngines(value: unknown): string[] {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  const raw = Array.isArray(value)
+    ? value.map((item) => String(item))
+    : typeof value === "string"
+      ? value.split(",")
+      : null;
+  if (!raw) {
+    throw new Error("SearXNG engines must be a comma-separated list.");
+  }
+  const engines: string[] = [];
+  for (const item of raw) {
+    const trimmed = item.trim().toLowerCase();
+    if (!trimmed) {
+      continue;
+    }
+    if (!SEARXNG_ENGINE_RE.test(trimmed)) {
+      throw new Error(`Invalid SearXNG engine name '${trimmed}'.`);
+    }
+    engines.push(trimmed);
+  }
+  return takeBounded([...new Set(engines)], MAX_SEARXNG_ENGINES);
+}
+
 export function parseSearxngPayload(
   payload: SearxPayload,
   fetchedAt: Date,
@@ -32,6 +68,14 @@ export function parseSearxngPayload(
   const unresponsive = Array.isArray(payload.unresponsive_engines)
     ? payload.unresponsive_engines.slice(0, 16).map((item) => String(item))
     : [];
+  if (payload.results !== undefined && !Array.isArray(payload.results)) {
+    return {
+      evidence: [],
+      partial: true,
+      errors: [{ class: "malformed", message: "SearXNG results was not an array" }],
+      unresponsiveEngines: unresponsive,
+    };
+  }
   const results = takeBounded(Array.isArray(payload.results) ? payload.results : [], maxResults);
   for (const item of results) {
     if (!item || typeof item !== "object") {
@@ -97,6 +141,22 @@ function hostAllowed(url: string | undefined, query: FetchQuery): boolean {
   }
 }
 
+function searxngFailure(
+  className: SourceErrorClass,
+  message: string,
+  status?: number,
+  requestUrl?: string,
+): FetchResult {
+  return {
+    evidence: [],
+    partial: true,
+    errors: [{ class: className, message }],
+    unresponsiveEngines: [],
+    requestUrl,
+    responseStatus: status,
+  };
+}
+
 export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
   return {
     id: "searxng",
@@ -106,13 +166,15 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
       supportsTimeRange: true,
       supportsPagination: true,
       supportsDomainFilter: true,
-      lookbackNotes: "time_range is engine-dependent",
+      lookbackNotes:
+        "categories=news, time_range=day, language=en; one query per watched asset plus one general query",
       partialResults: true,
     },
     async validate(config) {
       const endpoint = String(config.endpoint ?? "");
       try {
         assertSafeHttpUrl(endpoint, ["searxng", "localhost", "127.0.0.1"]);
+        parseSearxngEngines(config.engines);
         return { ok: true, message: "Endpoint looks valid." };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "Invalid endpoint" };
@@ -151,44 +213,83 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
       url.searchParams.set("format", "json");
       const limit = query.limit ?? 20;
       url.searchParams.set("number_of_results", String(limit));
-      if (query.language) {
-        url.searchParams.set("language", query.language);
-      }
-      if (query.timeRange) {
-        url.searchParams.set("time_range", query.timeRange);
-      }
+      url.searchParams.set("language", query.language ?? "en");
+      url.searchParams.set("time_range", query.timeRange ?? "day");
+      url.searchParams.set(
+        "categories",
+        query.categories && query.categories.length > 0 ? query.categories.join(",") : "news",
+      );
       if (query.page) {
         url.searchParams.set("pageno", String(query.page));
       }
-      if (query.categories && query.categories.length > 0) {
-        url.searchParams.set("categories", query.categories.join(","));
+      const engines = parseSearxngEngines(config.engines);
+      if (engines.length > 0) {
+        url.searchParams.set("engines", engines.join(","));
       }
+      const requestUrl = redactRequestUrl(url.toString());
       const fetchedAt = new Date();
       try {
         const response = await fetchImpl(url, {
           signal: AbortSignal.timeout(15000),
           redirect: "manual",
         });
-        if (!response.ok) {
-          return {
-            evidence: [],
-            partial: true,
-            errors: [
-              {
-                class: classifyHttpStatus(response.status),
-                message: `SearXNG HTTP ${response.status}`,
-              },
-            ],
-            unresponsiveEngines: [],
-          };
+        const retryAfter = response.headers.get("retry-after");
+        const length = Number(response.headers.get("content-length") ?? "0");
+        if (Number.isFinite(length) && length > MAX_SEARXNG_BODY_BYTES) {
+          return searxngFailure(
+            "too_large",
+            "SearXNG response exceeded the size bound.",
+            response.status,
+            requestUrl,
+          );
         }
-        const payload = (await response.json()) as SearxPayload;
+        if (response.status === 429) {
+          return searxngFailure(
+            "rate_limited",
+            retryAfter ? `SearXNG HTTP 429; Retry-After ${retryAfter}` : "SearXNG HTTP 429",
+            429,
+            requestUrl,
+          );
+        }
+        if (response.status === 451) {
+          return searxngFailure("blocked", "SearXNG HTTP 451", 451, requestUrl);
+        }
+        if (!response.ok) {
+          return searxngFailure(
+            classifyHttpStatus(response.status),
+            `SearXNG HTTP ${response.status}`,
+            response.status,
+            requestUrl,
+          );
+        }
+        const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+        const buffer = await readBoundedBytes(response, MAX_SEARXNG_BODY_BYTES);
+        const body = buffer.toString("utf8");
+        if (contentType.includes("text/html") || /^\s*</.test(body)) {
+          return searxngFailure(
+            "malformed",
+            "SearXNG returned HTML instead of JSON",
+            response.status,
+            requestUrl,
+          );
+        }
+        let payload: SearxPayload;
+        try {
+          payload = JSON.parse(body) as SearxPayload;
+        } catch {
+          return searxngFailure(
+            "malformed",
+            "SearXNG body was not JSON",
+            response.status,
+            requestUrl,
+          );
+        }
         const parsed = parseSearxngPayload(payload, fetchedAt, limit);
         const filtered = parsed.evidence.filter((item) => hostAllowed(item.url, query));
         return {
           ...parsed,
           evidence: takeBounded(filtered, limit),
-          requestUrl: redactRequestUrl(url.toString()),
+          requestUrl,
           responseStatus: response.status,
           adapterMetadata:
             parsed.unresponsiveEngines.length > 0
@@ -196,17 +297,13 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
               : undefined,
         };
       } catch (error) {
-        return {
-          evidence: [],
-          partial: true,
-          errors: [
-            {
-              class: "timeout",
-              message: error instanceof Error ? error.message : "SearXNG fetch failed",
-            },
-          ],
-          unresponsiveEngines: [],
-        };
+        const message = error instanceof Error ? error.message : "SearXNG fetch failed";
+        const className: SourceErrorClass = message.includes("size bound")
+          ? "too_large"
+          : /timeout|aborted/i.test(message)
+            ? "timeout"
+            : "unavailable";
+        return searxngFailure(className, message, undefined, requestUrl);
       }
     },
   };

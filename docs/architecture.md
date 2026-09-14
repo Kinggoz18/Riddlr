@@ -72,7 +72,8 @@ or unlimited), skills, and a watchlist. Coming-soon domains cannot execute. See
 [agents-and-skills.md](agents-and-skills.md) and
 [watchlists.md](watchlists.md).
 
-Live sources are SearXNG (bundled), RSS/Atom feeds (operator-pasted URLs; more
+Live sources are SearXNG (bundled; one `categories=news` query per watched
+asset plus one general query), RSS/Atom feeds (operator-pasted URLs; more
 than one feed is allowed), Discord (operator-configured bot; more
 than one Discord source is allowed), X (operator-configured recent search with
 bounded `next_token`), and one active market-data source: CoinGecko,

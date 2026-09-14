@@ -26,6 +26,7 @@ import {
   observations,
   portfolioHoldings,
   providerConfigs,
+  publisherHostPolicies,
   scanSourceRuns,
   scans,
   signalClaimProofs,
@@ -42,7 +43,9 @@ import {
   absorbObservationClusters,
   analysisReservationTokens,
   assessReliability,
+  blockedPublisherHosts,
   buildEventFacts,
+  canonicalizeUrl,
   claimGroupKey,
   classifyReprint,
   clusterEventTitle,
@@ -63,6 +66,7 @@ import {
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_OBSERVE_PINS,
+  MAX_SEARXNG_ASSET_QUERIES,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
   nextEventStatus,
@@ -70,6 +74,7 @@ import {
   observationsFromDetectorPayload,
   observationsFromMarketPayload,
   overlappingOutbound,
+  type RawEvidence,
   type ReliabilityStatus,
   resolveDailyTokenBudget,
   SIGNAL_JSON_SCHEMA,
@@ -98,6 +103,7 @@ import {
   createFeedsAdapter,
   createSearxngAdapter,
   createXAdapter,
+  type FetchResult,
   redactRequestUrl,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
@@ -204,6 +210,8 @@ export async function runScan(
     let sourceFailures = 0;
     let sourceSuccesses = 0;
     const collected = [];
+    const publisherPolicies = await ctx.db.select().from(publisherHostPolicies).limit(256);
+    const blockedHosts = blockedPublisherHosts(publisherPolicies);
 
     const perSourceQuota = Math.max(
       1,
@@ -251,92 +259,137 @@ export async function runScan(
           });
         }
       }
-      const queryText = module.sourceQuery({
-        adapterId: adapter.id,
-        watchlist: agentContext.watchlist,
-      });
+      const queryTexts =
+        adapter.id === "searxng"
+          ? takeBounded(
+              [
+                ...new Set(
+                  module
+                    .sourceQueries({
+                      adapterId: adapter.id,
+                      watchlist: agentContext.watchlist,
+                    })
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                ),
+              ],
+              MAX_SEARXNG_ASSET_QUERIES + 1,
+            )
+          : module.sourceQueries({
+              adapterId: adapter.id,
+              watchlist: agentContext.watchlist,
+            });
+      const texts = queryTexts.length > 0 ? queryTexts : [""];
       const requestHash = createHash("sha256")
         .update(
           JSON.stringify({
             sourceId: source.id,
             adapterId: source.adapterId,
-            query: queryText,
+            queries: texts,
           }),
         )
         .digest("hex");
-      const [fetchRequest] = await ctx.db
-        .insert(sourceFetchRequests)
-        .values({
-          scanId,
-          sourceId: source.id,
-          adapterId: source.adapterId,
-          requestHash,
-          requestUrl: redactRequestUrl(
-            `https://adapter.local/${source.adapterId}?q=${encodeURIComponent(queryText)}`,
-          ),
-          status: "running",
-        })
-        .returning();
-      const result = await adapter.fetch(runtimeConfig, {
-        query: queryText,
-        timeRange: "day",
-        limit: remaining,
-      });
-      if (fetchRequest) {
-        await ctx.db
-          .update(sourceFetchRequests)
-          .set({
-            status: result.errors.length && result.evidence.length === 0 ? "failed" : "succeeded",
-            errorClass: result.errors[0]?.class,
-            finishedAt: new Date(),
-            evidenceCount: result.evidence.length,
-            requestUrl: result.requestUrl ? redactRequestUrl(result.requestUrl) : undefined,
-            responseStatus: result.responseStatus,
-            adapterMetadata: result.adapterMetadata,
-            providerRequestId: result.providerRequestId,
-            paginationCursor: result.paginationCursor,
+      const merged: Array<{ raw: RawEvidence; fetchRequestId?: string }> = [];
+      const seenUrls = new Set<string>();
+      const allErrors: FetchResult["errors"] = [];
+      let anyPartial = false;
+      let lastPersistConfig: Record<string, unknown> | undefined;
+      for (const queryText of texts) {
+        const [fetchRequest] = await ctx.db
+          .insert(sourceFetchRequests)
+          .values({
+            scanId,
+            sourceId: source.id,
+            adapterId: source.adapterId,
+            requestHash,
+            requestUrl: redactRequestUrl(
+              `https://adapter.local/${source.adapterId}?q=${encodeURIComponent(queryText)}`,
+            ),
+            status: "running",
           })
-          .where(eq(sourceFetchRequests.id, fetchRequest.id));
+          .returning();
+        const result = await adapter.fetch(runtimeConfig, {
+          query: queryText,
+          timeRange: "day",
+          language: adapter.id === "searxng" ? "en" : undefined,
+          categories: adapter.id === "searxng" ? ["news"] : undefined,
+          limit: remaining,
+          blockedHosts: adapter.id === "searxng" ? blockedHosts : undefined,
+        });
+        if (fetchRequest) {
+          await ctx.db
+            .update(sourceFetchRequests)
+            .set({
+              status: result.errors.length && result.evidence.length === 0 ? "failed" : "succeeded",
+              errorClass: result.errors[0]?.class,
+              finishedAt: new Date(),
+              evidenceCount: result.evidence.length,
+              requestUrl: result.requestUrl ? redactRequestUrl(result.requestUrl) : undefined,
+              responseStatus: result.responseStatus,
+              adapterMetadata: result.adapterMetadata,
+              providerRequestId: result.providerRequestId,
+              paginationCursor: result.paginationCursor,
+            })
+            .where(eq(sourceFetchRequests.id, fetchRequest.id));
+        }
+        if (result.partial || result.errors.length > 0) {
+          anyPartial = true;
+        }
+        allErrors.push(...result.errors);
+        const persistConfig =
+          result.adapterMetadata &&
+          typeof result.adapterMetadata.persistConfig === "object" &&
+          result.adapterMetadata.persistConfig !== null
+            ? (result.adapterMetadata.persistConfig as Record<string, unknown>)
+            : undefined;
+        if (persistConfig) {
+          lastPersistConfig = persistConfig;
+        }
+        for (const item of result.evidence) {
+          const key = canonicalizeUrl(item.url);
+          if (key) {
+            if (seenUrls.has(key)) {
+              continue;
+            }
+            seenUrls.add(key);
+          }
+          merged.push({ raw: item, fetchRequestId: fetchRequest?.id });
+        }
       }
-      if (result.partial || result.errors.length > 0) {
+      if (anyPartial) {
         partial = true;
       }
+      const bounded = takeBounded(merged, remaining);
       await ctx.db.insert(scanSourceRuns).values({
         scanId,
         sourceId: source.id,
-        status: result.errors.length && result.evidence.length === 0 ? "failed" : "succeeded",
-        errorClass: result.errors[0]?.class,
-        errorMessage: result.errors.map((item) => item.message).join("; ") || null,
-        evidenceCount: result.evidence.length,
+        status: allErrors.length && bounded.length === 0 ? "failed" : "succeeded",
+        errorClass: allErrors[0]?.class,
+        errorMessage: allErrors.map((item) => item.message).join("; ") || null,
+        evidenceCount: bounded.length,
       });
-      if (result.errors.length && result.evidence.length === 0) {
+      if (allErrors.length && bounded.length === 0) {
         sourceFailures += 1;
       } else {
         sourceSuccesses += 1;
       }
-      const persistConfig =
-        result.adapterMetadata &&
-        typeof result.adapterMetadata.persistConfig === "object" &&
-        result.adapterMetadata.persistConfig !== null
-          ? (result.adapterMetadata.persistConfig as Record<string, unknown>)
-          : undefined;
       await ctx.db
         .update(sources)
         .set({
-          lastHealthOk: result.evidence.length > 0 || result.errors.length === 0,
-          lastHealthMessage: result.errors[0]?.message ?? "ok",
+          lastHealthOk: bounded.length > 0 || allErrors.length === 0,
+          lastHealthMessage: allErrors[0]?.message ?? "ok",
           lastHealthAt: new Date(),
-          ...(persistConfig ? { config: { ...source.config, ...persistConfig } } : {}),
+          ...(lastPersistConfig ? { config: { ...source.config, ...lastPersistConfig } } : {}),
         })
         .where(eq(sources.id, source.id));
       collected.push(
-        ...takeBounded(result.evidence, remaining).map((item) => ({
-          raw: item,
+        ...bounded.map((item) => ({
+          raw: item.raw,
           sourceId: source.id,
-          fetchRequestId: fetchRequest?.id,
+          fetchRequestId: item.fetchRequestId,
           family: source.family,
           adapterId: source.adapterId,
-          normalized: normalizeEvidence(item),
+          normalized: normalizeEvidence(item.raw),
         })),
       );
     }

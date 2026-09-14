@@ -3,17 +3,22 @@
 Riddlr ships a local SearXNG container with JSON format enabled. Public
 instances often disable JSON and will return 403.
 
-The search API parameters used: `q`, `categories`, `language`, `pageno`,
-`time_range`, `format=json`. URL allow/block lists are applied in Riddlr after
-fetch. `unresponsive_engines` is a partial success, not a failed scan.
+Each scan issues one `categories=news` query per watched asset (name OR symbol
+plus catalyst keywords), capped at 12, plus one domain-general query. Hits are
+deduped by canonical URL before they are stored. Search hits stay **mentions**
+until an eligible public page is enriched.
 
-Every search hit is a **search mention** until an eligible public page is
-enriched. Snippets cannot corroborate a claim. Eligible URLs are fetched with
-SSRF checks, robots.txt, a per-scan and per-host cap, and a decompressed byte
-limit. Main content is cleaned once; unchanged cleaned content is not sent to
-the model again.
+The search API parameters used: `q`, `categories=news`, `language=en`,
+`pageno`, `time_range=day`, `format=json`, and optional `engines` from Sources
+→ SearXNG → Edit source. URL allow/block lists are applied after fetch.
+`unresponsive_engines` is a partial success, not a failed scan.
 
-Publisher host policy (Sources) can block enrichment. Blocked hosts stay
-discovery-only. Two hosts reprinting one origin count as one origin.
+Default price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest
+of the list under Sources → Publisher hosts) cannot produce claims. Unblock a
+host there if you need its pages. CoinGecko observations still poll.
+
+Eligible URLs are fetched with SSRF checks, robots.txt, a per-scan and per-host
+cap, and a decompressed byte limit. Main content is cleaned once; unchanged
+cleaned content is not sent to the model again.
 
 Official docs: https://docs.searxng.org/dev/search_api.html

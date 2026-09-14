@@ -18,3 +18,6 @@ Captured from live provider responses. Secrets are not present in these files.
 | `feeds/atom-github-bitcoin-releases.xml` | `GET https://github.com/bitcoin/bitcoin/releases.atom` (first two `<entry>` elements) | 2026-09-14 |
 | `feeds/atom-youtube-google.xml` | `GET https://www.youtube.com/feeds/videos.xml?channel_id=UCK8sQmJBp8GCxrOtXWBpyEA` (first `<entry>`) | 2026-09-14 |
 | `feeds/html-200-federalreserve-home.html` | `GET https://www.federalreserve.gov/` HTML 200 (first 25 lines) used as a non-XML body | 2026-09-14 |
+| `searxng/news-bitcoin.json` | `GET http://searxng:8080/search?q=bitcoin&format=json&categories=news&time_range=day&language=en` (first three `results`) | 2026-09-14 |
+| `searxng/empty.json` | Empty JSON search body (`results: []`), the documented empty list | 2026-09-14 |
+| `searxng/news-bitcoin-drift-missing-url-title.json` | First captured news result with `url` and `title` removed to represent schema drift | 2026-09-14 |

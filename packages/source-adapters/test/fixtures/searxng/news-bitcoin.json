@@ -1,0 +1,27 @@
+{
+  "query": "bitcoin",
+  "results": [
+    {
+      "url": "https://www.investopedia.com/a-big-crypto-vote-is-coming-this-week-here-s-what-you-need-to-know-bitcoin-clarity-act-12114898",
+      "title": "A Big Crypto Vote Is Coming This Week. Here’s What You Need to Know.",
+      "content": "The Senate is set to hold a cloture vote on the Clarity Act on Tuesday. If the bill gets at least 60 votes, the bill will ...",
+      "engine": "bing news",
+      "category": "news"
+    },
+    {
+      "url": "https://www.reuters.com/business/finance/bitcoins-late-summer-rally-set-to-face-off-against-fed-congress-2026-09-14/",
+      "title": "Bitcoin's late summer rally set to face off against the Fed, Congress",
+      "content": "Bitcoin bulls are back after months of gloom, but a Federal Reserve rate decision this week will test that optimism, \u200beven as a key Senate vote on crypto legisl",
+      "engine": "reuters",
+      "category": "news"
+    },
+    {
+      "url": "https://www.ccn.com/news/crypto/revolut-customer-data-exposed-fake-government-email-scam/",
+      "title": "Revolut Fooled by Fake Government Request, Exposing Customer Passports and Bitcoin Records",
+      "content": "Revolut disclosed KYC data and Bitcoin records after being tricked by fake requests sent from a legitimate government agency ...",
+      "engine": "bing news",
+      "category": "news"
+    }
+  ],
+  "unresponsive_engines": []
+}

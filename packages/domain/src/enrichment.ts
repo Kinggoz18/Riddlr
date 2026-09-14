@@ -1,5 +1,6 @@
 import { canonicalizeUrl } from "./evidence.js";
 import { takeBounded } from "./limits.js";
+import { hostMatchesPublisherPolicy } from "./publisher-hosts.js";
 import type { ContentCompleteness, PageClass, TrustTier } from "./reliability.js";
 
 export const MAX_ENRICH_PER_SCAN = 12;
@@ -9,12 +10,6 @@ export const MAX_ENRICH_CHARS = 50_000;
 export const MAX_ENRICH_REDIRECTS = 3;
 export const ENRICH_TIMEOUT_MS = 10_000;
 export const EXTRACTOR_VERSION = "html-main-1";
-
-function hostMatchesPolicy(host: string, pattern: string): boolean {
-  const normalizedHost = host.toLowerCase().replace(/\.+$/, "");
-  const normalizedPattern = pattern.toLowerCase().replace(/\.+$/, "");
-  return normalizedHost === normalizedPattern || normalizedHost.endsWith(`.${normalizedPattern}`);
-}
 
 const NAV_PATH =
   /\/(tag|tags|search|login|signin|signup|account|privacy|terms|cookies|category|categories)(\/|$)/i;
@@ -77,11 +72,11 @@ export function enrichmentEligibility(input: {
     return { eligible: false, reason: "unsupported_scheme" };
   }
   const host = parsed.hostname.toLowerCase();
-  if (input.blockedHosts?.some((item) => hostMatchesPolicy(host, item))) {
+  if (input.blockedHosts?.some((item) => hostMatchesPublisherPolicy(host, item))) {
     return { eligible: false, reason: "blocked_host", host };
   }
   if (input.allowedHosts && input.allowedHosts.length > 0) {
-    const allowed = input.allowedHosts.some((item) => hostMatchesPolicy(host, item));
+    const allowed = input.allowedHosts.some((item) => hostMatchesPublisherPolicy(host, item));
     if (!allowed) {
       return { eligible: false, reason: "host_not_allowlisted", host };
     }

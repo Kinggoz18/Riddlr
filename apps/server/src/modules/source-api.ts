@@ -34,12 +34,13 @@ import {
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
   defaultTrustForFeedUrl,
+  parseSearxngEngines,
   SUGGESTED_FEEDS,
 } from "@riddlr/source-adapters";
 import { and, count, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
-import { upsertSourceIdentity } from "./intelligence.js";
+import { ensureDefaultPriceTrackerHostPolicies, upsertSourceIdentity } from "./intelligence.js";
 import {
   attachSourceToAgents,
   isMarketDataAdapter,
@@ -296,7 +297,25 @@ export function registerSourceRoutes(
     if (!row) {
       return reply.code(404).send({ error: { code: "not_found", message: "Source not found" } });
     }
-    const nextConfig = { ...row.config, ...(body.config ?? {}) };
+    let nextConfig = { ...row.config, ...(body.config ?? {}) };
+    if (row.adapterId === "searxng") {
+      let engines: string[] = [];
+      try {
+        engines = parseSearxngEngines(
+          body.config && Object.hasOwn(body.config, "engines")
+            ? body.config.engines
+            : row.config.engines,
+        );
+      } catch (error) {
+        return reply.code(400).send({
+          error: {
+            code: "invalid_source",
+            message: error instanceof Error ? error.message : "Invalid SearXNG engines.",
+          },
+        });
+      }
+      nextConfig = { endpoint: row.config.endpoint, engines };
+    }
     let secretId = row.secretId;
     if (body.token) {
       const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
@@ -510,6 +529,7 @@ export function registerSourceRoutes(
   );
 
   app.get("/api/v1/publisher-hosts", { preHandler: authed }, async () => {
+    await ensureDefaultPriceTrackerHostPolicies(ctx);
     const rows = await ctx.db.select().from(publisherHostPolicies).limit(200);
     const latest = new Map<string, (typeof rows)[number]>();
     for (const row of rows) {

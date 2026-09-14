@@ -9,7 +9,7 @@ pnpm licenses:check
 
 Unit tests cover domain registry, fingerprints, clustering, encryption, schema validation,
 materiality, schedules, prompt wrapping, provider adapters, Discord REST
-fixtures, RSS/Atom feed fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
+fixtures, RSS/Atom feed fixtures, SearXNG news fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock and volume detectors, catalyst
@@ -24,7 +24,7 @@ coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
 backfill, observation poll to series, detectors, and observed events without an
 article, token-budget skip, Discord token encryption and official REST
-polling, X bearer encryption and recent search, RSS/Atom feed create and poll, session rotation after 2FA,
+polling, X bearer encryption and recent search, RSS/Atom feed create and poll, SearXNG per-asset news queries, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,

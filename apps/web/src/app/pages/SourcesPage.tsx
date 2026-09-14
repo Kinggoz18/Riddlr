@@ -261,7 +261,9 @@ function IdentityPolicies() {
       <Card>
         <h2>Publisher hosts</h2>
         <p className="field-note">
-          Blocked hosts skip SearXNG enrichment. Trust does not make a snippet corroborated.
+          Blocked hosts skip SearXNG enrichment and cannot produce claims. Price-tracker hosts
+          (CoinGecko, CoinMarketCap, TradingView, and the rest of the default list) start blocked.
+          CoinGecko observations still poll.
         </p>
         {hosts.length > 0 ? (
           <ul className="data-list">
@@ -963,11 +965,9 @@ function SourceDetail() {
         actions={
           <>
             <SourcesSubnav />
-            {removable ? (
-              <NavLink to={`/sources/${row.id}/edit`} className="ui-button ui-button-primary">
-                Edit source
-              </NavLink>
-            ) : null}
+            <NavLink to={`/sources/${row.id}/edit`} className="ui-button ui-button-primary">
+              Edit source
+            </NavLink>
           </>
         }
       />
@@ -977,11 +977,17 @@ function SourceDetail() {
       </p>
       {row.adapterId === "searxng" ? (
         <Card>
-          <h2>Enrichment</h2>
+          <h2>News queries</h2>
           <p className="field-note">
-            Search results start as snippets. Eligible public pages are fetched with SSRF and robots
-            checks, cleaned once, and understood once per content version. Blocked hosts stay
-            discovery-only.
+            Each scan runs one <code>categories=news</code> query per watched asset, capped at 12,
+            plus one domain-general query. Results are deduped by canonical URL. Search hits stay
+            mentions until enrichment. Price-tracker hosts cannot produce claims.
+          </p>
+          <p className="field-note">
+            Engine allowlist:{" "}
+            {Array.isArray(config.engines) && config.engines.length > 0
+              ? config.engines.map(String).join(", ")
+              : "all JSON engines on the bundled instance"}
           </p>
         </Card>
       ) : null}
@@ -1088,6 +1094,7 @@ function SourceEdit() {
   const [row, setRow] = useState<SourceRow>();
   const [name, setName] = useState("");
   const [enabled, setEnabled] = useState(true);
+  const [engines, setEngines] = useState("");
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     if (!id) {
@@ -1098,6 +1105,8 @@ function SourceEdit() {
         setRow(body.source);
         setName(body.source.name);
         setEnabled(body.source.enabled);
+        const current = body.source.config?.engines;
+        setEngines(Array.isArray(current) ? current.map(String).join(", ") : "");
       })
       .catch(() => setMissing(true));
   }, [id]);
@@ -1121,7 +1130,11 @@ function SourceEdit() {
             try {
               await api(`/api/v1/sources/${row.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ name, enabled }),
+                body: JSON.stringify({
+                  name,
+                  enabled,
+                  ...(row.adapterId === "searxng" ? { config: { engines } } : {}),
+                }),
               });
               toast("Source saved");
               navigate(`/sources/${row.id}`);
@@ -1147,6 +1160,21 @@ function SourceEdit() {
             />
             Source enabled
           </label>
+          {row.adapterId === "searxng" ? (
+            <Field label="Engine allowlist">
+              <input
+                id="searxng-engines"
+                value={engines}
+                onChange={(e) => setEngines(e.target.value)}
+                placeholder="Leave empty for every JSON engine"
+              />
+              <p className="field-note">
+                Comma-separated SearXNG engine names, for example <code>bing news, reuters</code>.
+                Empty means every engine enabled on the bundled instance. The search endpoint is not
+                editable here.
+              </p>
+            </Field>
+          ) : null}
           <p className="ui-actions">
             <Button type="submit">Save source</Button>
           </p>

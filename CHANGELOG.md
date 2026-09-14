@@ -4,6 +4,12 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- SearXNG runs one `categories=news` query per watched asset (cap 12) plus one
+  domain-general query, dedupes hits by canonical URL, and blocks default
+  price-tracker hosts from producing claims. Sources → SearXNG → Edit source
+  sets an engine allowlist. See
+  [docs/integrations/searxng.md](docs/integrations/searxng.md).
+
 - RSS/Atom evidence adapter: operator-pasted feed URLs poll as snippets with
   SSRF, no DTD, ETag backoff, and trust set on the feed hostname. Sources →
   Add source → Configure RSS/Atom. See
