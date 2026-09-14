@@ -1,0 +1,6 @@
+{
+  "title": "Client Forbidden",
+  "detail": "This operation is not allowed.",
+  "status": 403,
+  "type": "https://api.x.com/2/problems/client-forbidden"
+}

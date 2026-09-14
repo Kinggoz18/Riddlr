@@ -94,6 +94,34 @@ describe("materiality", () => {
         hasValidatedClaim: false,
       }).material,
     ).toBe(false);
+    expect(
+      isMaterialEvent({
+        independentHostCount: 2,
+        independentFamilyCount: 1,
+        independentOriginCount: 2,
+        evidenceCount: 2,
+        derivedCount: 0,
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        sourcedObservationCount: 0,
+        hasAuthoritativePrimary: false,
+        communitySocialOnly: true,
+      }).material,
+    ).toBe(false);
+    expect(
+      isMaterialEvent({
+        independentHostCount: 1,
+        independentFamilyCount: 1,
+        evidenceCount: 1,
+        derivedCount: 0,
+        watchlistOverlap: false,
+        portfolioOverlap: false,
+        sourcedObservationCount: 0,
+        hasAuthoritativePrimary: true,
+        hasTrustedFirsthand: false,
+        communitySocialOnly: false,
+      }).reason,
+    ).toBe("early_warning_candidate");
     expect(isMaterial({ independentSourceCount: 0, evidenceCount: 4 })).toBe(false);
   });
 

@@ -22,6 +22,7 @@ import {
 import { encryptSecret, randomToken } from "@riddlr/crypto";
 import {
   auditLogs,
+  claimEvidence,
   encryptedSecrets,
   evidenceItems,
   instanceSettings,
@@ -35,6 +36,10 @@ import {
 import {
   assertPublicWalletAddress,
   clampPageSize,
+  computeIdentityTrackRecords,
+  DEFAULT_X_MONTHLY_READ_BUDGET,
+  type IdentityClaimObservation,
+  MAX_IDENTITY_TRACK_ROWS,
   MAX_LABELED_ADDRESSES,
   parsePageCursor,
   type TrustTier,
@@ -64,7 +69,7 @@ import {
   parseSnapshotSpaces,
   SUGGESTED_FEEDS,
 } from "@riddlr/source-adapters";
-import { and, count, desc, eq, lt } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import { monitoredAddresses, syncAddressActivityWebhooks } from "./inbound-webhooks.js";
@@ -277,6 +282,7 @@ export function registerSourceRoutes(
       mentions: body.mentions,
       keywords: body.keywords,
       lookbackHours: body.lookbackHours,
+      monthlyReadBudget: body.monthlyReadBudget ?? DEFAULT_X_MONTHLY_READ_BUDGET,
     });
     if (!validated.ok) {
       return reply
@@ -294,6 +300,7 @@ export function registerSourceRoutes(
         mentions: body.mentions ?? [],
         keywords: body.keywords ?? [],
         lookbackHours: body.lookbackHours ?? 24,
+        monthlyReadBudget: body.monthlyReadBudget ?? DEFAULT_X_MONTHLY_READ_BUDGET,
       },
     });
   });
@@ -1010,12 +1017,54 @@ export function registerSourceRoutes(
   app.get("/api/v1/source-identities", { preHandler: authed }, async () => {
     const identities = await ctx.db.select().from(sourceIdentities).limit(100);
     const policies = await ctx.db.select().from(sourceIdentityPolicies).limit(200);
+    const latestPolicy = new Map<string, (typeof policies)[number]>();
+    for (const policy of policies) {
+      if (!policy.active) {
+        continue;
+      }
+      const current = latestPolicy.get(policy.identityId);
+      if (!current || policy.revision > current.revision) {
+        latestPolicy.set(policy.identityId, policy);
+      }
+    }
+    const identityIds = identities.map((item) => item.id);
+    const claimRows =
+      identityIds.length === 0
+        ? []
+        : await ctx.db
+            .select({
+              identityId: claimEvidence.sourceIdentityId,
+              claimId: claimEvidence.claimId,
+              publishedAt: evidenceItems.publishedAt,
+            })
+            .from(claimEvidence)
+            .innerJoin(evidenceItems, eq(claimEvidence.evidenceId, evidenceItems.id))
+            .where(inArray(claimEvidence.sourceIdentityId, identityIds))
+            .limit(MAX_IDENTITY_TRACK_ROWS);
+    const observations: IdentityClaimObservation[] = [];
+    for (const row of claimRows) {
+      if (!row.identityId || !row.publishedAt) {
+        continue;
+      }
+      observations.push({
+        identityId: row.identityId,
+        claimId: row.claimId,
+        publishedAt: row.publishedAt,
+        trustTier: (latestPolicy.get(row.identityId)?.trustTier ?? "unknown") as TrustTier,
+      });
+    }
+    const tracks = computeIdentityTrackRecords(observations);
+    const byId = new Map(identities.map((item) => [item.id, item]));
     return {
       identities: identities.map((identity) => ({
         ...identity,
-        policy: policies
-          .filter((item) => item.identityId === identity.id && item.active)
-          .sort((left, right) => right.revision - left.revision)[0],
+        parentExternalId: identity.parentId ? byId.get(identity.parentId)?.externalId : undefined,
+        policy: latestPolicy.get(identity.id),
+        trackRecord: tracks.get(identity.id) ?? {
+          claims: 0,
+          laterCorroborated: 0,
+          medianLeadHours: null,
+        },
       })),
     };
   });

@@ -179,6 +179,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Configure X" }).click();
   await expect(page.getByRole("heading", { name: "Add X source" })).toBeVisible();
   await expect(page.getByText("Recent search only", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Monthly read budget")).toBeVisible();
+  await expect(page.getByText(/Named principals/i)).toBeVisible();
   await page.getByRole("link", { name: "Portfolios" }).click();
   await expect(page.getByText(/Never enter a seed phrase/i)).toBeVisible();
   await page.getByRole("link", { name: "Signals" }).click();

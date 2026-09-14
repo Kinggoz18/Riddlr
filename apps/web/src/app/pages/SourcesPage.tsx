@@ -26,7 +26,9 @@ type IdentityRow = {
   externalId: string;
   displayName?: string | null;
   hostname?: string | null;
+  parentExternalId?: string | null;
   policy?: { trustTier: string; allowedUses: string[] };
+  trackRecord?: { claims: number; laterCorroborated: number; medianLeadHours: number | null };
 };
 
 type HostPolicyRow = {
@@ -119,12 +121,12 @@ const ADAPTERS = [
   {
     id: "discord",
     name: "Discord",
-    body: "Recent channel messages. You can add more than one Discord source.",
+    body: "Recent channel messages, embeds, and archived public threads. You can add more than one Discord source.",
   },
   {
     id: "x",
     name: "X",
-    body: "Recent search only. Authors, mentions, and keywords.",
+    body: "Named-principal recent search only. Authors required. Spend-capped.",
   },
   {
     id: "coingecko",
@@ -343,8 +345,10 @@ function IdentityPolicies() {
       <Card>
         <h2>Source identities</h2>
         <p className="field-note">
-          Trust is assigned to a publisher, X actor, or Discord author—not to the platform. X and
-          Discord are not authoritative by family.
+          Trust is assigned to a publisher, X actor, Discord author, or Discord channel—not to the
+          platform. X, Discord, and feeds are claim sources only. Set channel trust on the channel
+          identity; authors without their own policy inherit it. Track records show how often that
+          identity’s claims were later corroborated by an official or known-analyst source.
         </p>
         {identities.length === 0 ? (
           <EmptyState
@@ -359,8 +363,16 @@ function IdentityPolicies() {
                   {identity.displayName || identity.externalId}
                   <small>
                     {identity.platform}
-                    {identity.hostname ? ` · ${identity.hostname}` : ""} ·{" "}
+                    {identity.hostname ? ` · ${identity.hostname}` : ""}
+                    {identity.parentExternalId ? ` · channel ${identity.parentExternalId}` : ""} ·{" "}
                     {(identity.policy?.trustTier ?? "unknown").replaceAll("_", " ")}
+                    {identity.trackRecord && identity.trackRecord.claims > 0
+                      ? ` · ${identity.trackRecord.laterCorroborated} of ${identity.trackRecord.claims} later corroborated${
+                          identity.trackRecord.medianLeadHours == null
+                            ? ""
+                            : ` · median lead ${identity.trackRecord.medianLeadHours}h`
+                        }`
+                      : ""}
                   </small>
                 </span>
                 <select
@@ -1222,7 +1234,7 @@ function DiscordForm() {
     <>
       <PageHeader
         title="Add Discord source"
-        description="Requires MESSAGE_CONTENT, VIEW_CHANNEL and READ_MESSAGE_HISTORY. Add another Discord source for a second server."
+        description="Requires MESSAGE_CONTENT, VIEW_CHANNEL and READ_MESSAGE_HISTORY. Embeds, archived public threads, and reaction counts are ingested. Add another Discord source for a second server."
         actions={<SourcesSubnav />}
       />
       <Card>
@@ -1331,14 +1343,14 @@ function DiscordForm() {
           </Field>
           <Field
             label="Lookback hours"
-            hint="1–24. Discord does not provide message-search archive access here."
+            hint="1–72. Word-boundary keywords only. Discord does not provide message-search archive access here."
           >
             <input
               id="discord-lookback-hours"
               name="discord-lookback-hours"
               type="number"
               min={1}
-              max={24}
+              max={72}
               autoComplete="off"
               value={lookbackHours}
               onChange={(e) => setLookbackHours(e.target.value)}
@@ -1370,9 +1382,9 @@ function XForm() {
   const [xName, setXName] = useState("X");
   const [bearerToken, setBearerToken] = useState("");
   const [authors, setAuthors] = useState<string[]>([]);
-  const [mentions, setMentions] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [xLookbackHours, setXLookbackHours] = useState("24");
+  const [monthlyReadBudget, setMonthlyReadBudget] = useState("5000");
   const [notes, setNotes] = useState<string>();
   useEffect(() => {
     void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
@@ -1383,7 +1395,7 @@ function XForm() {
     <>
       <PageHeader
         title="Add X source"
-        description="Recent search only. Availability depends on your X API plan."
+        description="Named-principal recent search only. Authors are required. Availability depends on your X API plan and remaining credits."
         actions={<SourcesSubnav />}
       />
       <Card>
@@ -1399,9 +1411,9 @@ function XForm() {
                   name: xName,
                   bearerToken,
                   authors,
-                  mentions,
                   keywords,
                   lookbackHours: Number(xLookbackHours),
+                  monthlyReadBudget: Number(monthlyReadBudget),
                 }),
               });
               toast("X saved");
@@ -1429,7 +1441,10 @@ function XForm() {
               required
             />
           </Field>
-          <Field label="Authors" hint="Accounts to follow. Type a handle and press Enter.">
+          <Field
+            label="Authors"
+            hint="Named principals, max 30. Mentions-only sources are rejected. Type a handle and press Enter."
+          >
             <ChipInput
               id="authors"
               values={authors}
@@ -1442,20 +1457,7 @@ function XForm() {
               format={(value) => `@${value.replace(/^@/, "")}`}
             />
           </Field>
-          <Field label="Mentions" hint="Posts that mention these accounts.">
-            <ChipInput
-              id="mentions"
-              values={mentions}
-              onChange={setMentions}
-              placeholder="@username"
-              normalize={(raw) => {
-                const handle = raw.trim().replace(/^@/, "");
-                return /^[A-Za-z0-9_]{1,15}$/.test(handle) ? handle : undefined;
-              }}
-              format={(value) => `@${value.replace(/^@/, "")}`}
-            />
-          </Field>
-          <Field label="Keywords">
+          <Field label="Keywords" hint="Optional. ANDed with the author watchlist, not ORed.">
             <ChipInput
               id="x-search-keywords"
               values={keywords}
@@ -1465,7 +1467,7 @@ function XForm() {
           </Field>
           <Field
             label="Lookback hours"
-            hint="1–168. Recent search only; archive search is not used."
+            hint="Used until the first successful fetch. After that, start_time is the last success, never earlier than 7 days. Archive search is not used."
           >
             <input
               id="x-lookback-hours"
@@ -1474,6 +1476,20 @@ function XForm() {
               max={168}
               value={xLookbackHours}
               onChange={(e) => setXLookbackHours(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Monthly read budget"
+            hint="Default 5,000. Ceiling 40,000. Polling stops when this many posts have been returned this UTC month."
+          >
+            <input
+              id="x-monthly-read-budget"
+              type="number"
+              min={10}
+              max={40000}
+              value={monthlyReadBudget}
+              onChange={(e) => setMonthlyReadBudget(e.target.value)}
+              required
             />
           </Field>
           <p className="ui-actions">
@@ -1671,7 +1687,6 @@ function SourceDetail() {
     : [];
   const keywords = Array.isArray(config.keywords) ? config.keywords.map(String) : [];
   const authors = Array.isArray(config.authors) ? config.authors.map(String) : [];
-  const mentions = Array.isArray(config.mentions) ? config.mentions.map(String) : [];
   const assetIds = Array.isArray(config.assetIds)
     ? config.assetIds.map((item) => `coingecko:${String(item).replace(/^coingecko:/, "")}`)
     : [];
@@ -1723,10 +1738,14 @@ function SourceDetail() {
         <Card>
           <h2>Authors</h2>
           <ChipList values={authors} format={handleLabel} empty="None" />
-          <h2>Mentions</h2>
-          <ChipList values={mentions} format={handleLabel} empty="None" />
           <h2>Keywords</h2>
           <ChipList values={keywords} empty="None" />
+          <p className="field-note">
+            Monthly read budget{" "}
+            {typeof config.monthlyReadBudget === "number" ? config.monthlyReadBudget : 5000}. Last
+            successful fetch{" "}
+            {typeof config.lastSuccessAt === "string" ? config.lastSuccessAt : "none yet"}.
+          </p>
         </Card>
       ) : null}
       {row.adapterId === "feeds" ? (

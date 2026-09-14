@@ -1,5 +1,5 @@
 import { decryptSecretWithKeys } from "@riddlr/crypto";
-import { agentSources, agents, encryptedSecrets, sources } from "@riddlr/db";
+import { agentSources, agents, encryptedSecrets, sourceFetchRequests, sources } from "@riddlr/db";
 import { takeBounded } from "@riddlr/domain";
 import {
   createCoinGeckoAdapter,
@@ -7,7 +7,7 @@ import {
   createCryptoComAdapter,
   type SourceAdapter,
 } from "@riddlr/source-adapters";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, sum } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 
 export const MARKET_DATA_ADAPTER_IDS = ["coingecko", "coinmarketcap", "cryptocom"] as const;
@@ -114,6 +114,20 @@ export async function sourceRuntimeConfig(
     purpose: secret.purpose,
     aad: `${secret.purpose}|${secret.keyVersion}`,
   });
+  if (row.adapterId === "x") {
+    const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+    const [{ value } = { value: null }] = await ctx.db
+      .select({ value: sum(sourceFetchRequests.evidenceCount) })
+      .from(sourceFetchRequests)
+      .where(
+        and(
+          eq(sourceFetchRequests.sourceId, row.id),
+          eq(sourceFetchRequests.adapterId, "x"),
+          gte(sourceFetchRequests.startedAt, monthStart),
+        ),
+      );
+    runtime.monthlyReadsUsed = Number(value ?? 0);
+  }
   return runtime;
 }
 

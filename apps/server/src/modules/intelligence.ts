@@ -157,6 +157,11 @@ export async function loadTrustMaps(ctx: AppContext) {
     .from(sourceIdentityPolicies)
     .where(eq(sourceIdentityPolicies.active, true))
     .limit(500);
+  const identityParents = await ctx.db
+    .select({ id: sourceIdentities.id, parentId: sourceIdentities.parentId })
+    .from(sourceIdentities)
+    .limit(500);
+  const parentById = new Map(identityParents.map((row) => [row.id, row.parentId] as const));
   const hosts = await ctx.db.select().from(publisherHostPolicies).limit(256);
   const byIdentity = new Map<string, TrustSnapshot>();
   for (const row of identityPolicies) {
@@ -188,6 +193,13 @@ export async function loadTrustMaps(ctx: AppContext) {
         const hit = byIdentity.get(identityId);
         if (hit) {
           return hit;
+        }
+        const parentId = parentById.get(identityId);
+        if (parentId) {
+          const parentHit = byIdentity.get(parentId);
+          if (parentHit) {
+            return parentHit;
+          }
         }
       }
       if (hostname) {

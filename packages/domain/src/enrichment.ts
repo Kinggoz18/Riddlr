@@ -154,7 +154,10 @@ export function trustAllowsUse(
   if (use === "analysis") {
     return true;
   }
-  if (use === "early_warning" || use === "confirmation") {
+  if (use === "early_warning") {
+    return tier === "official_firsthand" || tier === "known_analyst";
+  }
+  if (use === "confirmation") {
     return tier === "official_firsthand";
   }
   return false;

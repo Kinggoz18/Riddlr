@@ -1,5 +1,6 @@
 import type { MarketObservation } from "./domain-module.js";
 import { type EvidenceRole, lineageOriginKey } from "./evidence.js";
+import { isCommunitySocialEvidence } from "./identity.js";
 import { takeBounded } from "./limits.js";
 import type { ContentCompleteness, ReliabilityStatus, TrustTier } from "./reliability.js";
 import type { SkillApplicabilityFacts, SkillDataKind } from "./skill-catalog.js";
@@ -21,6 +22,7 @@ export type EventFacts = {
   portfolioOverlap: boolean;
   hasAuthoritativePrimary: boolean;
   hasTrustedFirsthand: boolean;
+  communitySocialOnly: boolean;
   independentOriginCount: number;
   independentActorCount: number;
   retractingCount?: number;
@@ -243,6 +245,14 @@ export function buildEventFacts(input: {
   const headlineMismatch = input.evidence.some((item) => item.headlineMismatch);
   const retractingCount = input.evidence.filter((item) => item.retracting).length;
   const hasTrustedFirsthand = independent.some((item) => item.trustTier === "official_firsthand");
+  const hasAuthoritativePrimary = independent.some(
+    (item) => item.trustTier === "official_firsthand" || item.trustTier === "known_analyst",
+  );
+  const communitySocialOnly =
+    input.evidence.length > 0 &&
+    input.evidence.every((item) =>
+      isCommunitySocialEvidence({ sourceFamily: item.sourceFamily, trustTier: item.trustTier }),
+    );
   const text = input.evidence.map((item) => item.text).join("\n");
   const change = numberObservation(input.observations, "price_change_24h");
   const volume = numberObservation(input.observations, "quoted_volume");
@@ -271,8 +281,9 @@ export function buildEventFacts(input: {
     assetIds: input.assets.map((item) => item.canonicalId),
     watchlistOverlap: input.watchlistOverlap,
     portfolioOverlap: input.portfolioOverlap,
-    hasAuthoritativePrimary: hasTrustedFirsthand,
+    hasAuthoritativePrimary,
     hasTrustedFirsthand,
+    communitySocialOnly,
     contentCompleteness: completeness,
     hasValidatedClaim,
     priceChangePct: change,
@@ -341,6 +352,7 @@ export function formatAnalysisFacts(facts: EventFacts): string[] {
     `Content completeness: ${facts.contentCompleteness}`,
     `Validated claim: ${facts.hasValidatedClaim ? "yes" : "none"}`,
     `Trusted firsthand: ${facts.hasTrustedFirsthand ? "yes" : "no"}`,
+    `Community social only: ${facts.communitySocialOnly ? "yes" : "no"}`,
     `Primary evidence: ${facts.primaryCount}`,
     `Derived reprints: ${facts.derivedCount}`,
     `Contradicting evidence: ${facts.contradictingCount}`,

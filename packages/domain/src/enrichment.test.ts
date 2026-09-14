@@ -56,6 +56,8 @@ describe("enrichment eligibility", () => {
     expect(trustAllowsUse("unknown", "discovery")).toBe(true);
     expect(trustAllowsUse("community", "early_warning")).toBe(false);
     expect(trustAllowsUse("official_firsthand", "early_warning")).toBe(true);
+    expect(trustAllowsUse("known_analyst", "early_warning")).toBe(true);
+    expect(trustAllowsUse("known_analyst", "confirmation")).toBe(false);
     expect(trustAllowsUse("blocked", "analysis")).toBe(false);
     expect(trustAllowsUse("community", "analysis", ["discovery"])).toBe(false);
     expect(trustAllowsUse("community", "analysis", ["discovery", "analysis"])).toBe(true);

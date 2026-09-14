@@ -1,0 +1,5 @@
+{
+  "title": "CreditsDepleted",
+  "detail": "Your enrolled account does not have any credits to fulfill this request.",
+  "status": 402
+}

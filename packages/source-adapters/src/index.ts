@@ -43,8 +43,11 @@ export {
   createDiscordAdapter,
   DISCORD_BOT_PERMISSIONS,
   discordBotInviteUrl,
+  joinDiscordEmbeds,
   MAX_DISCORD_CHANNELS,
   MAX_DISCORD_LOOKBACK_HOURS,
+  matchesDiscordKeywords,
+  parseDiscordArchivedThreads,
   parseDiscordMessages,
   snowflakeFromDate,
 } from "./discord.js";
@@ -162,10 +165,14 @@ export {
 } from "./types.js";
 export {
   buildRecentSearchQuery,
+  clampXMonthlyReadBudget,
   createXAdapter,
+  MAX_X_AUTHORS,
   MAX_X_LOOKBACK_HOURS,
+  MAX_X_PAGES,
   MAX_X_RESULTS,
   parseXSearchPayload,
   X_API_BASE,
   X_RECENT_SEARCH_PATH,
+  X_TWEET_FIELDS,
 } from "./x.js";

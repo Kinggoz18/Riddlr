@@ -311,30 +311,24 @@ export const discordSourceSchema = z.object({
     .max(8)
     .optional(),
   keywords: z.array(z.string().min(2).max(48)).max(16).optional(),
-  lookbackHours: z.number().int().min(1).max(24).optional(),
+  lookbackHours: z.number().int().min(1).max(72).optional(),
 });
 
-export const xSourceSchema = z
-  .object({
-    name: z.string().min(3).max(80).default("X"),
-    bearerToken: z.string().min(8).max(512),
-    authors: z
-      .array(z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/))
-      .max(8)
-      .optional(),
-    mentions: z
-      .array(z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/))
-      .max(8)
-      .optional(),
-    keywords: z.array(z.string().min(2).max(48)).max(16).optional(),
-    lookbackHours: z.number().int().min(1).max(168).optional(),
-  })
-  .refine(
-    (value) =>
-      (value.authors?.length ?? 0) + (value.mentions?.length ?? 0) + (value.keywords?.length ?? 0) >
-      0,
-    { message: "Provide authors, mentions, or keywords." },
-  );
+export const xSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("X"),
+  bearerToken: z.string().min(8).max(512),
+  authors: z
+    .array(z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/))
+    .min(1)
+    .max(30),
+  mentions: z
+    .array(z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/))
+    .max(8)
+    .optional(),
+  keywords: z.array(z.string().min(2).max(48)).max(16).optional(),
+  lookbackHours: z.number().int().min(1).max(168).optional(),
+  monthlyReadBudget: z.number().int().min(10).max(40_000).optional(),
+});
 
 export const whatsappSetupSchema = z.object({
   accessToken: z.string().min(8).max(512),

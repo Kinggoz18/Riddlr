@@ -524,13 +524,17 @@ export async function runScan(
           blockedHosts: adapter.id === "searxng" ? blockedHosts : undefined,
         });
         if (fetchRequest) {
+          const charged = result.adapterMetadata?.readsCharged;
           await ctx.db
             .update(sourceFetchRequests)
             .set({
               status: result.errors.length && result.evidence.length === 0 ? "failed" : "succeeded",
               errorClass: result.errors[0]?.class,
               finishedAt: new Date(),
-              evidenceCount: result.evidence.length,
+              evidenceCount:
+                typeof charged === "number" && Number.isFinite(charged)
+                  ? charged
+                  : result.evidence.length,
               requestUrl: result.requestUrl ? redactRequestUrl(result.requestUrl) : undefined,
               responseStatus: result.responseStatus,
               adapterMetadata: result.adapterMetadata,
@@ -1206,11 +1210,12 @@ export async function clusterScanEvents(
       watchlistOverlap,
       portfolioOverlap: overlap.length > 0,
       sourcedObservationCount: sourced.length,
-      hasAuthoritativePrimary: facts.hasTrustedFirsthand,
+      hasAuthoritativePrimary: facts.hasAuthoritativePrimary,
       hasTrustedFirsthand: facts.hasTrustedFirsthand,
       contentCompleteness: facts.contentCompleteness,
       hasValidatedClaim: facts.hasValidatedClaim,
       observedAnomaly,
+      communitySocialOnly: facts.communitySocialOnly,
     });
     const discovery = discoverCandidate({
       facts,

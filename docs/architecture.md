@@ -74,9 +74,10 @@ or unlimited), skills, and a watchlist. Coming-soon domains cannot execute. See
 
 Live sources are SearXNG (bundled; one `categories=news` query per watched
 asset plus one general query), RSS/Atom feeds (operator-pasted URLs; more
-than one feed is allowed), Discord (operator-configured bot; more
-than one Discord source is allowed), X (operator-configured recent search with
-bounded `next_token`), opt-in DefiLlama observations (TVL, stablecoins, hacks), opt-in Hyperliquid and
+than one feed is allowed), Discord (operator-configured invited bot; embeds,
+threads, and 72h lookback; more than one Discord source is allowed), X
+(operator-configured named-principal recent search with spend caps and bounded
+`next_token`), opt-in DefiLlama observations (TVL, stablecoins, hacks), opt-in Hyperliquid and
 Binance USD-M Futures perp observations, opt-in Polymarket and Kalshi prediction-market odds, opt-in Snapshot governance proposals, opt-in Alchemy and Helius address-activity webhooks, and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
 seed fills `assets` for watchlist search and text extraction. The observe worker

@@ -1,24 +1,56 @@
-import { takeBounded } from "@riddlr/domain";
+import {
+  clampPositiveInt,
+  DEFAULT_X_MONTHLY_READ_BUDGET,
+  MAX_X_AUTHORS,
+  MAX_X_BODY_BYTES,
+  MAX_X_KEYWORDS,
+  MAX_X_LOOKBACK_HOURS,
+  MAX_X_MONTHLY_READ_BUDGET,
+  MAX_X_PAGES,
+  MAX_X_QUERY_CHARS,
+  MAX_X_RESULTS,
+  MIN_X_MONTHLY_READ_BUDGET,
+  takeBounded,
+} from "@riddlr/domain";
 import {
   classifyHttpStatus,
   type FetchQuery,
   type FetchResult,
+  readBoundedJson,
   type SourceAdapter,
+  type SourceErrorClass,
 } from "./types.js";
 
 export const X_API_BASE = "https://api.x.com/2";
 export const X_RECENT_SEARCH_PATH = "/tweets/search/recent";
-export const MAX_X_AUTHORS = 8;
-export const MAX_X_MENTIONS = 8;
-export const MAX_X_KEYWORDS = 16;
-export const MAX_X_LOOKBACK_HOURS = 168;
-export const MAX_X_RESULTS = 50;
-export const MAX_X_QUERY_CHARS = 512;
+export {
+  DEFAULT_X_MONTHLY_READ_BUDGET,
+  MAX_X_AUTHORS,
+  MAX_X_KEYWORDS,
+  MAX_X_LOOKBACK_HOURS,
+  MAX_X_MONTHLY_READ_BUDGET,
+  MAX_X_PAGES,
+  MAX_X_QUERY_CHARS,
+  MAX_X_RESULTS,
+  MIN_X_MONTHLY_READ_BUDGET,
+};
 export const X_USERNAME_RE = /^@?[A-Za-z0-9_]{1,15}$/;
+export const X_TWEET_FIELDS =
+  "created_at,author_id,lang,public_metrics,referenced_tweets,conversation_id,entities";
+export const X_EXPANSIONS = "author_id,referenced_tweets.id";
+export const X_USER_FIELDS = "username,verified,public_metrics";
 
 const USER_AGENT = "Riddlr/0.5.0 (https://github.com/riddlr/riddlr)";
+const MIN_MAX_RESULTS = 10;
 
-type XUser = { id?: unknown; username?: unknown };
+type XUser = {
+  id?: unknown;
+  username?: unknown;
+  verified?: unknown;
+  public_metrics?: Record<string, unknown>;
+};
+type XUrlEntity = { expanded_url?: unknown; url?: unknown };
+type XCashtag = { tag?: unknown };
 type XTweet = {
   id?: unknown;
   text?: unknown;
@@ -28,24 +60,26 @@ type XTweet = {
   conversation_id?: unknown;
   public_metrics?: Record<string, unknown>;
   referenced_tweets?: Array<{ type?: unknown; id?: unknown }>;
+  entities?: { urls?: unknown; cashtags?: unknown };
 };
 
-function parseUsernames(value: unknown): string[] {
+type SourceError = FetchResult["errors"][number];
+
+function parseUsernames(value: unknown, limit = MAX_X_AUTHORS): string[] {
   const raw = Array.isArray(value) ? value.map((item) => String(item)) : [];
   const unique = [
     ...new Set(
       raw.map((item) => item.trim().replace(/^@/, "")).filter((item) => X_USERNAME_RE.test(item)),
     ),
   ];
-  return takeBounded(unique, MAX_X_AUTHORS);
+  return takeBounded(unique, limit);
 }
 
-function parseKeywords(value: unknown, extra: string): string[] {
+function parseKeywords(value: unknown): string[] {
   const fromConfig = Array.isArray(value) ? value.map((item) => String(item)) : [];
-  const fromQuery = extra.split(/\s+/);
   const unique = [
     ...new Set(
-      [...fromConfig, ...fromQuery]
+      fromConfig
         .map((item) => item.trim())
         .filter((item) => item.length >= 2 && item.length <= 48 && !item.includes(":")),
     ),
@@ -57,27 +91,33 @@ function quoteTerm(term: string): string {
   return /\s/.test(term) ? `"${term.replaceAll('"', "")}"` : term;
 }
 
-export function buildRecentSearchQuery(input: {
-  authors?: unknown;
-  mentions?: unknown;
-  keywords?: unknown;
-  query?: string;
-}): string {
-  const clauses: string[] = [];
+export function clampXMonthlyReadBudget(value: unknown): number {
+  const parsed = clampPositiveInt(value, DEFAULT_X_MONTHLY_READ_BUDGET, MAX_X_MONTHLY_READ_BUDGET);
+  return Math.max(MIN_X_MONTHLY_READ_BUDGET, parsed);
+}
+
+export function buildRecentSearchQuery(input: { authors?: unknown; keywords?: unknown }): {
+  query: string;
+  error?: string;
+} {
   const authors = parseUsernames(input.authors);
-  const mentions = parseUsernames(input.mentions);
-  const keywords = parseKeywords(input.keywords, input.query ?? "");
-  if (authors.length > 0) {
-    clauses.push(`(${authors.map((name) => `from:${name}`).join(" OR ")})`);
+  if (authors.length === 0) {
+    return { query: "", error: "Named-principal authors are required for recent search." };
   }
-  if (mentions.length > 0) {
-    clauses.push(`(${mentions.map((name) => `@${name}`).join(" OR ")})`);
-  }
+  const keywords = parseKeywords(input.keywords);
+  const authorClause = `(${authors.map((name) => `from:${name}`).join(" OR ")})`;
+  const parts = [authorClause, "-is:retweet", "-is:reply", "lang:en"];
   if (keywords.length > 0) {
-    clauses.push(`(${keywords.map(quoteTerm).join(" OR ")})`);
+    parts.push(keywords.map(quoteTerm).join(" "));
   }
-  const joined = clauses.join(" ");
-  return joined.slice(0, MAX_X_QUERY_CHARS);
+  const query = parts.join(" ");
+  if (query.length > MAX_X_QUERY_CHARS) {
+    return {
+      query: "",
+      error: `Recent search query exceeds ${MAX_X_QUERY_CHARS} characters. Reduce authors or keywords.`,
+    };
+  }
+  return { query };
 }
 
 function xHeaders(token: string): HeadersInit {
@@ -87,7 +127,7 @@ function xHeaders(token: string): HeadersInit {
   };
 }
 
-function errorClassForStatus(status: number): FetchResult["errors"][number]["class"] {
+function errorClassForStatus(status: number): SourceErrorClass {
   if (status === 401) {
     return "auth";
   }
@@ -97,8 +137,93 @@ function errorClassForStatus(status: number): FetchResult["errors"][number]["cla
   return classifyHttpStatus(status);
 }
 
+function planErrorMessage(status: number, title: string, detail?: string): string {
+  const body = detail?.trim() || title;
+  if (status === 402) {
+    return `${body} Credits are depleted. Recent search is plan-gated. Archive search is not used.`;
+  }
+  if (status === 403) {
+    return `${body} Recent search is not available on this plan or the app is not enrolled. Archive search is not used.`;
+  }
+  return `${body} Recent search is plan-gated. Archive search is not used.`;
+}
+
+function hostnameFromUrl(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function outboundUrlsFromEntities(entities: XTweet["entities"]): string[] {
+  const urls = Array.isArray(entities?.urls) ? entities.urls : [];
+  const expanded: string[] = [];
+  for (const item of takeBounded(urls, 8)) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const row = item as XUrlEntity;
+    const candidate =
+      typeof row.expanded_url === "string"
+        ? row.expanded_url
+        : typeof row.url === "string"
+          ? row.url
+          : undefined;
+    if (!candidate || !hostnameFromUrl(candidate)) {
+      continue;
+    }
+    expanded.push(candidate);
+  }
+  return expanded;
+}
+
+function cashtagsFromEntities(entities: XTweet["entities"]): string[] {
+  const tags = Array.isArray(entities?.cashtags) ? entities.cashtags : [];
+  const values: string[] = [];
+  for (const item of takeBounded(tags, 8)) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const tag = (item as XCashtag).tag;
+    if (typeof tag === "string" && /^[A-Za-z]{1,10}$/.test(tag)) {
+      values.push(tag.toUpperCase());
+    }
+  }
+  return values;
+}
+
+function looksLikeHtml(payload: unknown, contentType: string | null): boolean {
+  if (contentType?.toLowerCase().includes("text/html")) {
+    return true;
+  }
+  return typeof payload === "string" && /<html[\s>]/i.test(payload);
+}
+
+function startTimeFromConfig(config: Record<string, unknown>, now: Date): Date {
+  const oldest = new Date(now.getTime() - MAX_X_LOOKBACK_HOURS * 60 * 60 * 1000 + 60_000);
+  const lastRaw = config.lastSuccessAt;
+  if (typeof lastRaw === "string" || lastRaw instanceof Date) {
+    const last = lastRaw instanceof Date ? lastRaw : new Date(lastRaw);
+    if (Number.isFinite(last.getTime())) {
+      const clamped = last > now ? now : last;
+      return clamped < oldest ? oldest : clamped;
+    }
+  }
+  const lookbackHours = Math.min(
+    MAX_X_LOOKBACK_HOURS,
+    Math.max(1, Number(config.lookbackHours ?? 24)),
+  );
+  const startTime = new Date(now.getTime() - lookbackHours * 60 * 60 * 1000);
+  return startTime < oldest ? oldest : startTime;
+}
+
 export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchResult {
-  const errors: FetchResult["errors"] = [];
+  const errors: SourceError[] = [];
   if (!payload || typeof payload !== "object") {
     return {
       evidence: [],
@@ -110,6 +235,7 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
   const body = payload as {
     data?: unknown;
     includes?: { users?: unknown };
+    meta?: { result_count?: unknown; next_token?: unknown };
     title?: unknown;
     detail?: unknown;
     status?: unknown;
@@ -123,7 +249,11 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
       errors: [
         {
           class: errorClassForStatus(status),
-          message: `${body.detail ?? body.title} Recent search is plan-gated. Archive search is not used.`,
+          message: planErrorMessage(
+            status,
+            body.title,
+            typeof body.detail === "string" ? body.detail : undefined,
+          ),
         },
       ],
       unresponsiveEngines: [],
@@ -131,15 +261,22 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
   }
   if (Array.isArray(body.errors) && body.errors.length > 0 && !Array.isArray(body.data)) {
     const first = body.errors[0] as { message?: unknown; title?: unknown };
+    const title = String(first?.title ?? "X API rejected recent search.");
+    const message = typeof first?.message === "string" ? first.message : title;
+    const unauthorized = /unauthorized/i.test(title) || /unauthorized/i.test(message);
     errors.push({
-      class: "capability_missing",
-      message: String(first?.message ?? first?.title ?? "X API rejected recent search."),
+      class: unauthorized ? "auth" : "capability_missing",
+      message,
     });
   }
   if (!Array.isArray(body.data)) {
+    const resultCount = body.meta?.result_count;
+    if (resultCount === 0) {
+      return { evidence: [], partial: errors.length > 0, errors, unresponsiveEngines: [] };
+    }
     return {
       evidence: [],
-      partial: errors.length > 0,
+      partial: true,
       errors:
         errors.length > 0
           ? errors
@@ -147,15 +284,15 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
       unresponsiveEngines: [],
     };
   }
-  const users = new Map<string, string>();
+  const users = new Map<string, XUser>();
   const included = Array.isArray(body.includes?.users) ? body.includes.users : [];
   for (const item of takeBounded(included, 100)) {
     if (!item || typeof item !== "object") {
       continue;
     }
     const user = item as XUser;
-    if (typeof user.id === "string" && typeof user.username === "string") {
-      users.set(user.id, user.username);
+    if (typeof user.id === "string") {
+      users.set(user.id, user);
     }
   }
   const evidence: FetchResult["evidence"] = [];
@@ -172,28 +309,40 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
       continue;
     }
     const authorId = typeof tweet.author_id === "string" ? tweet.author_id : undefined;
-    const username = authorId ? users.get(authorId) : undefined;
+    const user = authorId ? users.get(authorId) : undefined;
+    const username = typeof user?.username === "string" ? user.username : undefined;
     const referenced = Array.isArray(tweet.referenced_tweets) ? tweet.referenced_tweets : [];
     const originRef = referenced.find(
-      (item) =>
-        item && (item.type === "retweeted" || item.type === "quoted" || item.type === "replied_to"),
+      (row) =>
+        row && (row.type === "retweeted" || row.type === "quoted" || row.type === "replied_to"),
     );
     const referencedId = typeof originRef?.id === "string" ? originRef.id : undefined;
-    const outbound = [...text.matchAll(/https?:\/\/[^\s]+/g)].map((item) => item[0]);
+    const outbound = outboundUrlsFromEntities(tweet.entities);
+    const cashtags = cashtagsFromEntities(tweet.entities);
+    const extraTags = cashtags
+      .filter((tag) => !text.toLowerCase().includes(`$${tag.toLowerCase()}`))
+      .map((tag) => `$${tag}`)
+      .join(" ");
+    const bodyText = extraTags ? `${text} ${extraTags}` : text;
     evidence.push({
       sourceFamily: "x",
       adapterId: "x",
       externalId: id,
       url: username ? `https://x.com/${username}/status/${id}` : `https://x.com/i/web/status/${id}`,
       title: username ? `@${username}` : `X post ${id}`,
-      bodyText: text,
+      bodyText,
       author: username,
       publishedAt: typeof tweet.created_at === "string" ? new Date(tweet.created_at) : undefined,
       fetchedAt,
       language: typeof tweet.lang === "string" ? tweet.lang : undefined,
       contentCompleteness: "native_complete",
       sourceIdentity: authorId
-        ? { platform: "x", externalId: authorId, displayName: username }
+        ? {
+            platform: "x",
+            externalId: authorId,
+            displayName: username,
+            verifiedBadge: user?.verified === true,
+          }
         : undefined,
       originKey: referencedId ? `x:${referencedId}` : authorId ? `x:${authorId}` : `x:${id}`,
       referencedOriginKey: referencedId ? `x:${referencedId}` : undefined,
@@ -208,6 +357,8 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
           tweet.public_metrics && typeof tweet.public_metrics === "object"
             ? tweet.public_metrics
             : undefined,
+        cashtags,
+        claimKind: "principal_statement",
       },
     });
   }
@@ -216,6 +367,16 @@ export function parseXSearchPayload(payload: unknown, fetchedAt: Date): FetchRes
     partial: errors.length > 0,
     errors,
     unresponsiveEngines: [],
+  };
+}
+
+function emptyResult(errors: SourceError[], extra?: Partial<FetchResult>): FetchResult {
+  return {
+    evidence: [],
+    partial: errors.length > 0,
+    errors,
+    unresponsiveEngines: [],
+    ...extra,
   };
 }
 
@@ -229,7 +390,7 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
       supportsPagination: true,
       supportsDomainFilter: false,
       lookbackNotes:
-        "GET /2/tweets/search/recent covers at most the last 7 days. max_results is 10–100 (Riddlr uses ≤50). Bounded next_token pagination is used. Query length is capped at 512 characters. Archive search (/2/tweets/search/all) is not called. Access depends on the token's X API plan.",
+        "GET /2/tweets/search/recent covers at most the last 7 days. Query is a from: watchlist of at most 30 authors, plus -is:retweet -is:reply lang:en. Keywords are ANDed. max_results is 100. next_token is bounded to 3 pages. start_time is the last successful fetch, never earlier than 7 days. Archive search (/2/tweets/search/all) is not called. Monthly read budget defaults to 5,000.",
       partialResults: true,
     },
     async validate(config) {
@@ -245,30 +406,45 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
         };
       }
       const authors = parseUsernames(config.authors);
-      const mentions = parseUsernames(config.mentions);
-      const keywords = parseKeywords(config.keywords, "");
-      if (authors.length === 0 && mentions.length === 0 && keywords.length === 0) {
+      if (authors.length === 0) {
         return {
           ok: false,
-          message: "Provide authors, mentions, or keywords for recent search.",
+          message:
+            "Named-principal authors are required. Mentions-only and keyword-only sources are rejected.",
+        };
+      }
+      const built = buildRecentSearchQuery({ authors: config.authors, keywords: config.keywords });
+      if (built.error) {
+        return { ok: false, message: built.error };
+      }
+      const budget = Number(config.monthlyReadBudget ?? DEFAULT_X_MONTHLY_READ_BUDGET);
+      if (
+        !Number.isFinite(budget) ||
+        budget < MIN_X_MONTHLY_READ_BUDGET ||
+        budget > MAX_X_MONTHLY_READ_BUDGET
+      ) {
+        return {
+          ok: false,
+          message: `Monthly read budget must be ${MIN_X_MONTHLY_READ_BUDGET}–${MAX_X_MONTHLY_READ_BUDGET}.`,
         };
       }
       return { ok: true, message: "X recent search source looks valid." };
     },
     async healthCheck(config) {
-      const token = String(config.token ?? "");
-      if (token.length < 8) {
-        return { ok: false, message: "Bearer token is required." };
+      const validated = await this.validate(config);
+      if (!validated.ok) {
+        return validated;
       }
-      const query = buildRecentSearchQuery({
-        authors: config.authors,
-        mentions: config.mentions,
-        keywords: config.keywords,
-        query: "",
-      });
+      const used = Number(config.monthlyReadsUsed ?? 0);
+      const budget = clampXMonthlyReadBudget(config.monthlyReadBudget);
+      if (used >= budget) {
+        return { ok: false, message: "Monthly read budget exhausted." };
+      }
+      const token = String(config.token ?? "");
+      const built = buildRecentSearchQuery({ authors: config.authors, keywords: config.keywords });
       const url = new URL(`${X_API_BASE}${X_RECENT_SEARCH_PATH}`);
-      url.searchParams.set("query", query);
-      url.searchParams.set("max_results", "10");
+      url.searchParams.set("query", built.query);
+      url.searchParams.set("max_results", String(MIN_MAX_RESULTS));
       try {
         const response = await fetchImpl(url, {
           headers: xHeaders(token),
@@ -277,11 +453,18 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
         if (response.status === 401) {
           return { ok: false, message: "X rejected the bearer token." };
         }
-        if (response.status === 402 || response.status === 403) {
+        if (response.status === 402) {
           return {
             ok: false,
             message:
-              "Recent search is not available on this X API plan. Riddlr does not call archive search.",
+              "Your enrolled account does not have any credits to fulfill this request. Credits are depleted.",
+          };
+        }
+        if (response.status === 403) {
+          return {
+            ok: false,
+            message:
+              "Recent search is not available on this X API plan or the app is not enrolled. Riddlr does not call archive search.",
           };
         }
         if (!response.ok) {
@@ -296,49 +479,43 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
       }
     },
     async fetch(config, query: FetchQuery) {
-      const validated = await this.validate({
-        ...config,
-        keywords:
-          Array.isArray(config.keywords) && config.keywords.length > 0
-            ? config.keywords
-            : query.query.split(/\s+/).filter(Boolean),
-      });
+      const validated = await this.validate(config);
       if (!validated.ok) {
-        return {
-          evidence: [],
-          partial: true,
-          errors: [{ class: "malformed", message: validated.message }],
-          unresponsiveEngines: [],
-        };
+        return emptyResult([{ class: "malformed", message: validated.message }]);
+      }
+      const budget = clampXMonthlyReadBudget(config.monthlyReadBudget);
+      const used = Math.max(0, Number(config.monthlyReadsUsed ?? 0) || 0);
+      const remaining = budget - used;
+      if (remaining < MIN_MAX_RESULTS) {
+        return emptyResult(
+          [
+            {
+              class: "capability_missing",
+              message: "capability_missing: monthly read budget exhausted",
+            },
+          ],
+          { responseStatus: 402 },
+        );
       }
       const token = String(config.token ?? "");
-      const lookbackHours = Math.min(
-        MAX_X_LOOKBACK_HOURS,
-        Math.max(1, Number(config.lookbackHours ?? 24)),
-      );
-      const startTime = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
-      const oldest = new Date(Date.now() - MAX_X_LOOKBACK_HOURS * 60 * 60 * 1000 + 60_000);
-      const clampedStart = startTime < oldest ? oldest : startTime;
-      const searchQuery = buildRecentSearchQuery({
-        authors: config.authors,
-        mentions: config.mentions,
-        keywords: config.keywords,
-        query: query.query,
-      });
+      const now = new Date();
+      const startTime = startTimeFromConfig(config, now);
+      const built = buildRecentSearchQuery({ authors: config.authors, keywords: config.keywords });
       const url = new URL(`${X_API_BASE}${X_RECENT_SEARCH_PATH}`);
-      url.searchParams.set("query", searchQuery);
+      url.searchParams.set("query", built.query);
       url.searchParams.set(
         "max_results",
-        String(Math.max(10, Math.min(query.limit ?? MAX_X_RESULTS, MAX_X_RESULTS))),
+        String(
+          Math.max(
+            MIN_MAX_RESULTS,
+            Math.min(query.limit ?? MAX_X_RESULTS, MAX_X_RESULTS, remaining),
+          ),
+        ),
       );
-      url.searchParams.set("start_time", clampedStart.toISOString());
-      url.searchParams.set(
-        "tweet.fields",
-        "created_at,author_id,lang,public_metrics,referenced_tweets,conversation_id",
-      );
-      url.searchParams.set("expansions", "author_id,referenced_tweets.id");
-      url.searchParams.set("user.fields", "username");
-      const limit = query.limit ?? MAX_X_RESULTS;
+      url.searchParams.set("start_time", startTime.toISOString());
+      url.searchParams.set("tweet.fields", X_TWEET_FIELDS);
+      url.searchParams.set("expansions", X_EXPANSIONS);
+      url.searchParams.set("user.fields", X_USER_FIELDS);
       const merged: FetchResult = {
         evidence: [],
         partial: false,
@@ -346,8 +523,22 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
         unresponsiveEngines: [],
       };
       let nextToken: string | undefined;
+      let readsCharged = 0;
+      let lastOk = false;
       try {
-        for (let page = 0; page < 3 && merged.evidence.length < limit; page += 1) {
+        for (
+          let page = 0;
+          page < MAX_X_PAGES && merged.evidence.length < (query.limit ?? MAX_X_RESULTS);
+          page += 1
+        ) {
+          if (used + readsCharged + MIN_MAX_RESULTS > budget) {
+            merged.partial = true;
+            merged.errors.push({
+              class: "capability_missing",
+              message: "capability_missing: monthly read budget exhausted",
+            });
+            break;
+          }
           const pageUrl = new URL(url);
           if (nextToken) {
             pageUrl.searchParams.set("next_token", nextToken);
@@ -356,8 +547,9 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
             headers: xHeaders(token),
             signal: AbortSignal.timeout(15_000),
           });
+          merged.responseStatus = response.status;
           if (response.status === 429) {
-            const retryAfter = Number(response.headers.get("x-rate-limit-reset") ?? "0");
+            const retryAfter = response.headers.get("x-rate-limit-reset") ?? "";
             merged.partial = true;
             merged.errors.push({
               class: "rate_limited",
@@ -367,35 +559,84 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
             });
             break;
           }
-          const payload = (await response.json().catch(() => ({
-            title: `HTTP ${response.status}`,
-            status: response.status,
-          }))) as { meta?: { next_token?: string } } & Record<string, unknown>;
+          const length = Number(response.headers.get("content-length") ?? "0");
+          if (Number.isFinite(length) && length > MAX_X_BODY_BYTES) {
+            merged.partial = true;
+            merged.errors.push({
+              class: "too_large",
+              message: "X response exceeded the size bound.",
+            });
+            break;
+          }
+          const contentType = response.headers.get("content-type");
+          let payload: unknown;
+          try {
+            payload = await readBoundedJson(response, MAX_X_BODY_BYTES);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "X body could not be read.";
+            merged.partial = true;
+            if (!response.ok) {
+              merged.errors.push({
+                class: errorClassForStatus(response.status),
+                message: planErrorMessage(response.status, `HTTP ${response.status}`),
+              });
+            } else {
+              merged.errors.push({
+                class: message.includes("size bound") ? "too_large" : "malformed",
+                message,
+              });
+            }
+            break;
+          }
+          if (looksLikeHtml(payload, contentType)) {
+            merged.partial = true;
+            merged.errors.push({ class: "malformed", message: "X returned an HTML body." });
+            break;
+          }
           if (!response.ok) {
-            const parsed = parseXSearchPayload({ ...payload, status: response.status }, new Date());
+            const parsed = parseXSearchPayload(
+              payload && typeof payload === "object"
+                ? { ...(payload as Record<string, unknown>), status: response.status }
+                : { title: `HTTP ${response.status}`, status: response.status },
+              now,
+            );
             merged.errors.push(...parsed.errors);
             merged.partial = true;
             break;
           }
-          const parsed = parseXSearchPayload(payload, new Date());
+          lastOk = true;
+          const parsed = parseXSearchPayload(payload, now);
+          const meta =
+            payload && typeof payload === "object"
+              ? (payload as { meta?: { result_count?: unknown; next_token?: unknown } }).meta
+              : undefined;
+          const pageCount =
+            typeof meta?.result_count === "number" && Number.isFinite(meta.result_count)
+              ? Math.max(0, Math.floor(meta.result_count))
+              : parsed.evidence.length;
+          readsCharged += pageCount;
           merged.evidence.push(...parsed.evidence);
           merged.errors.push(...parsed.errors);
-          nextToken = payload.meta?.next_token;
+          nextToken = typeof meta?.next_token === "string" ? meta.next_token : undefined;
           if (!nextToken) {
             break;
           }
         }
         return {
           ...merged,
-          evidence: takeBounded(merged.evidence, limit),
+          evidence: takeBounded(merged.evidence, query.limit ?? MAX_X_RESULTS),
           partial: merged.partial || merged.errors.length > 0,
           requestUrl: "https://api.x.com/2/tweets/search/recent",
           paginationCursor: nextToken,
-          adapterMetadata: nextToken ? { nextToken } : undefined,
+          adapterMetadata: {
+            ...(nextToken ? { nextToken } : {}),
+            readsCharged,
+            persistConfig: lastOk ? { lastSuccessAt: now.toISOString() } : undefined,
+          },
         };
       } catch (error) {
         return {
-          evidence: takeBounded(merged.evidence, limit),
+          evidence: takeBounded(merged.evidence, query.limit ?? MAX_X_RESULTS),
           partial: true,
           errors: [
             ...merged.errors,
@@ -405,6 +646,7 @@ export function createXAdapter(fetchImpl: typeof fetch = fetch): SourceAdapter {
             },
           ],
           unresponsiveEngines: [],
+          adapterMetadata: { readsCharged },
         };
       }
     },

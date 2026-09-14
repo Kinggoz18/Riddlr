@@ -24,7 +24,7 @@ coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
 backfill, observation poll to series, detectors, and observed events without an
 article, token-budget skip, Discord token encryption and official REST
-polling, X bearer encryption and recent search, RSS/Atom feed create and poll, DefiLlama opt-in poll, Hyperliquid and Binance USD-M Futures opt-in poll, Polymarket and Kalshi opt-in poll, Snapshot opt-in poll, Alchemy and Helius inbound webhooks, SearXNG per-asset news queries, session rotation after 2FA,
+polling, X bearer encryption and named-principal recent search, RSS/Atom feed create and poll, DefiLlama opt-in poll, Hyperliquid and Binance USD-M Futures opt-in poll, Polymarket and Kalshi opt-in poll, Snapshot opt-in poll, Alchemy and Helius inbound webhooks, SearXNG per-asset news queries, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,

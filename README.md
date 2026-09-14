@@ -46,8 +46,8 @@ setup codes expire after 15 minutes. See [Install](docs/install.md).
 - An administrator account with TOTP 2FA and recovery codes
 - An encrypted LLM provider configuration
 - Bundled SearXNG search as the first live source
-- Optional Discord bot source (official HTTP API; more than one Discord source is allowed)
-- Optional X recent-search source (official API, plan-gated)
+- Optional Discord bot source (official HTTP API; embeds and threads; more than one Discord source is allowed)
+- Optional X named-principal recent-search source (official API, spend-capped)
 - One active market-data source at a time: CoinGecko, CoinMarketCap, or Crypto.com Exchange public tickers
 - Read-only portfolios of public addresses and declared holdings
 - The default **Riddlr Intelligence Agent**, the first-run Crypto watcher

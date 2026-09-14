@@ -71,3 +71,15 @@ Captured from live provider responses. Secrets are not present in these files.
 | `helius/enhanced-transfer-drift-missing-signature.json` | Same capture with `signature` removed to represent schema drift | 2026-09-14 |
 | `helius/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
 | `helius/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `discord/message-example.json` | Documented Get Channel Messages example (id `334385199974967042`, content `Supa Hot`) from https://discord.com/developers/docs/resources/message | 2026-09-14 |
+| `discord/message-drift-missing-id.json` | Same documented message with `id` removed to represent schema drift | 2026-09-14 |
+| `discord/archived-thread.json` | Documented public thread channel example (id `41771983423143937`) from https://discord.com/developers/docs/resources/channel | 2026-09-14 |
+| `discord/archived-threads.json` | List Public Archived Threads envelope wrapping that documented thread (`has_more: false`) | 2026-09-14 |
+| `discord/missing-access.json` | Documented Discord JSON error `50001` Missing Access | 2026-09-14 |
+| `discord/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `discord/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `x/credits-depleted.json` | Documented HTTP 402 CreditsDepleted body (`Your enrolled account does not have any credits to fulfill this request.`) | 2026-09-14 |
+| `x/client-forbidden.json` | HTTP 403 recent-search plan gap (`Client Forbidden`) | 2026-09-14 |
+| `x/empty-data.json` | Empty recent-search `data` array with `meta.result_count` 0 | 2026-09-14 |
+| `x/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `x/search-drift-missing-id.json` | Recent-search `data` row with `id` removed to represent schema drift | 2026-09-14 |

@@ -1617,6 +1617,9 @@ describe("setup, auth, and domain persistence", () => {
       if (url.includes("/search")) {
         return Response.json({ results: [] });
       }
+      if (url.includes("/channels/") && url.includes("/threads/archived/public")) {
+        return Response.json({ threads: [], members: [], has_more: false });
+      }
       if (url.includes("/channels/111111111111111111/messages")) {
         return Response.json([
           {
@@ -1647,8 +1650,10 @@ describe("setup, auth, and domain persistence", () => {
       payload: {
         name: "Crypto X",
         bearerToken: token,
+        authors: ["alice"],
         keywords: ["bitcoin"],
         lookbackHours: 24,
+        monthlyReadBudget: 5000,
       },
     });
     expect(created.statusCode).toBe(200);
@@ -1705,6 +1710,8 @@ describe("setup, auth, and domain persistence", () => {
         if (url.includes("api.x.com")) {
           expect(url).toContain("/tweets/search/recent");
           expect(url).not.toContain("search/all");
+          expect(decodeURIComponent(url.replaceAll("+", " "))).toContain("from:alice");
+          expect(decodeURIComponent(url.replaceAll("+", " "))).toContain("-is:retweet");
           return Response.json({
             data: [
               {

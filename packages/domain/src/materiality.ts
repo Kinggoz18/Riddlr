@@ -14,6 +14,7 @@ export type MaterialityInput = {
   contentCompleteness?: ContentCompleteness;
   hasValidatedClaim?: boolean;
   observedAnomaly?: boolean;
+  communitySocialOnly?: boolean;
 };
 
 export type MaterialityDecision = {
@@ -38,7 +39,12 @@ export function isMaterialEvent(input: MaterialityInput): MaterialityDecision {
     return { material: false, reason: "reprint_only" };
   }
   const origins = input.independentOriginCount ?? input.independentHostCount;
-  if (origins >= 2 && complete(input) && input.hasValidatedClaim !== false) {
+  if (
+    !input.communitySocialOnly &&
+    origins >= 2 &&
+    complete(input) &&
+    input.hasValidatedClaim !== false
+  ) {
     return { material: true, reason: "independent_origins" };
   }
   if ((input.hasTrustedFirsthand || input.hasAuthoritativePrimary) && complete(input)) {
@@ -58,6 +64,7 @@ export function isMaterialEvent(input: MaterialityInput): MaterialityDecision {
     }
   }
   if (
+    !input.communitySocialOnly &&
     input.portfolioOverlap &&
     input.independentFamilyCount >= 1 &&
     origins >= 1 &&

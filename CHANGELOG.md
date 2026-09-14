@@ -4,6 +4,15 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- X named-principal recent search: authors required (max 30),
+  `-is:retweet -is:reply lang:en`, optional ANDed keywords, monthly read budget
+  (default 5,000), `entities.urls[].expanded_url`. Discord ingest joins embeds,
+  polls archived public threads (2 pages), stores reaction counts, and uses a
+  72-hour lookback with 5 message pages per channel. Identity track records
+  show later corroboration. Community social evidence cannot open events.
+  See [docs/integrations/x.md](docs/integrations/x.md) and
+  [docs/integrations/discord.md](docs/integrations/discord.md).
+
 - Alchemy and Helius opt-in address-activity webhooks: inbound HMAC (Alchemy)
   and exact Authorization (Helius), labeled addresses, $1M large-transfer
   evidence. Balance snapshots are not shipped. Caddy proxies `/hooks/*` to the

@@ -2,6 +2,8 @@
 
 Riddlr polls Discord through the official HTTP API (`https://discord.com/api/v10`).
 It does not scrape Discord and does not connect to the Gateway for ingestion.
+X and Discord stay **claim sources only**. See
+[integrations/discord.md](../integrations/discord.md).
 
 ## Bot setup
 
@@ -21,22 +23,26 @@ It does not scrape Discord and does not connect to the Gateway for ingestion.
    Portal → General Information) or from the bot token prefix.
 
 Sources → **Add source** → **Configure Discord** accepts a server snowflake,
-included and excluded channel IDs as chips, optional keywords, and a lookback
-of 1–24 hours. Add another Discord source for a second server.
+included and excluded channel IDs as chips, optional word-boundary keywords,
+and a lookback of 1–72 hours. Add another Discord source for a second server.
+
+Set trust on a Discord **channel** identity under Source identities to treat an
+announcements channel as official. Authors without their own policy inherit
+that channel's trust.
 
 ## What the adapter actually fetches
 
-`GET /channels/{channel.id}/messages` returns at most 100 messages per request
-(newest first). Riddlr sends `limit` ≤ 50 and `after` as a snowflake for the
-lookback window. Missing `READ_MESSAGE_HISTORY` returns no messages. This is
-not guild message-search archive access.
+`GET /channels/{channel.id}/messages` returns at most 100 messages per request.
+Riddlr sends `limit` ≤ 100 and `after` as a snowflake for the lookback window,
+paginating at most 5 pages per channel. Archived public threads are listed
+with `GET /channels/{channel.id}/threads/archived/public` (2 pages) and their
+starter messages are polled. Missing `READ_MESSAGE_HISTORY` returns no
+messages. This is not guild message-search archive access.
 
-The adapter persists guild, channel, author, bot/webhook, referenced message,
-and edit timestamps available from the official API. Empty or attachment-only
-messages stay incomplete until supported content is present. Repeats across
-channels in one guild, crossposts, bot relays, and identical external links
-share lineage. An operator may mark an announcements channel or staff author
-as official firsthand under Sources. The platform family `discord` is not
-authoritative.
+Text is `content` plus embed title, description, and fields. Attachment
+metadata (filename, content type) is stored; files are not downloaded.
+Webhook-authored embeds take `referencedOriginKey` from the embed URL host so
+a bot reprint is not an independent origin. `reactions[].count` is stored as
+engagement context.
 
 Official reference: https://docs.discord.com/developers/resources/message
