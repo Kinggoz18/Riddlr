@@ -10,6 +10,22 @@ export {
   textOpposes,
 } from "./analysis-facts.js";
 export {
+  CATALYST_KIND_LABELS,
+  CATALYST_KINDS,
+  CATALYST_SEVERITY_PRIOR,
+  type CatalystKind,
+  claimSatisfiesCatalystContract,
+  isCatalystKind,
+  isQuantitativeCatalyst,
+  isSubjectFreeCatalyst,
+  overlayFirstPassNegation,
+  overlayNormalizedClaimNegation,
+  principalCatalystKindForClaims,
+  QUANTITATIVE_CATALYST_KINDS,
+  SUBJECT_FREE_CATALYST_KINDS,
+  selectPrincipalCatalyst,
+} from "./catalysts.js";
+export {
   assertClaimKind,
   CLAIM_KIND_RE,
   type ClaimCandidate,
@@ -145,6 +161,7 @@ export {
   MAX_ASSET_SEARCH_RESULTS,
   MAX_ASSETS_PER_DOCUMENT,
   MAX_CAIP19_PER_ASSET,
+  MAX_CATALYST_KINDS,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_OBSERVE_BATCH_SIZE,
@@ -294,6 +311,7 @@ export {
   RISK_LEVELS,
   type RiskLevel,
   SIGNAL_JSON_SCHEMA,
+  SIGNAL_SCHEMA_VERSION,
   type SignalOutput,
   signalOutputSchema,
   validateSignalOutput,

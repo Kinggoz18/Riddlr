@@ -12,6 +12,12 @@ function createSyntheticModule(): DomainModule {
     claimKinds() {
       return ["equities:earnings"];
     },
+    mapClaimKindToCatalyst(kind) {
+      if (kind === "equities:earnings" || kind === "earnings_or_guidance") {
+        return "earnings_or_guidance";
+      }
+      return undefined;
+    },
     sourceQuery(input) {
       return input.watchlist.map((item) => item.canonicalId).join(" ") || "listed company news";
     },
@@ -130,6 +136,7 @@ describe("domain module contract", () => {
     expect(module.canonicalizeAsset({ symbol: "TEST" })?.canonicalId).toBe("test:test");
     expect(assets[0]?.canonicalId).toBe("test:testco");
     expect(claims[0]?.kind).toBe("equities:earnings");
+    expect(module.mapClaimKindToCatalyst("equities:earnings")).toBe("earnings_or_guidance");
     expect(
       module.assessImpact({
         claims,

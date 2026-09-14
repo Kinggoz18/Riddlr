@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { CATALYST_KINDS } from "./catalysts.js";
 import type { ReliabilityStatus } from "./reliability.js";
 import { SIGNAL_OUTPUT_KINDS } from "./reliability.js";
+
+export const SIGNAL_SCHEMA_VERSION = "2";
 
 export const RISK_LEVELS = ["low", "moderate", "high", "critical"] as const;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
@@ -18,7 +21,7 @@ export const signalOutputSchema = z
     risk: z.enum(RISK_LEVELS),
     confidence: z.number(),
     assets: z.array(z.string()),
-    eventType: z.string(),
+    eventType: z.enum(CATALYST_KINDS),
     marketContext: z.string(),
     contradictoryEvidence: z.string(),
     invalidationConditions: z.string(),
@@ -62,7 +65,7 @@ export const SIGNAL_JSON_SCHEMA = {
     risk: { type: "string", enum: [...RISK_LEVELS] },
     confidence: { type: "number" },
     assets: { type: "array", items: { type: "string" } },
-    eventType: { type: "string" },
+    eventType: { type: "string", enum: [...CATALYST_KINDS] },
     marketContext: { type: "string" },
     contradictoryEvidence: { type: "string" },
     invalidationConditions: { type: "string" },
@@ -84,6 +87,7 @@ export function validateSignalOutput(
   allowedClaimIds: ReadonlySet<string> = new Set(),
   computedReliability?: ReliabilityStatus,
   claimEvidenceLinks?: ReadonlyMap<string, ReadonlySet<string>>,
+  allowedEventTypes: ReadonlySet<string> = new Set(),
 ): SignalOutput {
   const parsed = signalOutputSchema.safeParse(value);
   if (!parsed.success) {
@@ -117,6 +121,9 @@ export function validateSignalOutput(
   }
   if (parsed.data.confidence < 0 || parsed.data.confidence > 1) {
     throw new InvalidSignalError("Confidence must be between 0 and 1.");
+  }
+  if (allowedEventTypes.size > 0 && !allowedEventTypes.has(parsed.data.eventType)) {
+    throw new InvalidSignalError("Signal eventType is not a catalyst kind on the event.");
   }
   if (
     parsed.data.claimedReliability &&

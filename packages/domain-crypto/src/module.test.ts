@@ -155,20 +155,26 @@ describe("crypto domain module", () => {
     expect(claims).toEqual([]);
   });
 
-  it("extracts a market-move claim from a complete document", () => {
-    const claims = cryptoDomainModule.extractClaims([
-      normalizeEvidence({
-        sourceFamily: "search",
-        adapterId: "searxng",
-        title: "Bitcoin ETF inflows accelerate",
-        bodyText:
-          "Bitcoin demand rose after reported ETF inflows covering US listed products in the latest issuer filing.",
-        fetchedAt: new Date("2026-09-13T00:00:00Z"),
-        url: "https://example.com/bitcoin-etf",
-        contentCompleteness: "full_document",
-      }),
-    ]);
-    expect(claims.some((item) => item.kind === "crypto:market_move")).toBe(true);
+  it("extracts a listing-or-delisting claim from a complete document", () => {
+    const claims = cryptoDomainModule.extractClaims(
+      [
+        normalizeEvidence({
+          sourceFamily: "search",
+          adapterId: "searxng",
+          title: "Bitcoin ETF inflows accelerate",
+          bodyText:
+            "Bitcoin demand rose after reported ETF inflows covering US listed products in the latest issuer filing.",
+          fetchedAt: new Date("2026-09-13T00:00:00Z"),
+          url: "https://example.com/bitcoin-etf",
+          contentCompleteness: "full_document",
+        }),
+      ],
+      CRYPTO_REGISTRY,
+    );
+    expect(claims.some((item) => item.kind === "crypto:listing_or_delisting")).toBe(true);
+    expect(cryptoDomainModule.mapClaimKindToCatalyst("crypto:listing_or_delisting")).toBe(
+      "listing_or_delisting",
+    );
   });
 
   it("does not treat a custody story and an ETF inflow story as the same claim", () => {
@@ -348,6 +354,90 @@ describe("crypto domain module", () => {
           polarity: "asserted",
           modality: "asserted",
           excerpt: "z=4.25 over 20 quoted_volume samples",
+        },
+        evidence,
+      ),
+    ).toBeUndefined();
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "observed_anomaly",
+          predicate: "return_shock",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "z=4.25 over 20 spot_price samples",
+          value: 4.25,
+          unit: "sigma",
+          subjectCanonicalId: "coingecko:bitcoin",
+        },
+        evidence,
+        CRYPTO_REGISTRY,
+      ),
+    ).toBeUndefined();
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "peg_deviation",
+          predicate: "peg_change",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "Tether depegged from the dollar",
+          subjectCanonicalId: "coingecko:tether",
+        },
+        evidence,
+        CRYPTO_REGISTRY,
+      ),
+    ).toBeUndefined();
+    const peg = cryptoDomainModule.normalizeClaim(
+      {
+        kind: "peg_deviation",
+        predicate: "peg_change",
+        polarity: "asserted",
+        modality: "asserted",
+        excerpt: "Tether depegged from the dollar",
+        subjectCanonicalId: "coingecko:tether",
+        value: 0.92,
+        unit: "usd",
+      },
+      evidence,
+      CRYPTO_REGISTRY,
+    );
+    expect(peg?.kind).toBe("crypto:stablecoin_peg_change");
+    expect(peg?.value).toBe(0.92);
+    expect(peg?.unit).toBe("usd");
+    const listing = cryptoDomainModule.normalizeClaim(
+      {
+        kind: "listing_or_delisting",
+        predicate: "listing_or_delisting",
+        polarity: "asserted",
+        modality: "asserted",
+        excerpt: "A model said return_shock.v1 fired at z=4.25 over 20 spot_price samples.",
+        subjectCanonicalId: "coingecko:bitcoin",
+      },
+      evidence,
+      CRYPTO_REGISTRY,
+    );
+    expect(listing?.kind).toBe("crypto:listing_or_delisting");
+    const macro = cryptoDomainModule.normalizeClaim(
+      {
+        kind: "macro_policy_decision",
+        predicate: "macro_policy_decision",
+        polarity: "asserted",
+        modality: "asserted",
+        excerpt: "A model said return_shock.v1 fired at z=4.25 over 20 spot_price samples.",
+      },
+      evidence,
+    );
+    expect(macro?.kind).toBe("crypto:macro_policy_decision");
+    expect(macro?.subjectCanonicalId).toBeUndefined();
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "security_incident",
+          predicate: "security_incident",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "A model said return_shock.v1 fired at z=4.25 over 20 spot_price samples.",
         },
         evidence,
       ),

@@ -42,6 +42,7 @@ export const MAX_RETENTION_DELETE_BATCH = 5_000;
 export const MAX_RETENTION_LOOPS = 40;
 export const OBSERVE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 export const MAX_OBSERVE_BODY_BYTES = 1_000_000;
+export const MAX_CATALYST_KINDS = 32;
 
 export function clampPageSize(value: unknown, fallback = DEFAULT_PAGE_SIZE): number {
   const parsed = Number(value);

@@ -5,6 +5,7 @@ import {
   auditActionLabel,
   auditResourceLabel,
   candidateKindLabel,
+  catalystKindLabel,
   compactMoney,
   DEFAULT_DAILY_TOKEN_BUDGET,
   editClockHour,
@@ -71,6 +72,8 @@ describe("agent labels", () => {
     expect(reliabilityStatusLabel("observed")).toBe("Observed");
     expect(reliabilityStatusLabel("single_source")).toBe("Single source");
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
+    expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
+    expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
   });
 });
 

@@ -1,3 +1,4 @@
+import type { CatalystKind } from "./catalysts.js";
 import type { ClaimCandidate, NormalizedClaim } from "./claims.js";
 import type { NormalizedEvidence } from "./evidence.js";
 import type { AssetClass, MarketDomainId } from "./market-domains.js";
@@ -59,6 +60,7 @@ export type DomainModule = {
   id: MarketDomainId;
   assetClasses: AssetClass[];
   claimKinds(): string[];
+  mapClaimKindToCatalyst(kind: string): CatalystKind | undefined;
   sourceQuery(input: { adapterId: string; watchlist: ExtractedAsset[] }): string;
   canonicalizeAsset(
     input: {

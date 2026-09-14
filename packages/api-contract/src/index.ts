@@ -1,5 +1,6 @@
 import {
   AGENT_SCHEDULES,
+  CATALYST_KINDS,
   MARKET_DOMAIN_IDS,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
@@ -13,6 +14,8 @@ export const dailyTokenBudgetSchema = z
   .min(MIN_DAILY_TOKEN_BUDGET)
   .max(MAX_DAILY_TOKEN_BUDGET)
   .nullable();
+
+export const catalystKindSchema = z.enum(CATALYST_KINDS);
 
 export const errorEnvelopeSchema = z.object({
   error: z.object({

@@ -6,7 +6,7 @@ is ephemeral infrastructure. The LLM is a read-only analyst.
 ## Data path
 
 ```
-Source → Evidence mention → Document (eligible web) → Claims
+Source → Evidence mention → Document (eligible web) → first-pass + understanding → Claims
   → Event (claim-aware cluster) → Reliability + domain impact
   → Analysis (material events) → Validated signal or unverified early warning
   → Dashboard / notification policy
@@ -42,7 +42,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0022](adr/0022-first-run-access.md),
 [ADR 0023](adr/0023-claim-corroboration.md), and
 [ADR 0024](adr/0024-registry-driven-resolution.md), and
-[ADR 0025](adr/0025-observation-layer.md).
+[ADR 0025](adr/0025-observation-layer.md), and
+[ADR 0026](adr/0026-catalyst-taxonomy.md).
 
 ## Trust boundaries
 

@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Cross-domain catalyst taxonomy: full documents use regex as a first pass and
+  cached LLM understanding as the primary claim extractor. Quantitative claims
+  require value and unit. Signal `eventType` is a taxonomy kind. Events and
+  Signals show the kind. See [docs/catalysts.md](docs/catalysts.md).
+
 - Detector findings on a watched asset form a material event with reliability
   `observed` and no web article. The title is the detector claim. Per-event
   observations keep the series point the detector used. See

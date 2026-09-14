@@ -2,10 +2,18 @@ import { Button, Card, EmptyState, PageHeader } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
+import { catalystKindLabel } from "../format.js";
 
 function SignalsPage() {
   const [rows, setRows] = useState<
-    Array<{ id: string; headline: string; risk: string; whyItMatters: string; createdAt: string }>
+    Array<{
+      id: string;
+      headline: string;
+      risk: string;
+      whyItMatters: string;
+      createdAt: string;
+      catalystKind?: string | null;
+    }>
   >([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,6 +52,11 @@ function SignalsPage() {
           <Card key={row.id} className="record-row">
             <NavLink to={`/signals/${row.id}`}>{row.headline}</NavLink>
             <span className="badge danger">{row.risk}</span>
+            {row.catalystKind ? (
+              <p className="record-meta">
+                <span>{catalystKindLabel(row.catalystKind)}</span>
+              </p>
+            ) : null}
             <p>{row.whyItMatters}</p>
           </Card>
         ))}

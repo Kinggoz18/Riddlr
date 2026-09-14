@@ -25,6 +25,9 @@ A domain moves to `supported` only with a real module, adapters, agent profile,
 UI, documentation, and tests.
 
 The registered module owns source-query construction, claim kinds, claim
-normalization, and impact assessment. Generic packages do not embed
+normalization, impact assessment, and the mapping from domain claim kinds onto
+the cross-domain catalyst taxonomy. Generic packages do not embed
 domain-specific search fallbacks. Coming-soon domains cannot start scans,
 enrichment, claim extraction, analysis, or notifications.
+
+See [docs/catalysts.md](catalysts.md).

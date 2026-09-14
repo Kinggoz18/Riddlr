@@ -75,6 +75,7 @@ import {
   type EvidenceRole,
   independenceGraph,
   MARKET_DOMAIN_REGISTRY,
+  MAX_CLAIMS_PER_DOCUMENT,
   ONBOARDING_STEP_COUNT,
   parsePageCursor,
   sourceHostname,
@@ -90,6 +91,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import type { AppContext } from "./context.js";
 import { registerAgentRoutes } from "./modules/agent-api.js";
+import { catalystKindForClaim, catalystKindForEvent } from "./modules/catalyst-api.js";
 import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
 import { observationHealth, registerObservationRoutes } from "./modules/observe.js";
@@ -992,7 +994,43 @@ export async function buildApp(ctx: AppContext) {
           .orderBy(desc(signals.createdAt))
           .limit(limit)
       : await ctx.db.select().from(signals).orderBy(desc(signals.createdAt)).limit(limit);
-    return { signals: rows };
+    const eventIds = [...new Set(rows.map((row) => row.eventId))];
+    const eventMeta =
+      eventIds.length > 0
+        ? await ctx.db
+            .select({ id: events.id, marketDomainId: events.marketDomainId })
+            .from(events)
+            .where(inArray(events.id, eventIds))
+            .limit(limit)
+        : [];
+    const claimKindRows =
+      eventIds.length > 0
+        ? await ctx.db
+            .select({ eventId: eventClaims.eventId, kind: claims.kind })
+            .from(eventClaims)
+            .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+            .where(inArray(eventClaims.eventId, eventIds))
+            .limit(eventIds.length * MAX_CLAIMS_PER_DOCUMENT)
+        : [];
+    const kindsByEvent = new Map<string, string[]>();
+    for (const row of claimKindRows) {
+      const current = kindsByEvent.get(row.eventId) ?? [];
+      current.push(row.kind);
+      kindsByEvent.set(row.eventId, current);
+    }
+    return {
+      signals: rows.map((row) => {
+        const event = eventMeta.find((item) => item.id === row.eventId);
+        return {
+          ...row,
+          catalystKind: catalystKindForEvent(
+            ctx,
+            event?.marketDomainId,
+            kindsByEvent.get(row.eventId) ?? [],
+          ),
+        };
+      }),
+    };
   });
   app.get("/api/v1/signals/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -1031,7 +1069,30 @@ export async function buildApp(ctx: AppContext) {
       )
       .where(eq(signalClaimProofs.signalId, id))
       .limit(32);
-    return { signal, evidence, skillTrace: analysis?.skillTrace, proofLinks };
+    const [event] = await ctx.db
+      .select({ id: events.id, marketDomainId: events.marketDomainId })
+      .from(events)
+      .where(eq(events.id, signal.eventId))
+      .limit(1);
+    const eventClaimKinds = await ctx.db
+      .select({ kind: claims.kind })
+      .from(eventClaims)
+      .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+      .where(eq(eventClaims.eventId, signal.eventId))
+      .limit(MAX_CLAIMS_PER_DOCUMENT);
+    return {
+      signal: {
+        ...signal,
+        catalystKind: catalystKindForEvent(
+          ctx,
+          event?.marketDomainId,
+          eventClaimKinds.map((item) => item.kind),
+        ),
+      },
+      evidence,
+      skillTrace: analysis?.skillTrace,
+      proofLinks,
+    };
   });
   app.get("/api/v1/events", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);
@@ -1059,9 +1120,25 @@ export async function buildApp(ctx: AppContext) {
       assetIds.length > 0
         ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(200)
         : [];
+    const claimKindRows =
+      ids.length > 0
+        ? await ctx.db
+            .select({ eventId: eventClaims.eventId, kind: claims.kind })
+            .from(eventClaims)
+            .innerJoin(claims, eq(eventClaims.claimId, claims.id))
+            .where(inArray(eventClaims.eventId, ids))
+            .limit(ids.length * MAX_CLAIMS_PER_DOCUMENT)
+        : [];
+    const kindsByEvent = new Map<string, string[]>();
+    for (const row of claimKindRows) {
+      const current = kindsByEvent.get(row.eventId) ?? [];
+      current.push(row.kind);
+      kindsByEvent.set(row.eventId, current);
+    }
     return {
       events: rows.map((row) => ({
         ...row,
+        catalystKind: catalystKindForEvent(ctx, row.marketDomainId, kindsByEvent.get(row.id) ?? []),
         assets: assetLinks
           .filter((link) => link.eventId === row.id)
           .map((link) => assetRows.find((asset) => asset.id === link.assetId))
@@ -1236,14 +1313,24 @@ export async function buildApp(ctx: AppContext) {
             .limit(20)
         : [];
     return {
-      event: eventRows[0],
+      event: {
+        ...event,
+        catalystKind: catalystKindForEvent(
+          ctx,
+          event.marketDomainId,
+          claimRows.map((item) => item.kind),
+        ),
+      },
       evidence,
       roles: links,
       observations: observationRows,
       assets: eventAssetRows,
       independence,
       skillTrace: analysis?.skillTrace,
-      claims: claimRows,
+      claims: claimRows.map((item) => ({
+        ...item,
+        catalystKind: catalystKindForClaim(ctx, event.marketDomainId, item.kind),
+      })),
       assessment,
       assessments: assessmentHistory.map((item) => ({
         ...item,

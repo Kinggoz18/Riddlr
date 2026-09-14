@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { ExternalLink } from "../Brand.js";
 import {
   candidateKindLabel,
+  catalystKindLabel,
   epistemicStatusLabel,
   eventStatusLabel,
   independenceCopy,
@@ -22,6 +23,7 @@ function EventDetailPage() {
       materialityReason?: string | null;
       epistemicStatus?: string | null;
       candidateKind?: string | null;
+      catalystKind?: string | null;
       discoveryReason?: string | null;
       reliabilityStatus?: string | null;
       impactLevel?: string | null;
@@ -42,6 +44,7 @@ function EventDetailPage() {
       claimId: string;
       title: string;
       kind: string;
+      catalystKind?: string | null;
       stance: string;
       excerpt?: string | null;
       evidenceId?: string | null;
@@ -96,6 +99,7 @@ function EventDetailPage() {
         {data.event.candidateKind ? (
           <span>{candidateKindLabel(data.event.candidateKind)}</span>
         ) : null}
+        {data.event.catalystKind ? <span>{catalystKindLabel(data.event.catalystKind)}</span> : null}
         {data.event.epistemicStatus ? (
           <span>{epistemicStatusLabel(data.event.epistemicStatus)}</span>
         ) : null}
@@ -172,7 +176,10 @@ function EventDetailPage() {
               <li key={item.claimId}>
                 <span>{item.title}</span>
                 <small>
-                  {item.kind} · {item.stance}
+                  {item.catalystKind
+                    ? catalystKindLabel(item.catalystKind)
+                    : item.kind.replaceAll("_", " ").replaceAll(":", " ")}{" "}
+                  · {item.stance}
                   {item.excerpt ? ` · “${item.excerpt}”` : ""}
                 </small>
               </li>

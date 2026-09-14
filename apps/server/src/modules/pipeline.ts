@@ -73,6 +73,7 @@ import {
   type ReliabilityStatus,
   resolveDailyTokenBudget,
   SIGNAL_JSON_SCHEMA,
+  SIGNAL_SCHEMA_VERSION,
   selectApplicableSkills,
   shouldSkipForDailyTokenBudget,
   skippedSkillNotice,
@@ -1142,6 +1143,7 @@ export async function clusterScanEvents(
             reliability: reliability.status,
             impact: impact.level,
             claimIds,
+            claimKinds: [...new Set(clusterClaims.map((item) => item.kind))],
             earlyWarningsEnabled,
             previousReliability,
             shadowAssessments,
@@ -1361,6 +1363,7 @@ async function maybeAnalyze(
     reliability?: ReliabilityStatus;
     impact?: "informational" | "low" | "moderate" | "high" | "critical";
     claimIds?: string[];
+    claimKinds?: string[];
     earlyWarningsEnabled?: boolean;
     previousReliability?: ReliabilityStatus;
     shadowAssessments?: boolean;
@@ -1459,7 +1462,7 @@ async function maybeAnalyze(
       and(
         eq(analysisCache.provider, provider.kind),
         eq(analysisCache.model, String(settings.model ?? "gpt-4.1-mini")),
-        eq(analysisCache.schemaVersion, "1"),
+        eq(analysisCache.schemaVersion, SIGNAL_SCHEMA_VERSION),
         eq(analysisCache.promptHash, promptHash),
         eq(analysisCache.skillHash, skillHash),
         eq(analysisCache.contextHash, contextHash),
@@ -1502,7 +1505,7 @@ async function maybeAnalyze(
       await ctx.db.insert(analysisCache).values({
         provider: provider.kind,
         model: String(settings.model ?? "gpt-4.1-mini"),
-        schemaVersion: "1",
+        schemaVersion: SIGNAL_SCHEMA_VERSION,
         promptHash,
         skillHash,
         contextHash,
@@ -1529,12 +1532,18 @@ async function maybeAnalyze(
         claimEvidenceLinks.set(link.claimId, current);
       }
     }
+    const allowedEventTypes = new Set(
+      (hint?.claimKinds ?? [])
+        .map((kind) => agentContext.module.mapClaimKindToCatalyst(kind))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+    );
     const signal = validateSignalOutput(
       parsed,
       allowed,
       new Set(hint?.claimIds ?? []),
       hint?.reliability,
       claimEvidenceLinks,
+      allowedEventTypes,
     );
     const material = hint?.material ?? {
       material: true,
@@ -1597,7 +1606,7 @@ async function maybeAnalyze(
     await ctx.db.insert(analyses).values({
       eventId,
       model: String(settings.model ?? "unknown"),
-      schemaVersion: "1",
+      schemaVersion: SIGNAL_SCHEMA_VERSION,
       promptTokens,
       completionTokens,
       latencyMs,
@@ -1727,8 +1736,9 @@ export async function analyzeQueuedEvent(
       ? await ctx.db.select().from(assets).where(inArray(assets.id, assetIds)).limit(50)
       : [];
   const claimRows = await ctx.db
-    .select({ claimId: eventClaims.claimId })
+    .select({ claimId: eventClaims.claimId, kind: claims.kind })
     .from(eventClaims)
+    .innerJoin(claims, eq(eventClaims.claimId, claims.id))
     .where(eq(eventClaims.eventId, eventId))
     .limit(32);
   const agentContext = await loadAgentScanContext(ctx, event.agentId);
@@ -1830,6 +1840,7 @@ export async function analyzeQueuedEvent(
         | "critical"
         | undefined,
       claimIds: claimRows.map((item) => item.claimId),
+      claimKinds: claimRows.map((item) => item.kind),
       earlyWarningsEnabled: await instanceEarlyWarningsEnabled(ctx),
       previousReliability: event.reliabilityStatus as ReliabilityStatus | undefined,
       shadowAssessments: await instanceShadowAssessments(ctx),

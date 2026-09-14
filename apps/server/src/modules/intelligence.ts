@@ -14,8 +14,10 @@ import {
 } from "@riddlr/db";
 import {
   buildUnderstandingPrompt,
+  CATALYST_KINDS,
   CONTENT_UNDERSTANDING_JSON_SCHEMA,
   CONTENT_UNDERSTANDING_SCHEMA_VERSION,
+  claimSatisfiesCatalystContract,
   claimStanceFromExtraction,
   classifyPageHeuristic,
   type DomainModule,
@@ -25,7 +27,9 @@ import {
   excerptOffsets,
   excerptPresent,
   headlineBodyMismatch,
+  MAX_CATALYST_KINDS,
   type NormalizedEvidence,
+  overlayNormalizedClaimNegation,
   preferEvidenceTitle,
   prioritizeEnrichment,
   skipUnderstandingForPageClass,
@@ -335,10 +339,12 @@ async function persistClaimsForEvidence(
   let extracted = module.extractClaims([normalized], registry);
   let attributedToOtherOrigin = false;
   let retracting = false;
+  let extractionVersion = "domain-extract-1";
+  const complete =
+    normalized.contentCompleteness === "full_document" ||
+    normalized.contentCompleteness === "native_complete";
   if (
-    extracted.length === 0 &&
-    (normalized.contentCompleteness === "full_document" ||
-      normalized.contentCompleteness === "native_complete") &&
+    complete &&
     !skipUnderstandingForPageClass(
       classifyPageHeuristic({
         url: row.canonicalUrl ?? undefined,
@@ -349,9 +355,32 @@ async function persistClaimsForEvidence(
     !headlineBodyMismatch(row.title ?? undefined, row.bodyText ?? "")
   ) {
     const understood = await understandEvidence(ctx, module, row, normalized, fetchImpl, registry);
-    extracted = understood.claims;
-    attributedToOtherOrigin = understood.attributedToOtherOrigin;
-    retracting = understood.retracting;
+    if (understood.claims.length > 0) {
+      extracted = overlayNormalizedClaimNegation(understood.claims, extracted, (kind) =>
+        module.mapClaimKindToCatalyst(kind),
+      );
+      attributedToOtherOrigin = understood.attributedToOtherOrigin;
+      retracting = understood.retracting;
+      extractionVersion = "understanding-taxonomy-1";
+    } else {
+      extracted = extracted.filter((claim) =>
+        claimSatisfiesCatalystContract({
+          catalystKind: module.mapClaimKindToCatalyst(claim.kind),
+          subjectCanonicalId: claim.subjectCanonicalId,
+          value: claim.value,
+          unit: claim.unit,
+        }),
+      );
+    }
+  } else {
+    extracted = extracted.filter((claim) =>
+      claimSatisfiesCatalystContract({
+        catalystKind: module.mapClaimKindToCatalyst(claim.kind),
+        subjectCanonicalId: claim.subjectCanonicalId,
+        value: claim.value,
+        unit: claim.unit,
+      }),
+    );
   }
   const content = `${row.title ?? ""}\n${row.bodyText ?? ""}`;
   retracting = retracting || /\b(retract|retraction|we were wrong|correction:)\b/i.test(content);
@@ -385,7 +414,7 @@ async function persistClaimsForEvidence(
         fingerprint: claim.fingerprint,
         title: claim.title,
         policyVersion: module.id,
-        extractionVersion: "domain-extract-1",
+        extractionVersion,
         effectiveStart,
       })
       .onConflictDoNothing()
@@ -449,7 +478,7 @@ async function understandEvidence(
   const prompt = buildUnderstandingPrompt({
     evidenceId: row.id,
     marketDomainId: module.id,
-    claimKinds: module.claimKinds(),
+    claimKinds: takeBounded([...CATALYST_KINDS], MAX_CATALYST_KINDS),
     title: row.title ?? undefined,
     content,
     url: row.canonicalUrl ?? undefined,
@@ -471,7 +500,7 @@ async function understandEvidence(
     const parsed = validateContentUnderstanding(raw, {
       evidenceId: row.id,
       content,
-      allowedClaimKinds: module.claimKinds(),
+      allowedClaimKinds: [...CATALYST_KINDS],
     });
     if (headlineBodyMismatch(row.title ?? undefined, content)) {
       parsed.headlineBodyConsistent = false;
@@ -557,7 +586,7 @@ async function understandEvidence(
     const parsed = validateContentUnderstanding(completion.parsed, {
       evidenceId: row.id,
       content,
-      allowedClaimKinds: module.claimKinds(),
+      allowedClaimKinds: [...CATALYST_KINDS],
     });
     ctx.metrics.aiCalls.inc({ provider: provider.kind, result: "ok" });
     await ctx.db.insert(evidenceUnderstanding).values({

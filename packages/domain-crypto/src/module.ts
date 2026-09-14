@@ -1,5 +1,8 @@
 import {
+  CATALYST_SEVERITY_PRIOR,
+  type CatalystKind,
   canonicalizeFromRegistry,
+  claimSatisfiesCatalystContract,
   claimTitle,
   classifyPageHeuristic,
   DEFAULT_AGENT_DESCRIPTION,
@@ -9,11 +12,13 @@ import {
   type ExtractedAsset,
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
+  isCatalystKind,
   type MarketObservation,
   type NormalizedEvidence,
   RETURN_SHOCK_V1,
   type RegistryAsset,
   resolveEvidenceAssets,
+  selectPrincipalCatalyst,
   takeBounded,
   VOLUME_ANOMALY_V1,
   watchlistSearchQuery,
@@ -72,13 +77,67 @@ export const CRYPTO_CLAIM_KINDS = [
   "crypto:security_incident",
   "crypto:insolvency",
   "crypto:stablecoin_peg_change",
-  "crypto:regulatory_action",
-  "crypto:service_outage",
+  "crypto:token_unlock",
+  "crypto:listing_or_delisting",
   "crypto:market_move",
+  "crypto:governance_proposal",
+  "crypto:regulatory_action",
+  "crypto:sanction",
+  "crypto:macro_policy_decision",
+  "crypto:scheduled_release",
+  "crypto:service_outage",
+  "crypto:material_corporate_event",
+  "crypto:large_transfer",
+  "crypto:market_stress",
+  "crypto:principal_statement",
   "crypto:general_report",
   "crypto:observed_spot_price_anomaly",
   "crypto:observed_quoted_volume_anomaly",
 ] as const;
+
+export const CRYPTO_CLAIM_TO_CATALYST: Record<
+  (typeof CRYPTO_CLAIM_KINDS)[number],
+  CatalystKind | undefined
+> = {
+  "crypto:security_incident": "security_incident",
+  "crypto:insolvency": "insolvency_or_withdrawal_halt",
+  "crypto:stablecoin_peg_change": "peg_deviation",
+  "crypto:token_unlock": "token_unlock",
+  "crypto:listing_or_delisting": "listing_or_delisting",
+  "crypto:market_move": "listing_or_delisting",
+  "crypto:governance_proposal": "governance_proposal",
+  "crypto:regulatory_action": "regulatory_or_legal_action",
+  "crypto:sanction": "sanction",
+  "crypto:macro_policy_decision": "macro_policy_decision",
+  "crypto:scheduled_release": "scheduled_release",
+  "crypto:service_outage": "material_corporate_event",
+  "crypto:material_corporate_event": "material_corporate_event",
+  "crypto:large_transfer": "large_transfer",
+  "crypto:market_stress": "market_stress",
+  "crypto:principal_statement": "principal_statement",
+  "crypto:general_report": undefined,
+  "crypto:observed_spot_price_anomaly": "observed_anomaly",
+  "crypto:observed_quoted_volume_anomaly": "observed_anomaly",
+};
+
+export const CRYPTO_CATALYST_TO_CLAIM: Partial<
+  Record<CatalystKind, (typeof CRYPTO_CLAIM_KINDS)[number]>
+> = {
+  security_incident: "crypto:security_incident",
+  insolvency_or_withdrawal_halt: "crypto:insolvency",
+  peg_deviation: "crypto:stablecoin_peg_change",
+  token_unlock: "crypto:token_unlock",
+  listing_or_delisting: "crypto:listing_or_delisting",
+  governance_proposal: "crypto:governance_proposal",
+  regulatory_or_legal_action: "crypto:regulatory_action",
+  sanction: "crypto:sanction",
+  macro_policy_decision: "crypto:macro_policy_decision",
+  scheduled_release: "crypto:scheduled_release",
+  material_corporate_event: "crypto:material_corporate_event",
+  large_transfer: "crypto:large_transfer",
+  market_stress: "crypto:market_stress",
+  principal_statement: "crypto:principal_statement",
+};
 
 export const CRYPTO_IMPACT_POLICY_VERSION = "crypto-impact-1";
 
@@ -91,6 +150,7 @@ const CLAIM_PATTERNS: Array<{
   kind: (typeof CRYPTO_CLAIM_KINDS)[number];
   predicate: string;
   re: RegExp;
+  quantitative?: boolean;
 }> = [
   {
     kind: "crypto:security_incident",
@@ -106,11 +166,43 @@ const CLAIM_PATTERNS: Array<{
     kind: "crypto:stablecoin_peg_change",
     predicate: "peg_change",
     re: /\bdepeg(?:ged|ging)?\b|\blost (its )?peg\b/i,
+    quantitative: true,
+  },
+  {
+    kind: "crypto:token_unlock",
+    predicate: "token_unlock",
+    re: /\b(token unlock|unlock event|cliff unlock)\b/i,
+    quantitative: true,
+  },
+  {
+    kind: "crypto:listing_or_delisting",
+    predicate: "listing_or_delisting",
+    re: /\b(etf inflows?|inflows accelerate|listed products|listed on|delisted from)\b/i,
+  },
+  {
+    kind: "crypto:governance_proposal",
+    predicate: "governance_proposal",
+    re: /\b(governance proposal|snapshot vote)\b/i,
   },
   {
     kind: "crypto:regulatory_action",
     predicate: "regulatory_action",
-    re: /\b(sec|cftc|doj|ofac|enforcement action)\b/i,
+    re: /\b(sec|cftc|doj|enforcement action)\b/i,
+  },
+  {
+    kind: "crypto:sanction",
+    predicate: "sanction",
+    re: /\b(ofac|sanctioned|sanctions)\b/i,
+  },
+  {
+    kind: "crypto:macro_policy_decision",
+    predicate: "macro_policy_decision",
+    re: /\b(fomc|federal reserve|interest-rate decision)\b/i,
+  },
+  {
+    kind: "crypto:scheduled_release",
+    predicate: "scheduled_release",
+    re: /\b(cpi print|nonfarm payrolls|eia inventory)\b/i,
   },
   {
     kind: "crypto:service_outage",
@@ -118,9 +210,16 @@ const CLAIM_PATTERNS: Array<{
     re: /\b(outage|went down|service disruption)\b/i,
   },
   {
-    kind: "crypto:market_move",
-    predicate: "market_move",
-    re: /\b(etf inflows?|inflows accelerate|listed products)\b/i,
+    kind: "crypto:large_transfer",
+    predicate: "large_transfer",
+    re: /\b(large transfer|whale (?:moved|transfer))\b/i,
+    quantitative: true,
+  },
+  {
+    kind: "crypto:market_stress",
+    predicate: "market_stress",
+    re: /\b(funding rate|open interest|liquidations?)\b/i,
+    quantitative: true,
   },
 ];
 
@@ -130,6 +229,31 @@ function excerptAround(content: string, match: RegExpExecArray | null): string {
   }
   const start = Math.max(0, match.index - 40);
   return content.slice(start, start + 180).trim();
+}
+
+function quantityFromText(content: string): { value: number; unit: string } | undefined {
+  const percent = /(\d+(?:\.\d+)?)\s*(?:%|percent)\b/i.exec(content);
+  if (percent?.[1]) {
+    return { value: Number(percent[1]), unit: "percent" };
+  }
+  const usd = /(?:usd|usdt|\$)\s?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/i.exec(content);
+  if (usd?.[1]) {
+    return { value: Number(usd[1].replaceAll(",", "")), unit: "usd" };
+  }
+  return undefined;
+}
+
+function toCryptoClaimKind(kind: string): (typeof CRYPTO_CLAIM_KINDS)[number] | undefined {
+  if ((CRYPTO_CLAIM_KINDS as readonly string[]).includes(kind)) {
+    if (kind === "crypto:market_move") {
+      return "crypto:listing_or_delisting";
+    }
+    return kind as (typeof CRYPTO_CLAIM_KINDS)[number];
+  }
+  if (isCatalystKind(kind)) {
+    return CRYPTO_CATALYST_TO_CLAIM[kind];
+  }
+  return undefined;
 }
 
 function completeEnough(item: NormalizedEvidence): boolean {
@@ -158,6 +282,18 @@ export const cryptoDomainModule: DomainModule = {
   assetClasses: [...CRYPTO_ASSET_CLASSES],
   claimKinds() {
     return [...CRYPTO_CLAIM_KINDS];
+  },
+  mapClaimKindToCatalyst(kind: string) {
+    if ((CRYPTO_CLAIM_KINDS as readonly string[]).includes(kind)) {
+      return CRYPTO_CLAIM_TO_CATALYST[kind as (typeof CRYPTO_CLAIM_KINDS)[number]];
+    }
+    if (isCatalystKind(kind) && CRYPTO_CATALYST_TO_CLAIM[kind]) {
+      return kind;
+    }
+    if (kind === "observed_anomaly") {
+      return "observed_anomaly";
+    }
+    return undefined;
   },
   sourceQuery(input) {
     const watchlist = input.watchlist.map((item) => ({
@@ -274,12 +410,14 @@ export const cryptoDomainModule: DomainModule = {
         const polarity = negated ? "negated" : "asserted";
         const excerpt = excerptAround(content, match);
         const objectText = match[0];
+        const quantity = pattern.quantitative ? quantityFromText(content) : undefined;
         const fingerprint = fingerprintClaim({
           marketDomainId: "crypto",
           kind: pattern.kind,
           subjectCanonicalId,
           polarity,
           objectText,
+          value: quantity?.value,
           timeBucket,
         });
         const claim = {
@@ -288,6 +426,8 @@ export const cryptoDomainModule: DomainModule = {
           subjectCanonicalId,
           predicate: pattern.predicate,
           objectText,
+          value: quantity?.value,
+          unit: quantity?.unit,
           polarity: polarity as "asserted" | "negated",
           modality: "asserted" as const,
           fingerprint,
@@ -300,16 +440,18 @@ export const cryptoDomainModule: DomainModule = {
     return takeBounded(out, 32);
   },
   normalizeClaim(candidate, evidence, registry: readonly RegistryAsset[] = []) {
-    if (!(CRYPTO_CLAIM_KINDS as readonly string[]).includes(candidate.kind)) {
-      return undefined;
-    }
-    if (candidate.kind === "crypto:general_report") {
+    const domainKind = toCryptoClaimKind(candidate.kind);
+    if (!domainKind || domainKind === "crypto:general_report") {
       return undefined;
     }
     if (
-      candidate.kind === "crypto:observed_spot_price_anomaly" ||
-      candidate.kind === "crypto:observed_quoted_volume_anomaly"
+      domainKind === "crypto:observed_spot_price_anomaly" ||
+      domainKind === "crypto:observed_quoted_volume_anomaly"
     ) {
+      return undefined;
+    }
+    const catalyst = CRYPTO_CLAIM_TO_CATALYST[domainKind];
+    if (!catalyst || catalyst === "observed_anomaly") {
       return undefined;
     }
     if (weakClaimObject(candidate.objectText ?? candidate.excerpt)) {
@@ -317,18 +459,29 @@ export const cryptoDomainModule: DomainModule = {
     }
     const assets = this.extractAssets([evidence], registry);
     const subjectCanonicalId = candidate.subjectCanonicalId ?? assets[0]?.canonicalId;
+    if (
+      !claimSatisfiesCatalystContract({
+        catalystKind: catalyst,
+        subjectCanonicalId,
+        value: candidate.value,
+        unit: candidate.unit,
+      })
+    ) {
+      return undefined;
+    }
     const timeBucket = (evidence.publishedAt ?? evidence.fetchedAt).toISOString().slice(0, 10);
     const fingerprint = fingerprintClaim({
       marketDomainId: "crypto",
-      kind: candidate.kind,
+      kind: domainKind,
       subjectCanonicalId,
       polarity: candidate.polarity,
       objectText: candidate.objectText ?? candidate.predicate,
+      value: candidate.value,
       timeBucket,
     });
     const claim = {
       marketDomainId: "crypto" as const,
-      kind: candidate.kind,
+      kind: domainKind,
       subjectCanonicalId,
       predicate: candidate.predicate,
       objectText: candidate.objectText,
@@ -366,6 +519,10 @@ export const cryptoDomainModule: DomainModule = {
       };
     }
     const kinds = new Set(input.claims.map((item) => item.kind));
+    const catalysts = input.claims
+      .map((item) => this.mapClaimKindToCatalyst(item.kind))
+      .filter((item): item is CatalystKind => Boolean(item));
+    const principal = selectPrincipalCatalyst(catalysts);
     if (kinds.has("crypto:security_incident") || kinds.has("crypto:insolvency")) {
       return {
         level: "critical",
@@ -373,21 +530,28 @@ export const cryptoDomainModule: DomainModule = {
         reasonCodes: ["crypto:security_incident", "crypto:insolvency"],
       };
     }
-    if (kinds.has("crypto:stablecoin_peg_change") && !input.contradicted) {
+    if (
+      (kinds.has("crypto:stablecoin_peg_change") || principal === "peg_deviation") &&
+      !input.contradicted
+    ) {
       return {
         level: "critical",
         reason: "peg_failure",
         reasonCodes: ["crypto:peg_failure"],
       };
     }
-    if (kinds.has("crypto:regulatory_action")) {
+    if (kinds.has("crypto:regulatory_action") || principal === "regulatory_or_legal_action") {
       return {
         level: input.watchlistOverlap || input.portfolioOverlap ? "high" : "moderate",
         reason: "regulatory_action",
         reasonCodes: ["crypto:regulatory_action"],
       };
     }
-    if (kinds.has("crypto:service_outage")) {
+    if (
+      kinds.has("crypto:service_outage") ||
+      kinds.has("crypto:material_corporate_event") ||
+      principal === "material_corporate_event"
+    ) {
       return {
         level: "high",
         reason: "service_outage",
@@ -401,16 +565,22 @@ export const cryptoDomainModule: DomainModule = {
         reasonCodes: ["crypto:stale"],
       };
     }
-    if (kinds.has("crypto:market_move") && (input.watchlistOverlap || input.portfolioOverlap)) {
+    if (
+      (kinds.has("crypto:market_move") ||
+        kinds.has("crypto:listing_or_delisting") ||
+        principal === "listing_or_delisting") &&
+      (input.watchlistOverlap || input.portfolioOverlap)
+    ) {
       return {
         level: "moderate",
         reason: "watchlist_market_move",
-        reasonCodes: ["crypto:market_move"],
+        reasonCodes: ["crypto:listing_or_delisting"],
       };
     }
     if (
       (kinds.has("crypto:observed_spot_price_anomaly") ||
-        kinds.has("crypto:observed_quoted_volume_anomaly")) &&
+        kinds.has("crypto:observed_quoted_volume_anomaly") ||
+        principal === "observed_anomaly") &&
       (input.watchlistOverlap || input.portfolioOverlap)
     ) {
       return {
@@ -418,6 +588,26 @@ export const cryptoDomainModule: DomainModule = {
         reason: "observed_anomaly",
         reasonCodes: ["crypto:observed_anomaly"],
       };
+    }
+    if (principal) {
+      const prior = CATALYST_SEVERITY_PRIOR[principal];
+      if (prior === "critical" || prior === "high") {
+        return {
+          level: prior,
+          reason: principal,
+          reasonCodes: [`crypto:${principal}`],
+        };
+      }
+      if (
+        prior === "moderate" &&
+        (input.watchlistOverlap || input.portfolioOverlap || input.hasTrustedFirsthand)
+      ) {
+        return {
+          level: "moderate",
+          reason: principal,
+          reasonCodes: [`crypto:${principal}`],
+        };
+      }
     }
     if (input.hasTrustedFirsthand && kinds.size > 0 && !kinds.has("crypto:general_report")) {
       return {

@@ -172,6 +172,47 @@ export function reliabilityStatusLabel(status: string) {
   }
 }
 
+export function catalystKindLabel(kind: string) {
+  switch (kind) {
+    case "security_incident":
+      return "Security incident";
+    case "insolvency_or_withdrawal_halt":
+      return "Insolvency or withdrawal halt";
+    case "peg_deviation":
+      return "Peg deviation";
+    case "token_unlock":
+      return "Token unlock";
+    case "listing_or_delisting":
+      return "Listing or delisting";
+    case "governance_proposal":
+      return "Governance proposal";
+    case "regulatory_or_legal_action":
+      return "Regulatory or legal action";
+    case "sanction":
+      return "Sanction";
+    case "macro_policy_decision":
+      return "Macro policy decision";
+    case "scheduled_release":
+      return "Scheduled release";
+    case "insider_transaction":
+      return "Insider transaction";
+    case "material_corporate_event":
+      return "Material corporate event";
+    case "earnings_or_guidance":
+      return "Earnings or guidance";
+    case "large_transfer":
+      return "Large transfer";
+    case "market_stress":
+      return "Market stress";
+    case "observed_anomaly":
+      return "Observed anomaly";
+    case "principal_statement":
+      return "Principal statement";
+    default:
+      return kind.replaceAll("_", " ").replaceAll(":", " ");
+  }
+}
+
 export function candidateKindLabel(kind: string) {
   switch (kind) {
     case "potential_opportunity":

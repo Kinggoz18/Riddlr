@@ -14,7 +14,7 @@ describe("content understanding", () => {
         attributedToOtherOrigin: false,
         claims: [
           {
-            kind: "crypto:market_move",
+            kind: "listing_or_delisting",
             predicate: "market_move",
             polarity: "asserted",
             modality: "asserted",
@@ -25,7 +25,7 @@ describe("content understanding", () => {
       {
         evidenceId: "e1",
         content,
-        allowedClaimKinds: ["crypto:market_move"],
+        allowedClaimKinds: ["listing_or_delisting"],
       },
     );
     expect(parsed.claims).toHaveLength(1);
@@ -42,7 +42,7 @@ describe("content understanding", () => {
           attributedToOtherOrigin: false,
           claims: [
             {
-              kind: "crypto:market_move",
+              kind: "listing_or_delisting",
               predicate: "market_move",
               polarity: "asserted",
               modality: "asserted",
@@ -50,7 +50,7 @@ describe("content understanding", () => {
             },
           ],
         },
-        { evidenceId: "e1", content, allowedClaimKinds: ["crypto:market_move"] },
+        { evidenceId: "e1", content, allowedClaimKinds: ["listing_or_delisting"] },
       ),
     ).toThrow(InvalidUnderstandingError);
   });
@@ -73,7 +73,7 @@ describe("content understanding", () => {
             },
           ],
         },
-        { evidenceId: "e1", content, allowedClaimKinds: ["crypto:market_move"] },
+        { evidenceId: "e1", content, allowedClaimKinds: ["listing_or_delisting"] },
       ),
     ).toThrow(InvalidUnderstandingError);
     expect(() =>
@@ -85,7 +85,7 @@ describe("content understanding", () => {
           attributedToOtherOrigin: false,
           claims: [
             {
-              kind: "crypto:market_move",
+              kind: "listing_or_delisting",
               predicate: "market_move",
               polarity: "asserted",
               modality: "asserted",
@@ -93,7 +93,7 @@ describe("content understanding", () => {
             },
           ],
         },
-        { evidenceId: "e1", content, allowedClaimKinds: ["crypto:market_move"] },
+        { evidenceId: "e1", content, allowedClaimKinds: ["listing_or_delisting"] },
       ),
     ).toThrow(/excerpt/);
   });

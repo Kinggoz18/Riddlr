@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
 import {
   candidateKindLabel,
+  catalystKindLabel,
   dateTime,
   epistemicStatusLabel,
   eventStatusLabel,
@@ -21,6 +22,7 @@ type EventRow = {
   materialityReason?: string | null;
   epistemicStatus?: string | null;
   candidateKind?: string | null;
+  catalystKind?: string | null;
   reliabilityStatus?: string | null;
   impactLevel?: string | null;
   contentCompleteness?: string | null;
@@ -68,6 +70,7 @@ function EventsPage() {
                 <p className="record-meta">
                   <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
                   {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
+                  {row.catalystKind ? <span>{catalystKindLabel(row.catalystKind)}</span> : null}
                   {row.reliabilityStatus ? (
                     <span>{reliabilityStatusLabel(row.reliabilityStatus)}</span>
                   ) : null}

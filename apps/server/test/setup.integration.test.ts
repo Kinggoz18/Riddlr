@@ -682,11 +682,12 @@ describe("setup, auth, and domain persistence", () => {
                     attributedToOtherOrigin: false,
                     claims: [
                       {
-                        kind: "crypto:market_move",
-                        predicate: "market_move",
+                        kind: "listing_or_delisting",
+                        predicate: "listing_or_delisting",
                         polarity: "asserted",
                         modality: "asserted",
                         excerpt: "ETF inflows",
+                        subjectCanonicalId: "coingecko:bitcoin",
                       },
                     ],
                   }),
@@ -714,7 +715,7 @@ describe("setup, auth, and domain persistence", () => {
                   risk: "moderate",
                   confidence: 0.62,
                   assets: ["coingecko:bitcoin"],
-                  eventType: "narrative",
+                  eventType: "listing_or_delisting",
                   marketContext: "Crypto domain context from extracted Bitcoin mentions.",
                   contradictoryEvidence: "No contradictory evidence in this fixture.",
                   invalidationConditions: "Inflows reverse or coverage is retracted.",
@@ -744,6 +745,20 @@ describe("setup, auth, and domain persistence", () => {
       .from(events)
       .where(eq(events.scanId, scan?.id as string));
     expect(firstEvents.some((row) => row.reliabilityStatus === "corroborated")).toBe(true);
+    expect(understandingCalls).toBeGreaterThan(0);
+    const listedEvents = await app.inject({
+      method: "GET",
+      url: "/api/v1/events?limit=50",
+      headers: { cookie },
+    });
+    expect(
+      (
+        listedEvents.json().events as Array<{ catalystKind?: string; reliabilityStatus: string }>
+      ).some(
+        (row) =>
+          row.reliabilityStatus === "corroborated" && row.catalystKind === "listing_or_delisting",
+      ),
+    ).toBe(true);
     const signalRows = await ctx.db.select().from(signals);
     const produced = signalRows.find((row) => row.headline.includes("Bitcoin ETF"));
     expect(produced).toBeDefined();
@@ -1302,7 +1317,7 @@ describe("setup, auth, and domain persistence", () => {
       .returning();
     const before = (await ctx.db.select().from(signals)).length;
     let llmCalled = false;
-    const fetchImpl: typeof fetch = async (input) => {
+    const fetchImpl: typeof fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.includes("api.coingecko.com")) {
         return coinGeckoMarketsResponse();
@@ -1340,8 +1355,39 @@ describe("setup, auth, and domain persistence", () => {
         );
       }
       if (url.includes("/v1/chat/completions") || url.includes("/v1/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          response_format?: { json_schema?: { name?: string } };
+        };
+        if (body.response_format?.json_schema?.name === "content_understanding") {
+          return Response.json({
+            id: "chatcmpl-understanding-budget",
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: "The article reports Bitcoin ETF inflows into US listed products.",
+                    pageClass: "news_report",
+                    headlineBodyConsistent: true,
+                    attributedToOtherOrigin: false,
+                    claims: [
+                      {
+                        kind: "listing_or_delisting",
+                        predicate: "listing_or_delisting",
+                        polarity: "asserted",
+                        modality: "asserted",
+                        excerpt: "ETF inflows",
+                        subjectCanonicalId: "coingecko:bitcoin",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 80, completion_tokens: 40 },
+          });
+        }
         llmCalled = true;
-        throw new Error("LLM must not be called when the token budget is exhausted");
+        throw new Error("analysis LLM must not be called when the token budget is exhausted");
       }
       return new Response("unexpected fetch", { status: 404 });
     };
@@ -1423,10 +1469,39 @@ describe("setup, auth, and domain persistence", () => {
         );
       }
       if (url.includes("/v1/chat/completions")) {
-        llmCalled = true;
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           messages?: Array<{ role?: string; content?: string }>;
+          response_format?: { json_schema?: { name?: string } };
         };
+        if (body.response_format?.json_schema?.name === "content_understanding") {
+          return Response.json({
+            id: "chatcmpl-understanding-unlimited",
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: "The article reports Bitcoin ETF inflows into US listed products.",
+                    pageClass: "news_report",
+                    headlineBodyConsistent: true,
+                    attributedToOtherOrigin: false,
+                    claims: [
+                      {
+                        kind: "listing_or_delisting",
+                        predicate: "listing_or_delisting",
+                        polarity: "asserted",
+                        modality: "asserted",
+                        excerpt: "ETF inflows",
+                        subjectCanonicalId: "coingecko:bitcoin",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 80, completion_tokens: 40 },
+          });
+        }
+        llmCalled = true;
         const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
         const { evidenceIds: ids, claimIds } = proofIdsFromAnalysisPrompt(user);
         return Response.json({
@@ -1447,7 +1522,7 @@ describe("setup, auth, and domain persistence", () => {
                   risk: "moderate",
                   confidence: 0.62,
                   assets: ["coingecko:bitcoin"],
-                  eventType: "narrative",
+                  eventType: "listing_or_delisting",
                   marketContext: "Crypto domain context from extracted Bitcoin mentions.",
                   contradictoryEvidence: "No contradictory evidence in this fixture.",
                   invalidationConditions: "Inflows reverse or coverage is retracted.",
@@ -2118,8 +2193,8 @@ describe("setup, auth, and domain persistence", () => {
     });
     expect(listed.statusCode).toBe(200);
     expect(
-      (listed.json().events as Array<{ reliabilityStatus: string }>).some(
-        (row) => row.reliabilityStatus === "observed",
+      (listed.json().events as Array<{ reliabilityStatus: string; catalystKind?: string }>).some(
+        (row) => row.reliabilityStatus === "observed" && row.catalystKind === "observed_anomaly",
       ),
     ).toBe(true);
 
@@ -2130,7 +2205,12 @@ describe("setup, auth, and domain persistence", () => {
     });
     expect(detail.statusCode).toBe(200);
     expect(detail.json().event.reliabilityStatus).toBe("observed");
-    expect(detail.json().event.materialityReason).toBe("observed_anomaly");
+    expect(detail.json().event.catalystKind).toBe("observed_anomaly");
+    expect(
+      (detail.json().claims as Array<{ catalystKind?: string }>).some(
+        (row) => row.catalystKind === "observed_anomaly",
+      ),
+    ).toBe(true);
     expect((detail.json().observations as unknown[]).length).toBeGreaterThan(0);
 
     await ctx.redis.del(`riddlr:observe:lock:${COINGECKO_SPOT_PROVIDER_ID}`);

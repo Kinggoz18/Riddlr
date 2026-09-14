@@ -8,6 +8,7 @@ import {
   DEFAULT_PAGE_SIZE,
   DEFAULT_REGISTRY_TOP_N,
   MAX_ASSETS_PER_DOCUMENT,
+  MAX_CATALYST_KINDS,
   MAX_OBSERVE_SUBJECTS,
   MAX_PAGE_SIZE,
   MAX_REGISTRY_TOP_N,
@@ -51,5 +52,6 @@ describe("bounded resource limits", () => {
     expect(MAX_OBSERVE_SUBJECTS).toBe(4_000);
     expect(DEFAULT_DETECTOR_WINDOW).toBe(20);
     expect(DEFAULT_DETECTOR_ABS_Z).toBe(3);
+    expect(MAX_CATALYST_KINDS).toBe(32);
   });
 });

@@ -185,6 +185,7 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
     await page.getByRole("link", { name: observed.title }).click();
     await expect(page.getByRole("heading", { name: observed.title })).toBeVisible();
     await expect(page.getByText("Observed", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Observed anomaly").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Sourced observations" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Claims" })).toBeVisible();
     await expect(page.getByText(/https?:\/\//i)).toHaveCount(0);

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { ExternalLink } from "../Brand.js";
+import { catalystKindLabel } from "../format.js";
 
 function SignalDetailPage() {
   const { id } = useParams();
@@ -20,6 +21,7 @@ function SignalDetailPage() {
       epistemicStatus?: string;
       outputKind?: string;
       notifyKind?: string;
+      catalystKind?: string | null;
     };
     evidence: Array<{ id: string; title?: string; canonicalUrl?: string; bodyText?: string }>;
     proofLinks?: Array<{
@@ -59,6 +61,7 @@ function SignalDetailPage() {
       <p className="record-meta">
         <StatusBadge label={s.risk} tone="risk" />
         <span>Confidence {s.confidence}</span>
+        {s.catalystKind ? <span>{catalystKindLabel(s.catalystKind)}</span> : null}
         <span>
           {s.outputKind === "unverified_early_warning" || s.notifyKind === "early_warning"
             ? "Unverified early warning"

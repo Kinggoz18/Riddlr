@@ -12,7 +12,8 @@ materiality, schedules, prompt wrapping, provider adapters, Discord REST
 fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
-CoinGecko simple/price observations, return-shock and volume detectors, and coming-soon rejection. Architecture tests keep generic packages from importing
+CoinGecko simple/price observations, return-shock and volume detectors, catalyst
+taxonomy mapping, quantitative claim contracts, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -26,7 +27,8 @@ article, token-budget skip, Discord token encryption and official REST
 polling, X bearer encryption and recent search, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
-master key, WhatsApp HMAC webhooks, paginated audit/lists, and audit clear.
+master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,
+understanding as the primary claim extractor, and catalyst kinds on event APIs.
 
 `pnpm compose:smoke` waits until Compose answers `/api/v1/setup/status` with
 four steps, five market domains, and local first-run access.
@@ -53,8 +55,9 @@ fixture with a shared outbound Reuters URL is not treated as independent
 corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
-search against a running Compose stack, the Health Observations card, and opening
-an observed quantitative event on Events.
+search against a running Compose stack, the Health Observations card, opening
+an observed quantitative event on Events, and the catalyst kind label on that
+event.
 First-run credentials default to `ops@example.com`. On an already-set-up
 instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
 `RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips
