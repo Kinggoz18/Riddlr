@@ -77,6 +77,8 @@ describe("agent labels", () => {
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
     expect(adapterLabel("feeds")).toBe("RSS/Atom");
     expect(adapterLabel("defillama")).toBe("DefiLlama");
+    expect(adapterLabel("polymarket")).toBe("Polymarket");
+    expect(adapterLabel("kalshi")).toBe("Kalshi");
   });
 });
 

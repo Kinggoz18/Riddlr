@@ -1,0 +1,123 @@
+[
+  {
+    "id": "27824",
+    "slug": "fed-decision-in-october",
+    "ticker": "fed-decision-in-october",
+    "title": "Fed decision in October?",
+    "description": "The FED interest rates are defined in this market by the upper bound of the target federal funds range. The decisions on the target federal fund range are made by the Federal Open Market Committee (FOMC) meetings.\n\nThis market will resolve to the amount of basis points the upper bound of the target federal funds rate is changed by versus the level it was prior to the Federal Reserve's October 2025",
+    "endDate": "2025-10-29T12:00:00Z",
+    "closed": true,
+    "active": true,
+    "volume": 252485550.016563,
+    "tags": [
+      {
+        "id": "100478",
+        "label": "fomc",
+        "slug": "fomc"
+      },
+      {
+        "id": "100215",
+        "label": "All",
+        "slug": "all"
+      },
+      {
+        "id": "100328",
+        "label": "Economy",
+        "slug": "economy"
+      },
+      {
+        "id": "100196",
+        "label": "Fed Rates",
+        "slug": "fed-rates"
+      },
+      {
+        "id": "2",
+        "label": "Politics",
+        "slug": "politics"
+      },
+      {
+        "id": "100477",
+        "label": "powell",
+        "slug": "powell"
+      },
+      {
+        "id": "159",
+        "label": "Fed",
+        "slug": "fed"
+      },
+      {
+        "id": "101550",
+        "label": "Jerome Powell",
+        "slug": "jerome-powell"
+      }
+    ],
+    "markets": [
+      {
+        "id": "553810",
+        "slug": "fed-decreases-interest-rates-by-50-bps-after-october-2025-meeting",
+        "question": "Fed decreases interest rates by 50+ bps after October 2025 meeting?",
+        "closed": true,
+        "active": true,
+        "endDate": "2025-10-29T12:00:00Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "clobTokenIds": "[\"56606480957388905488783515430819601640929432353106353680720689974997213777138\", \"53676785636700157256852250095826025029451888648974703429616395645714952970781\"]",
+        "outcomePrices": "[\"0\", \"1\"]",
+        "volume": "52589989.131546",
+        "volumeNum": 52589989.131546,
+        "bestAsk": 0.001,
+        "oneHourPriceChange": -0.001,
+        "oneDayPriceChange": -0.0055,
+        "groupItemTitle": "50+ bps decrease"
+      },
+      {
+        "id": "553811",
+        "slug": "fed-decreases-interest-rates-by-25-bps-after-october-2025-meeting",
+        "question": "Fed decreases interest rates by 25 bps after October 2025 meeting?",
+        "closed": true,
+        "active": true,
+        "endDate": "2025-10-29T12:00:00Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "clobTokenIds": "[\"78970393675220813117457137074949547635027336958817818487077806376171274244367\", \"39843382223032680172636234017143696377311711066819162700626001781924811983436\"]",
+        "outcomePrices": "[\"1\", \"0\"]",
+        "volume": "51626217.76071",
+        "volumeNum": 51626217.76071,
+        "bestBid": 0.999,
+        "bestAsk": 1,
+        "oneHourPriceChange": 0.002,
+        "oneDayPriceChange": 0.01,
+        "groupItemTitle": "25 bps decrease"
+      },
+      {
+        "id": "553812",
+        "slug": "no-change-in-fed-interest-rates-after-october-2025-meeting",
+        "question": "No change in Fed interest rates after October 2025 meeting?",
+        "closed": true,
+        "active": true,
+        "endDate": "2025-10-29T12:00:00Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "clobTokenIds": "[\"93649474745035786731233919003082633017639813911207879453624389467235918905276\", \"20248532312255939043525932145429175719961770380347060601058184144030320732306\"]",
+        "outcomePrices": "[\"0\", \"1\"]",
+        "volume": "46052653.992844",
+        "volumeNum": 46052653.992844,
+        "bestAsk": 0.001,
+        "oneDayPriceChange": -0.0025,
+        "groupItemTitle": "No change"
+      },
+      {
+        "id": "553813",
+        "slug": "fed-increases-interest-rates-by-25-bps-after-october-2025-meeting",
+        "question": "Fed increases interest rates by 25+ bps after October 2025 meeting?",
+        "closed": true,
+        "active": true,
+        "endDate": "2025-10-29T12:00:00Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "clobTokenIds": "[\"60156625646569576964584621291475860303247825215466310280401996727843189574431\", \"75662380910516595836713877605277832183886163391379455962356909608435996726535\"]",
+        "outcomePrices": "[\"0\", \"1\"]",
+        "volume": "102216689.131463",
+        "volumeNum": 102216689.131463,
+        "bestAsk": 0.001,
+        "groupItemTitle": "25+ bps increase"
+      }
+    ]
+  }
+]

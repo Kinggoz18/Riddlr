@@ -6,6 +6,7 @@ import {
   MAX_DEFILLAMA_CHAIN_SLUGS,
   MAX_DEFILLAMA_PROTOCOL_FETCHES,
   MAX_FEED_POLL_INTERVAL_SECONDS,
+  MAX_PREDICTION_MARKETS,
   MIN_DAILY_TOKEN_BUDGET,
   MIN_FEED_POLL_INTERVAL_SECONDS,
   SETUP_STEPS,
@@ -240,6 +241,26 @@ export const binanceFuturesSourceSchema = z.object({
   quoteAssets: z
     .array(z.string().regex(/^[A-Za-z0-9]{3,8}$/))
     .max(8)
+    .optional(),
+});
+
+export const polymarketSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Polymarket"),
+  marketSlugs: z
+    .array(z.string().regex(/^[A-Za-z0-9._-]{2,128}$/))
+    .max(MAX_PREDICTION_MARKETS)
+    .optional(),
+});
+
+export const kalshiSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Kalshi"),
+  seriesTickers: z
+    .array(z.string().regex(/^[A-Za-z0-9]{2,32}$/))
+    .max(MAX_PREDICTION_MARKETS)
+    .optional(),
+  marketTickers: z
+    .array(z.string().regex(/^[A-Za-z0-9._-]{2,128}$/))
+    .max(MAX_PREDICTION_MARKETS)
     .optional(),
 });
 

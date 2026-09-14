@@ -153,9 +153,10 @@ function HealthPage() {
             </strong>
           </p>
           <p className="field-note">
-            Interval {observations?.intervalSeconds ?? 60}s for CoinGecko spot. DefiLlama (opt-in)
-            polls every 15 minutes. Retention {observations?.retentionDays ?? 90} days then daily
-            downsample. Last poll {observations?.lastPollAt ?? "never"}.
+            Interval {observations?.intervalSeconds ?? 60}s for CoinGecko spot. DefiLlama,
+            Polymarket, and Kalshi (opt-in) poll every 15 minutes. Retention{" "}
+            {observations?.retentionDays ?? 90} days then daily downsample. Last poll{" "}
+            {observations?.lastPollAt ?? "never"}.
           </p>
         </Card>
       </section>
@@ -163,7 +164,7 @@ function HealthPage() {
         <h2>Pinned series</h2>
         <p className="field-note">
           Subjects nobody watches are not polled. Pin a registry asset to keep its series without a
-          watchlist.
+          watchlist. Native ids polymarket:slug and kalshi:TICKER are accepted by the pin API.
         </p>
         <ul className="asset-list">
           {pins.map((pin) => (

@@ -92,6 +92,16 @@ const ADAPTERS = [
     body: "Perp funding, open interest, and liquidations. Opt-in. Public REST, no key. Funding is per 8h; compare venues on annualised APR only.",
   },
   {
+    id: "polymarket",
+    name: "Polymarket",
+    body: "Prediction-market YES odds. Opt-in. Free Gamma and CLOB reads, no key. Pin market slugs. Odds jumps are early warnings until an official document corroborates.",
+  },
+  {
+    id: "kalshi",
+    name: "Kalshi",
+    body: "US-regulated prediction-market odds. Opt-in. Public Trade API, no key. Pin series tickers such as KXCPI. Same odds-jump detector as Polymarket.",
+  },
+  {
     id: "discord",
     name: "Discord",
     body: "Recent channel messages. You can add more than one Discord source.",
@@ -151,7 +161,7 @@ function SourcesList() {
     <>
       <PageHeader
         title="Sources"
-        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama is opt-in observation."
+        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, and Kalshi are opt-in observation."
         actions={<SourcesSubnav />}
       />
       {rows.length === 0 ? (
@@ -361,7 +371,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, and Binance USD-M Futures are single opt-in observation sources."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, and Kalshi are single opt-in observation sources."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -709,6 +719,155 @@ function BinanceFuturesForm() {
           </Field>
           <p className="ui-actions">
             <Button type="submit">Save Binance USD-M Futures source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function PolymarketForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Polymarket");
+  const [marketSlugs, setMarketSlugs] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "polymarket");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Polymarket source"
+        description="Opt-in YES odds from Gamma and CLOB. No API key. Pin market slugs. One events/keyset page suggests watched-asset and macro markets. Odds jumps are early warnings."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/polymarket", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  marketSlugs,
+                }),
+              });
+              toast("Polymarket saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Polymarket"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="polymarket-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Market slugs"
+            hint="Gamma slugs such as fed-rate-hike-in-2026. Cap 50. Also pin polymarket:slug on Health."
+          >
+            <ChipInput
+              id="polymarket-slugs"
+              values={marketSlugs}
+              onChange={setMarketSlugs}
+              placeholder="fed-rate-hike-in-2026"
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Polymarket source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function KalshiForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Kalshi");
+  const [seriesTickers, setSeriesTickers] = useState<string[]>([]);
+  const [marketTickers, setMarketTickers] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "kalshi");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Kalshi source"
+        description="Opt-in US-regulated prediction-market odds. No API key. Pin series tickers such as KXCPI. Preferred for CPI, FOMC, and unemployment. Odds jumps are early warnings."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/kalshi", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  seriesTickers,
+                  marketTickers,
+                }),
+              });
+              toast("Kalshi saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Kalshi"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="kalshi-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Series tickers"
+            hint="Series such as KXCPI. Do not fetch the unfiltered series list. Cap 50."
+          >
+            <ChipInput
+              id="kalshi-series"
+              values={seriesTickers}
+              onChange={setSeriesTickers}
+              placeholder="KXCPI"
+            />
+          </Field>
+          <Field
+            label="Market tickers"
+            hint="Optional individual markets such as KXCPI-26SEP-T0.6. Leave empty to poll every open market in the pinned series."
+          >
+            <ChipInput
+              id="kalshi-markets"
+              values={marketTickers}
+              onChange={setMarketTickers}
+              placeholder="KXCPI-26SEP-T0.6"
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Kalshi source</Button>
           </p>
         </form>
       </Card>
@@ -1109,6 +1268,12 @@ function SourceCreate() {
   if (adapter === "binance-futures") {
     return <BinanceFuturesForm />;
   }
+  if (adapter === "polymarket") {
+    return <PolymarketForm />;
+  }
+  if (adapter === "kalshi") {
+    return <KalshiForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -1298,6 +1463,40 @@ function SourceDetail() {
           <ChipList
             values={Array.isArray(config.quoteAssets) ? config.quoteAssets.map(String) : []}
             empty="USDT, USDC, BUSD"
+          />
+        </Card>
+      ) : null}
+      {row.adapterId === "polymarket" ? (
+        <Card>
+          <h2>Polymarket</h2>
+          <p className="field-note">
+            Free Gamma and CLOB reads, no key. Polls every 15 minutes. Pin slugs here or
+            polymarket:slug on Health. Closed markets are unsubscribed. Odds jumps are early
+            warnings until an official document corroborates.
+          </p>
+          <h2>Market slugs</h2>
+          <ChipList
+            values={Array.isArray(config.marketSlugs) ? config.marketSlugs.map(String) : []}
+            empty="Watchlist and macro suggestions only"
+          />
+        </Card>
+      ) : null}
+      {row.adapterId === "kalshi" ? (
+        <Card>
+          <h2>Kalshi</h2>
+          <p className="field-note">
+            Public Trade API v2, no key. Polls every 15 minutes. Pin series such as KXCPI. Markets
+            listed as status=active still count as open. Never fetch the unfiltered series list.
+          </p>
+          <h2>Series tickers</h2>
+          <ChipList
+            values={Array.isArray(config.seriesTickers) ? config.seriesTickers.map(String) : []}
+            empty="No series pinned"
+          />
+          <h2>Market tickers</h2>
+          <ChipList
+            values={Array.isArray(config.marketTickers) ? config.marketTickers.map(String) : []}
+            empty="Every open market in the pinned series"
           />
         </Card>
       ) : null}

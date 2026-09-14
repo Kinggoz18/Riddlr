@@ -371,6 +371,10 @@ export function adapterLabel(adapterId: string) {
       return "Hyperliquid";
     case "binance-futures":
       return "Binance USD-M Futures";
+    case "polymarket":
+      return "Polymarket";
+    case "kalshi":
+      return "Kalshi";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

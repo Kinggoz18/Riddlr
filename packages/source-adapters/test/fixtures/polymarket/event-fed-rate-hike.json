@@ -1,0 +1,75 @@
+[
+  {
+    "id": "101936",
+    "slug": "fed-rate-hike-in-2026",
+    "ticker": "fed-rate-hike-in-2026",
+    "title": "Fed rate hike in 2026?",
+    "description": "This market will resolve to \u201cYes\u201d if the upper bound of the target federal funds rate is increased at any point between January 1, 2026 and the Fed's December 2026 meeting, currently scheduled for December 8-9, 2026. Otherwise, this market will resolve to \u201cNo\u201d.\n\nThis market may not resolve to \"No\" until the Fed has released its rate change decision following its December meeting.\n\nThe primary reso",
+    "endDate": "2026-12-09T00:00:00Z",
+    "closed": false,
+    "active": true,
+    "liquidity": 190593.1221,
+    "liquidityClob": 190593.1221,
+    "volume": 9308127.036213003,
+    "tags": [
+      {
+        "id": "105614",
+        "label": "CPI Release",
+        "slug": "cpi-release"
+      },
+      {
+        "id": "159",
+        "label": "Fed",
+        "slug": "fed"
+      },
+      {
+        "id": "101800",
+        "label": "Economic Policy",
+        "slug": "economic-policy"
+      },
+      {
+        "id": "101550",
+        "label": "Jerome Powell",
+        "slug": "jerome-powell"
+      },
+      {
+        "id": "100328",
+        "label": "Economy",
+        "slug": "economy"
+      },
+      {
+        "id": "100196",
+        "label": "Fed Rates",
+        "slug": "fed-rates"
+      },
+      {
+        "id": "101250",
+        "label": "Macro Single",
+        "slug": "macro-single"
+      }
+    ],
+    "markets": [
+      {
+        "id": "908713",
+        "slug": "fed-rate-hike-in-2026",
+        "question": "Fed rate hike in 2026?",
+        "closed": false,
+        "active": true,
+        "endDate": "2026-12-09T00:00:00Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "clobTokenIds": "[\"75028752776148090296091099469912621384650554615761384992997579209329182670110\", \"93005850938352995663334573245996733794924636935158112548608169054144721737755\"]",
+        "outcomePrices": "[\"0.905\", \"0.095\"]",
+        "liquidity": "190335.3841",
+        "liquidityNum": 190335.3841,
+        "liquidityClob": 190335.3841,
+        "volume": "9308127.036213003",
+        "volumeNum": 9308127.036213003,
+        "bestBid": 0.9,
+        "bestAsk": 0.91,
+        "oneHourPriceChange": 0.01,
+        "oneDayPriceChange": 0.03,
+        "groupItemTitle": ""
+      }
+    ]
+  }
+]

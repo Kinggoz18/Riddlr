@@ -20,15 +20,16 @@ import {
 } from "@riddlr/db";
 import {
   canonicalizeFromRegistry,
+  type DetectorSpec,
   detectFundingDivergenceForSubject,
   detectMarketStressForSubject,
+  detectOddsJumpForSubject,
   detectorEvidenceFingerprint,
   detectPegDeviationForSubject,
   detectReturnShockForSubject,
   detectTvlDrawdownForSubject,
   detectVolumeAnomalyForSubject,
   excerptHash,
-  FUTURES_NATIVE_SUBJECT_RE,
   fingerprintClaim,
   MAX_OBSERVATIONS_PER_POLL,
   MAX_OBSERVE_PINS,
@@ -37,6 +38,7 @@ import {
   MAX_SERIES_WINDOW,
   normalizeEvidence,
   OBSERVATION_SERIES_ORIGIN_KEY,
+  OBSERVE_NATIVE_SUBJECT_RE,
   type RawEvidence,
   takeBounded,
 } from "@riddlr/domain";
@@ -49,9 +51,13 @@ import {
   createCoinGeckoSpotProvider,
   createDefiLlamaProvider,
   createHyperliquidProvider,
+  createKalshiProvider,
+  createPolymarketProvider,
   DEFILLAMA_PROVIDER_ID,
   HYPERLIQUID_PROVIDER_ID,
+  KALSHI_PROVIDER_ID,
   ObservationProviderRegistry,
+  POLYMARKET_PROVIDER_ID,
   redactRequestUrl,
 } from "@riddlr/source-adapters";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
@@ -73,6 +79,8 @@ export function createObservationProviders(): ObservationProviderRegistry {
   registry.register(createDefiLlamaProvider());
   registry.register(createHyperliquidProvider());
   registry.register(createBinanceFuturesProvider());
+  registry.register(createPolymarketProvider());
+  registry.register(createKalshiProvider());
   return registry;
 }
 
@@ -94,6 +102,19 @@ function providers(ctx: AppContext): ObservationProviderRegistry {
     ctx.observationProviders = createObservationProviders();
   }
   return ctx.observationProviders;
+}
+
+function asCategoryMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof item === "string") {
+      out[key] = item;
+    }
+  }
+  return out;
 }
 
 async function coingeckoTokenHeaders(ctx: AppContext): Promise<Record<string, string>> {
@@ -180,6 +201,23 @@ async function futuresSymbolMap(ctx: AppContext, subjects: readonly string[]) {
     }
   }
   return map;
+}
+
+async function predictionAssetHints(ctx: AppContext, subjects: readonly string[]) {
+  const registry = await listRegistryAssets(ctx);
+  const watched = new Set(subjects);
+  const hints: Array<{ canonicalId: string; symbol?: string; name?: string }> = [];
+  for (const asset of registry) {
+    if (!watched.has(asset.canonicalId)) {
+      continue;
+    }
+    hints.push({
+      canonicalId: asset.canonicalId,
+      symbol: asset.symbol ?? undefined,
+      name: asset.name ?? undefined,
+    });
+  }
+  return takeBounded(hints, 64);
 }
 
 export async function latestSpotQuotes(
@@ -483,7 +521,7 @@ async function persistDetectorFinding(
     kind: finding.claimKind,
     subjectCanonicalId: finding.subjectCanonicalId,
     predicate: finding.detectorId,
-    objectText: `${finding.polarity} z=${finding.zScore.toFixed(2)}`,
+    objectText: `${finding.polarity} z=${finding.zScore.toFixed(2)}${finding.bodyText.includes(", agreed") ? " agreed" : ""}`,
     value: finding.zScore,
     unit: finding.unit,
     polarity: "asserted" as const,
@@ -704,69 +742,87 @@ async function persistHackEvidence(
   };
 }
 
+async function findingForDetector(
+  ctx: AppContext,
+  providerId: string,
+  spec: DetectorSpec,
+  subject: string,
+  categories: Record<string, string>,
+) {
+  const points = await seriesWindow(ctx, providerId, spec.metric, subject);
+  switch (spec.id) {
+    case "return_shock":
+      return detectReturnShockForSubject(subject, points, spec);
+    case "volume_anomaly":
+      return detectVolumeAnomalyForSubject(subject, points, spec);
+    case "tvl_drawdown":
+      return detectTvlDrawdownForSubject(subject, points, spec);
+    case "peg_deviation":
+      return detectPegDeviationForSubject(
+        subject,
+        points,
+        await seriesWindow(ctx, COINGECKO_SPOT_PROVIDER_ID, "spot_price", subject),
+        spec,
+      );
+    case "market_stress":
+      return detectMarketStressForSubject(
+        subject,
+        {
+          fundingApr: points,
+          openInterestUsd: await seriesWindow(ctx, providerId, "open_interest_usd", subject),
+          liquidations1mUsd: await seriesWindow(ctx, providerId, "liquidations_1m_usd", subject),
+        },
+        spec,
+      );
+    case "funding_divergence": {
+      const series = await fundingDivergenceSeries(ctx, subject);
+      return detectFundingDivergenceForSubject(subject, series.left, series.right, spec);
+    }
+    case "odds_jump":
+      return detectOddsJumpForSubject(
+        subject,
+        {
+          oddsYes: points,
+          liquidityUsd: (await seriesWindow(ctx, providerId, "odds_liquidity_usd", subject)).at(-1)
+            ?.value,
+          otherVenueOddsYes: await seriesWindow(
+            ctx,
+            providerId === POLYMARKET_PROVIDER_ID ? KALSHI_PROVIDER_ID : POLYMARKET_PROVIDER_ID,
+            "odds_yes",
+            subject,
+          ),
+          claimKind:
+            categories[subject] === "regulatory_or_legal_action"
+              ? "crypto:regulatory_action"
+              : spec.claimKind,
+        },
+        spec,
+      );
+    default:
+      return undefined;
+  }
+}
+
 async function runDetectors(
   ctx: AppContext,
   providerId: string,
   sourceId: string,
   fetchRequestId: string | undefined,
   subjects: readonly string[],
+  sourceConfig: Record<string, unknown> = {},
 ) {
   const clustered = new Map<
     string,
     { scan: NonNullable<Awaited<ReturnType<typeof persistDetectorFinding>>["scan"]>; ids: string[] }
   >();
+  const categories = asCategoryMap(sourceConfig.marketCategory);
   for (const subject of takeBounded(subjects, ctx.config.RIDDLR_OBSERVE_MAX_SUBJECTS)) {
     for (const spec of CRYPTO_DETECTOR_SPECS) {
       const specProvider = spec.provider ?? COINGECKO_SPOT_PROVIDER_ID;
       if (specProvider !== providerId) {
         continue;
       }
-      const points = await seriesWindow(ctx, providerId, spec.metric, subject);
-      const hit =
-        spec.id === "return_shock"
-          ? detectReturnShockForSubject(subject, points, spec)
-          : spec.id === "volume_anomaly"
-            ? detectVolumeAnomalyForSubject(subject, points, spec)
-            : spec.id === "tvl_drawdown"
-              ? detectTvlDrawdownForSubject(subject, points, spec)
-              : spec.id === "peg_deviation"
-                ? detectPegDeviationForSubject(
-                    subject,
-                    points,
-                    await seriesWindow(ctx, COINGECKO_SPOT_PROVIDER_ID, "spot_price", subject),
-                    spec,
-                  )
-                : spec.id === "market_stress"
-                  ? detectMarketStressForSubject(
-                      subject,
-                      {
-                        fundingApr: points,
-                        openInterestUsd: await seriesWindow(
-                          ctx,
-                          providerId,
-                          "open_interest_usd",
-                          subject,
-                        ),
-                        liquidations1mUsd: await seriesWindow(
-                          ctx,
-                          providerId,
-                          "liquidations_1m_usd",
-                          subject,
-                        ),
-                      },
-                      spec,
-                    )
-                  : spec.id === "funding_divergence"
-                    ? await (async () => {
-                        const series = await fundingDivergenceSeries(ctx, subject);
-                        return detectFundingDivergenceForSubject(
-                          subject,
-                          series.left,
-                          series.right,
-                          spec,
-                        );
-                      })()
-                    : undefined;
+      const hit = await findingForDetector(ctx, providerId, spec, subject, categories);
       if (!hit) {
         ctx.metrics.detectorFindings.inc({ detector: spec.id, result: "none" });
         continue;
@@ -897,6 +953,12 @@ function observationProviderForPoll(ctx: AppContext, providerId: string, fetchIm
       drainLiquidations: () => [],
     });
   }
+  if (fetchImpl && providerId === POLYMARKET_PROVIDER_ID) {
+    return createPolymarketProvider({ fetchImpl, minIntervalMs: 0 });
+  }
+  if (fetchImpl && providerId === KALSHI_PROVIDER_ID) {
+    return createKalshiProvider({ fetchImpl, minIntervalMs: 0 });
+  }
   return registry.require(providerId);
 }
 
@@ -961,6 +1023,8 @@ export async function pollObservationProvider(
         return groups;
       })();
   const subjectSet = new Set(subjects);
+  const detectorSubjects = new Set(subjects);
+  let mergedConfig: Record<string, unknown> = { ...source.config };
   for (const batch of takeBounded(batches, 40)) {
     const requestHash = createHash("sha256")
       .update(JSON.stringify({ provider: provider.id, ids: batch, at: now.toISOString() }))
@@ -977,6 +1041,9 @@ export async function pollObservationProvider(
     const observeConfig: Record<string, unknown> = { ...source.config, ...headers };
     if (provider.id === HYPERLIQUID_PROVIDER_ID || provider.id === BINANCE_FUTURES_PROVIDER_ID) {
       observeConfig.symbolMap = await futuresSymbolMap(ctx, batch);
+    }
+    if (provider.id === POLYMARKET_PROVIDER_ID || provider.id === KALSHI_PROVIDER_ID) {
+      observeConfig.assetHints = await predictionAssetHints(ctx, batch);
     }
     const result = await provider.observe(observeConfig, {
       subjectCanonicalIds: batch,
@@ -1007,6 +1074,9 @@ export async function pollObservationProvider(
         ...(result.persistConfig ? { config: { ...source.config, ...result.persistConfig } } : {}),
       })
       .where(eq(sources.id, source.id));
+    if (result.persistConfig) {
+      mergedConfig = { ...mergedConfig, ...result.persistConfig };
+    }
     if (result.errors.some((item) => item.class === "rate_limited")) {
       ctx.metrics.observePolls.inc({ provider: provider.id, result: "rate_limited" });
       await ctx.redis.set(`${OBSERVE_LAST}${provider.id}`, now.toISOString(), "EX", 7 * 24 * 3600);
@@ -1020,6 +1090,9 @@ export async function pollObservationProvider(
         fetchRequestId: fetchRequest?.id,
       })),
     );
+    for (const item of result.observations) {
+      detectorSubjects.add(item.subjectCanonicalId);
+    }
     const clustered = new Map<
       string,
       { scan: NonNullable<Awaited<ReturnType<typeof persistHackEvidence>>["scan"]>; ids: string[] }
@@ -1039,7 +1112,7 @@ export async function pollObservationProvider(
       await clusterScanEvents(ctx, item.scan, item.ids);
     }
   }
-  await runDetectors(ctx, provider.id, source.id, lastFetchId, subjects);
+  await runDetectors(ctx, provider.id, source.id, lastFetchId, [...detectorSubjects], mergedConfig);
   await retainObservationSeries(ctx);
   const resultLabel = lastClass && inserted === 0 ? lastClass : inserted === 0 ? "empty" : "ok";
   ctx.metrics.observePolls.inc({ provider: provider.id, result: resultLabel });
@@ -1087,7 +1160,7 @@ export async function addObservationPin(
   input: { subjectCanonicalId: string; metric?: string; provider?: string },
 ) {
   const subject = input.subjectCanonicalId.trim();
-  const native = FUTURES_NATIVE_SUBJECT_RE.test(subject);
+  const native = OBSERVE_NATIVE_SUBJECT_RE.test(subject);
   const asset = native ? undefined : await findRegistryAsset(ctx, subject);
   if (!native && !asset) {
     const error = new Error("Unknown asset.");

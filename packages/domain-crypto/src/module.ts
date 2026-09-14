@@ -20,6 +20,7 @@ import {
   MAX_SEARXNG_ASSET_QUERIES,
   type MarketObservation,
   type NormalizedEvidence,
+  ODDS_JUMP_V1,
   PEG_DEVIATION_V1,
   RETURN_SHOCK_V1,
   type RegistryAsset,
@@ -172,6 +173,8 @@ export const CRYPTO_DETECTOR_SPECS: readonly DetectorSpec[] = [
   { ...MARKET_STRESS_V1, claimKind: "crypto:market_stress", provider: "binance-futures" },
   { ...FUNDING_DIVERGENCE_V1, claimKind: "crypto:market_stress", provider: "hyperliquid" },
   { ...FUNDING_DIVERGENCE_V1, claimKind: "crypto:market_stress", provider: "binance-futures" },
+  { ...ODDS_JUMP_V1, claimKind: "crypto:macro_policy_decision", provider: "polymarket" },
+  { ...ODDS_JUMP_V1, claimKind: "crypto:macro_policy_decision", provider: "kalshi" },
 ];
 
 const CLAIM_PATTERNS: Array<{
@@ -355,7 +358,9 @@ export const cryptoDomainModule: DomainModule = {
       input.adapterId === "feeds" ||
       input.adapterId === "defillama" ||
       input.adapterId === "hyperliquid" ||
-      input.adapterId === "binance-futures"
+      input.adapterId === "binance-futures" ||
+      input.adapterId === "polymarket" ||
+      input.adapterId === "kalshi"
     ) {
       return [""];
     }
@@ -579,6 +584,11 @@ export const cryptoDomainModule: DomainModule = {
           `Perp 24h volume ${item.assetCanonicalId} (${item.sourceId}): ${item.value} usd`,
         );
       }
+      if (item.kind === "odds_yes" && item.assetCanonicalId) {
+        notes.push(
+          `Odds yes ${item.assetCanonicalId} (${item.sourceId}): ${item.value} at ${item.observedAt.toISOString()}`,
+        );
+      }
     }
     return {
       domainId: "crypto",
@@ -599,6 +609,24 @@ export const cryptoDomainModule: DomainModule = {
       .map((item) => this.mapClaimKindToCatalyst(item.kind))
       .filter((item): item is CatalystKind => Boolean(item));
     const principal = selectPrincipalCatalyst(catalysts);
+    const oddsJump = input.claims.some((item) => item.predicate === "odds_jump");
+    if (oddsJump) {
+      const agreed = input.claims.some((item) =>
+        (item.objectText ?? item.title).includes("agreed"),
+      );
+      if (agreed && (input.watchlistOverlap || input.portfolioOverlap)) {
+        return {
+          level: "moderate",
+          reason: "odds_jump_agreed",
+          reasonCodes: ["crypto:odds_jump"],
+        };
+      }
+      return {
+        level: "low",
+        reason: "odds_jump",
+        reasonCodes: ["crypto:odds_jump"],
+      };
+    }
     if (kinds.has("crypto:security_incident") || kinds.has("crypto:insolvency")) {
       return {
         level: "critical",

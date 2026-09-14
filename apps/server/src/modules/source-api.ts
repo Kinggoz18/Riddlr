@@ -7,7 +7,9 @@ import {
   discordSourceSchema,
   feedSourceSchema,
   hyperliquidSourceSchema,
+  kalshiSourceSchema,
   pageQuerySchema,
+  polymarketSourceSchema,
   publisherHostPolicySchema,
   sourceIdentityPolicySchema,
   sourcePatchSchema,
@@ -36,6 +38,8 @@ import {
   createDiscordAdapter,
   createFeedsAdapter,
   createHyperliquidAdapter,
+  createKalshiAdapter,
+  createPolymarketAdapter,
   createSearxngAdapter,
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
@@ -88,6 +92,31 @@ export function registerSourceRoutes(
   const defillama = createDefiLlamaAdapter();
   const hyperliquid = createHyperliquidAdapter();
   const binanceFutures = createBinanceFuturesAdapter();
+  const polymarket = createPolymarketAdapter();
+  const kalshi = createKalshiAdapter();
+
+  function adapterForHealth(adapterId: string) {
+    switch (adapterId) {
+      case "discord":
+        return discord;
+      case "x":
+        return x;
+      case "feeds":
+        return feeds;
+      case "defillama":
+        return defillama;
+      case "hyperliquid":
+        return hyperliquid;
+      case "binance-futures":
+        return binanceFutures;
+      case "polymarket":
+        return polymarket;
+      case "kalshi":
+        return kalshi;
+      default:
+        return marketAdapter(adapterId) ?? searxng;
+    }
+  }
 
   app.get("/api/v1/sources", { preHandler: authed }, async () => {
     const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
@@ -130,6 +159,16 @@ export function registerSourceRoutes(
           id: binanceFutures.id,
           family: binanceFutures.family,
           capabilities: binanceFutures.capabilities,
+        },
+        {
+          id: polymarket.id,
+          family: polymarket.family,
+          capabilities: polymarket.capabilities,
+        },
+        {
+          id: kalshi.id,
+          family: kalshi.family,
+          capabilities: kalshi.capabilities,
         },
         {
           id: coingecko.id,
@@ -356,6 +395,44 @@ export function registerSourceRoutes(
     });
   });
 
+  app.post("/api/v1/sources/polymarket", { preHandler: authed }, async (request, reply) => {
+    const body = polymarketSourceSchema.parse(request.body);
+    const marketSlugs = body.marketSlugs ?? [];
+    const validated = await polymarket.validate({ marketSlugs });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "observation",
+      adapterId: "polymarket",
+      name: body.name,
+      config: marketSlugs.length > 0 ? { marketSlugs } : {},
+    });
+  });
+
+  app.post("/api/v1/sources/kalshi", { preHandler: authed }, async (request, reply) => {
+    const body = kalshiSourceSchema.parse(request.body);
+    const seriesTickers = body.seriesTickers ?? [];
+    const marketTickers = body.marketTickers ?? [];
+    const validated = await kalshi.validate({ seriesTickers, marketTickers });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "observation",
+      adapterId: "kalshi",
+      name: body.name,
+      config: {
+        ...(seriesTickers.length > 0 ? { seriesTickers } : {}),
+        ...(marketTickers.length > 0 ? { marketTickers } : {}),
+      },
+    });
+  });
+
   app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const [row] = await ctx.db.select().from(sources).where(eq(sources.id, id)).limit(1);
@@ -440,16 +517,7 @@ export function registerSourceRoutes(
     if (!row) {
       return reply.code(404).send({ error: { code: "not_found", message: "Source not found" } });
     }
-    const adapter =
-      row.adapterId === "discord"
-        ? discord
-        : row.adapterId === "x"
-          ? x
-          : row.adapterId === "feeds"
-            ? feeds
-            : row.adapterId === "defillama"
-              ? defillama
-              : (marketAdapter(row.adapterId) ?? searxng);
+    const adapter = adapterForHealth(row.adapterId);
     const health = await adapter.healthCheck(await sourceRuntimeConfig(ctx, row));
     await ctx.db
       .update(sources)

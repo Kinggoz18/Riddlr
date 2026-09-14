@@ -12,6 +12,7 @@ nobody watches is not polled. CoinGecko `/simple/price` is the shipped spot
 provider (60s, auto-created). DefiLlama is an opt-in provider (15 minutes) for
 TVL, stablecoins, and hacks; it is not auto-created. Hyperliquid and Binance
 USD-M Futures are opt-in perp providers (60s; Binance OI every 5 minutes).
+Polymarket and Kalshi are opt-in prediction-market providers (15 minutes).
 Interval
 `RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` (default 60, max 300) applies to
 CoinGecko spot. Batch size default 100. Concurrency `RIDDLR_OBSERVE_CONCURRENCY`
@@ -37,9 +38,14 @@ DefiLlama `stablecoin_basis` is beyond 1% on two consecutive polls and CoinGecko
 or Binance `funding_rate_apr` sample z-score beyond ±3σ after 20 hourly points
 (target 168 ≈ 7 days), on a 20% 1h `open_interest_usd` move, or on
 `liquidations_1m_usd` of at least $10,000,000. `funding_divergence.v1` fires
-when annualised funding differs by more than 10 percentage points. A finding is native-complete
+when annualised funding differs by more than 10 percentage points. `odds_jump.v1`
+fires when Polymarket or Kalshi `odds_yes` moves at least 15 percentage points
+in 1h or 25 in 24h and `odds_liquidity_usd` is at least $10,000. Impact stays
+`low` unless both venues jump on the same subject (`agreed`) and the asset is
+watched or held (`moderate`). A finding is native-complete
 evidence with `sourceFamily: observation` and a claim
-`crypto:observed_<metric>_anomaly` (peg uses `crypto:stablecoin_peg_change`).
+`crypto:observed_<metric>_anomaly` (peg uses `crypto:stablecoin_peg_change`;
+odds-jump uses `crypto:macro_policy_decision` or `crypto:regulatory_action`).
 The same detector, subject, and polarity fingerprint to one evidence row per UTC
 day.
 
@@ -68,5 +74,7 @@ to poll it without a watchlist. The dashboard footer reads "Price data by CoinGe
 See [integrations/coingecko.md](integrations/coingecko.md),
 [integrations/defillama.md](integrations/defillama.md),
 [integrations/hyperliquid.md](integrations/hyperliquid.md),
-[integrations/binance-futures.md](integrations/binance-futures.md), and
+[integrations/binance-futures.md](integrations/binance-futures.md),
+[integrations/polymarket.md](integrations/polymarket.md),
+[integrations/kalshi.md](integrations/kalshi.md), and
 [ADR 0025](adr/0025-observation-layer.md).

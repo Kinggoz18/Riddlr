@@ -284,6 +284,54 @@ async function perpContextObservations(
   return out;
 }
 
+async function oddsContextObservations(
+  ctx: AppContext,
+  canonicalIds: readonly string[],
+): Promise<MarketObservation[]> {
+  const ids = takeBounded([...new Set(canonicalIds.filter(Boolean))], 16);
+  if (ids.length === 0) {
+    return [];
+  }
+  const rows = await ctx.db
+    .select({
+      provider: observationSeries.provider,
+      metric: observationSeries.metric,
+      subjectCanonicalId: observationSeries.subjectCanonicalId,
+      value: observationSeries.value,
+      unit: observationSeries.unit,
+      observedAt: observationSeries.observedAt,
+    })
+    .from(observationSeries)
+    .where(
+      and(
+        inArray(observationSeries.provider, ["polymarket", "kalshi"]),
+        inArray(observationSeries.metric, ["odds_yes", "odds_change_1h", "odds_change_24h"]),
+        eq(observationSeries.resolution, "raw"),
+        inArray(observationSeries.subjectCanonicalId, ids),
+      ),
+    )
+    .orderBy(desc(observationSeries.observedAt))
+    .limit(ids.length * 12);
+  const seen = new Set<string>();
+  const out: MarketObservation[] = [];
+  for (const row of rows) {
+    const key = `${row.provider}|${row.metric}|${row.subjectCanonicalId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({
+      kind: row.metric,
+      assetCanonicalId: row.subjectCanonicalId,
+      value: row.value,
+      unit: row.unit,
+      observedAt: row.observedAt,
+      sourceId: row.provider,
+    });
+  }
+  return out;
+}
+
 export async function runScan(
   ctx: AppContext,
   scanId: string,
@@ -939,6 +987,10 @@ export async function clusterScanEvents(
           ctx,
           extracted.map((item) => item.canonicalId),
         )),
+        ...(await oddsContextObservations(
+          ctx,
+          extracted.map((item) => item.canonicalId),
+        )),
       ],
       MAX_OBSERVATIONS_PER_EVENT,
     );
@@ -1029,7 +1081,11 @@ export async function clusterScanEvents(
       (observationOnly &&
         clusterClaims.some(
           (item) =>
-            item.kind === "crypto:market_stress" || item.kind === "crypto:stablecoin_peg_change",
+            item.kind === "crypto:market_stress" ||
+            item.kind === "crypto:stablecoin_peg_change" ||
+            item.predicate === "odds_jump" ||
+            item.kind === "crypto:macro_policy_decision" ||
+            item.kind === "crypto:regulatory_action",
         ));
     const retractingCount = clusterClaims.filter((item) => item.stance === "retracts").length;
     const contradictingFromClaims = clusterClaims.filter(

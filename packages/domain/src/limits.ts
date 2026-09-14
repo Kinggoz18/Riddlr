@@ -96,6 +96,23 @@ export const OI_CHANGE_LOOKBACK_MS = 60 * 60 * 1000;
 export const OI_CHANGE_MAX_GAP_MS = 15 * 60 * 1000;
 export const FUNDING_DIVERGENCE_MAX_GAP_MS = 20 * 60 * 1000;
 export const FUTURES_NATIVE_SUBJECT_RE = /^(hyperliquid|binance-futures):[A-Za-z0-9._-]+$/;
+export const OBSERVE_NATIVE_SUBJECT_RE =
+  /^(hyperliquid|binance-futures|polymarket|kalshi):[A-Za-z0-9._-]+$/;
+export const DEFAULT_PREDICTION_INTERVAL_MS = 15 * 60 * 1000;
+export const MAX_PREDICTION_BODY_BYTES = 2_000_000;
+export const MAX_PREDICTION_MARKETS = 50;
+export const MAX_POLYMARKET_CALLS_PER_MINUTE = 60;
+export const MAX_KALSHI_CALLS_PER_MINUTE = 30;
+export const MAX_KALSHI_MARKET_PAGES = 5;
+export const MAX_PRICES_HISTORY_POINTS = 512;
+export const DEFAULT_ODDS_JUMP_1H_PP = 15;
+export const DEFAULT_ODDS_JUMP_24H_PP = 25;
+export const DEFAULT_ODDS_LIQUIDITY_USD = 10_000;
+export const ODDS_JUMP_1H_MS = 60 * 60 * 1000;
+export const ODDS_JUMP_24H_MS = 24 * 60 * 60 * 1000;
+export const ODDS_JUMP_1H_MAX_GAP_MS = 20 * 60 * 1000;
+export const ODDS_JUMP_24H_MAX_GAP_MS = 2 * 60 * 60 * 1000;
+export const ODDS_JUMP_VENUE_MAX_GAP_MS = 40 * 60 * 1000;
 
 export function clampPageSize(value: unknown, fallback = DEFAULT_PAGE_SIZE): number {
   const parsed = Number(value);

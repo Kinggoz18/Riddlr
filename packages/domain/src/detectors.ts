@@ -3,6 +3,9 @@ import {
   DEFAULT_DETECTOR_WINDOW,
   DEFAULT_FUNDING_DIVERGENCE_APR_PCT,
   DEFAULT_LIQUIDATION_BURST_USD,
+  DEFAULT_ODDS_JUMP_1H_PP,
+  DEFAULT_ODDS_JUMP_24H_PP,
+  DEFAULT_ODDS_LIQUIDITY_USD,
   DEFAULT_OI_CHANGE_PCT,
   DEFAULT_PEG_DEVIATION_PCT,
   DEFAULT_TVL_DRAWDOWN_FLOOR_USD,
@@ -11,6 +14,11 @@ import {
   MARKET_STRESS_FUNDING_MAX_GAP_MS,
   MARKET_STRESS_FUNDING_MIN_SAMPLES,
   MARKET_STRESS_FUNDING_WINDOW,
+  ODDS_JUMP_1H_MAX_GAP_MS,
+  ODDS_JUMP_1H_MS,
+  ODDS_JUMP_24H_MAX_GAP_MS,
+  ODDS_JUMP_24H_MS,
+  ODDS_JUMP_VENUE_MAX_GAP_MS,
   OI_CHANGE_LOOKBACK_MS,
   OI_CHANGE_MAX_GAP_MS,
   TVL_DRAWDOWN_LOOKBACK_MS,
@@ -30,6 +38,7 @@ export type DetectorSpec = {
   oiChangePct?: number;
   fundingWindow?: number;
   liquidationBurstUsd?: number;
+  oddsJump24hPct?: number;
 };
 
 export type SeriesPoint = {
@@ -120,6 +129,18 @@ export const FUNDING_DIVERGENCE_V1: DetectorSpec = {
   window: 1,
   absZ: DEFAULT_FUNDING_DIVERGENCE_APR_PCT,
   maxGapMs: FUNDING_DIVERGENCE_MAX_GAP_MS,
+};
+
+export const ODDS_JUMP_V1: DetectorSpec = {
+  id: "odds_jump",
+  version: "v1",
+  metric: "odds_yes",
+  claimKind: "generic:macro_policy_decision",
+  window: 2,
+  absZ: DEFAULT_ODDS_JUMP_1H_PP,
+  maxGapMs: ODDS_JUMP_1H_MAX_GAP_MS,
+  floorUsd: DEFAULT_ODDS_LIQUIDITY_USD,
+  oddsJump24hPct: DEFAULT_ODDS_JUMP_24H_PP,
 };
 
 function sampleMean(values: readonly number[]): number {
@@ -633,6 +654,136 @@ export function detectFundingDivergenceForSubject(
   spec: DetectorSpec = FUNDING_DIVERGENCE_V1,
 ): DetectorFinding | undefined {
   return detectFundingDivergence(leftApr, rightApr, spec, subjectCanonicalId);
+}
+
+function pointNear(
+  points: readonly SeriesPoint[],
+  targetMs: number,
+  maxGapMs: number,
+): SeriesPoint | undefined {
+  let best: SeriesPoint | undefined;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    const delta = Math.abs(point.observedAt.getTime() - targetMs);
+    if (delta <= maxGapMs && delta < bestDelta) {
+      best = point;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}
+
+function oddsJumpAtHorizon(
+  ordered: readonly SeriesPoint[],
+  last: SeriesPoint,
+  lookbackMs: number,
+  maxGapMs: number,
+  thresholdPp: number,
+): { prior: SeriesPoint; changePp: number } | undefined {
+  const prior = pointNear(ordered.slice(0, -1), last.observedAt.getTime() - lookbackMs, maxGapMs);
+  if (!prior) {
+    return undefined;
+  }
+  const changePp = (last.value - prior.value) * 100;
+  if (!Number.isFinite(changePp) || Math.abs(changePp) < thresholdPp) {
+    return undefined;
+  }
+  return { prior, changePp };
+}
+
+export function detectOddsJump(
+  input: {
+    oddsYes: readonly SeriesPoint[];
+    liquidityUsd?: number;
+    otherVenueOddsYes?: readonly SeriesPoint[];
+    claimKind?: string;
+  },
+  spec: DetectorSpec = ODDS_JUMP_V1,
+  subjectCanonicalId = "",
+): DetectorFinding | undefined {
+  const floor = spec.floorUsd ?? DEFAULT_ODDS_LIQUIDITY_USD;
+  if (!Number.isFinite(input.liquidityUsd) || (input.liquidityUsd as number) < floor) {
+    return undefined;
+  }
+  const ordered = sortPoints(input.oddsYes);
+  const last = ordered[ordered.length - 1];
+  if (!last) {
+    return undefined;
+  }
+  const threshold1h = spec.absZ;
+  const threshold24h = spec.oddsJump24hPct ?? DEFAULT_ODDS_JUMP_24H_PP;
+  const hit1h = oddsJumpAtHorizon(ordered, last, ODDS_JUMP_1H_MS, spec.maxGapMs, threshold1h);
+  const hit24h = oddsJumpAtHorizon(
+    ordered,
+    last,
+    ODDS_JUMP_24H_MS,
+    ODDS_JUMP_24H_MAX_GAP_MS,
+    threshold24h,
+  );
+  const hit = hit1h ?? hit24h;
+  if (!hit) {
+    return undefined;
+  }
+  const horizon = hit1h ? "1h" : "24h";
+  const threshold = hit1h ? threshold1h : threshold24h;
+  const otherOrdered = sortPoints(input.otherVenueOddsYes ?? []);
+  const otherLast = otherOrdered[otherOrdered.length - 1];
+  const otherGap =
+    otherLast === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.abs(otherLast.observedAt.getTime() - last.observedAt.getTime());
+  const otherHit =
+    otherLast && otherGap <= ODDS_JUMP_VENUE_MAX_GAP_MS
+      ? (oddsJumpAtHorizon(
+          otherOrdered,
+          otherLast,
+          ODDS_JUMP_1H_MS,
+          ODDS_JUMP_1H_MAX_GAP_MS,
+          threshold1h,
+        ) ??
+        oddsJumpAtHorizon(
+          otherOrdered,
+          otherLast,
+          ODDS_JUMP_24H_MS,
+          ODDS_JUMP_24H_MAX_GAP_MS,
+          threshold24h,
+        ))
+      : undefined;
+  const agreed = Boolean(otherHit);
+  const polarity = hit.changePp > 0 ? "up" : "down";
+  const changeText = Math.abs(hit.changePp).toFixed(2);
+  const claimKind = input.claimKind ?? spec.claimKind;
+  return {
+    detectorId: spec.id,
+    version: spec.version,
+    metric: spec.metric,
+    claimKind,
+    subjectCanonicalId,
+    zScore: hit.changePp,
+    value: hit.changePp,
+    unit: "percent",
+    polarity,
+    thresholdAbsZ: threshold,
+    sampleCount: 2,
+    windowStart: hit.prior.observedAt,
+    windowEnd: last.observedAt,
+    bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: odds_yes ${hit.prior.value} → ${last.value} (${hit.changePp.toFixed(2)} pp in ${horizon}, threshold ${threshold} pp, liquidity ${input.liquidityUsd} usd${agreed ? ", agreed" : ""}).`,
+    claimTitle: `${subjectLabel(subjectCanonicalId)} ${changeText} pp odds jump in ${horizon} (${spec.version}, threshold ${threshold} pp${agreed ? ", agreed" : ""})`,
+    series: [hit.prior, last],
+  };
+}
+
+export function detectOddsJumpForSubject(
+  subjectCanonicalId: string,
+  input: {
+    oddsYes: readonly SeriesPoint[];
+    liquidityUsd?: number;
+    otherVenueOddsYes?: readonly SeriesPoint[];
+    claimKind?: string;
+  },
+  spec: DetectorSpec = ODDS_JUMP_V1,
+): DetectorFinding | undefined {
+  return detectOddsJump(input, spec, subjectCanonicalId);
 }
 
 export function detectorEvidenceFingerprint(finding: DetectorFinding): string {

@@ -42,3 +42,19 @@ Captured from live provider responses. Secrets are not present in these files.
 | `binance-futures/open-interest-unknown.json` | `GET https://testnet.binancefuture.com/fapi/v1/openInterest?symbol=NOTACOINUSDT` (HTTP 400 `code:-1121`) | 2026-09-14 |
 | `binance-futures/force-order-frames.json` | `wss://stream.binancefuture.com/ws/!forceOrder@arr` (two frames in one minute; production `fstream.binance.com` NXDOMAIN from this host) | 2026-09-14 |
 | `binance-futures/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `polymarket/events-keyset-truncated.json` | `GET https://gamma-api.polymarket.com/events/keyset?active=true&closed=false&limit=100` (truncated) | 2026-09-14 |
+| `polymarket/event-fed-rate-hike.json` | `GET https://gamma-api.polymarket.com/events?slug=fed-rate-hike-in-2026` | 2026-09-14 |
+| `polymarket/event-fed-decision-closed.json` | `GET https://gamma-api.polymarket.com/events?slug=fed-decision-in-october` | 2026-09-14 |
+| `polymarket/market-fed-rate-hike.json` | `GET https://gamma-api.polymarket.com/markets?slug=fed-rate-hike-in-2026` | 2026-09-14 |
+| `polymarket/market-drift-missing-tokens.json` | Captured market with `clobTokenIds` removed to represent schema drift | 2026-09-14 |
+| `polymarket/midpoint.json` | `GET https://clob.polymarket.com/midpoint?token_id=<YES>` (`{"mid":"0.905"}`) | 2026-09-14 |
+| `polymarket/prices-history.json` | `GET https://clob.polymarket.com/prices-history?market=<YES>&interval=1d&fidelity=5` | 2026-09-14 |
+| `polymarket/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `polymarket/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `kalshi/series-kxcpi.json` | `GET https://external-api.kalshi.com/trade-api/v2/series/KXCPI` | 2026-09-14 |
+| `kalshi/series-unknown.json` | `GET https://external-api.kalshi.com/trade-api/v2/series/NOTASERIES` (HTTP 404) | 2026-09-14 |
+| `kalshi/markets-kxcpi-truncated.json` | `GET https://external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXCPI&status=open&limit=100` (truncated) | 2026-09-14 |
+| `kalshi/market-drift-missing-bid.json` | Captured market with yes bid/ask removed to represent schema drift | 2026-09-14 |
+| `kalshi/orderbook-kxcpi-26sep-t0.6.json` | `GET https://external-api.kalshi.com/trade-api/v2/markets/KXCPI-26SEP-T0.6/orderbook?depth=5` | 2026-09-14 |
+| `kalshi/empty-markets.json` | `{"markets":[]}` | 2026-09-14 |
+| `kalshi/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |

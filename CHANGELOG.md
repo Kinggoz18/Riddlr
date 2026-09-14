@@ -4,6 +4,13 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Polymarket and Kalshi opt-in observation sources: YES odds, 1h/24h change, and
+  an odds-jump detector (15 pp / 1h or 25 pp / 24h with a $10,000 liquidity
+  floor). Always an early warning. Sources → Add source → Configure Polymarket /
+  Configure Kalshi. See
+  [docs/integrations/polymarket.md](docs/integrations/polymarket.md) and
+  [docs/integrations/kalshi.md](docs/integrations/kalshi.md).
+
 - Hyperliquid and Binance USD-M Futures opt-in observation sources: perpetual
   funding, open interest, mark price, and Binance liquidations. Market-stress
   and funding-divergence detectors. Sources → Add source → Configure

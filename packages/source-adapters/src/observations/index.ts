@@ -59,6 +59,36 @@ export {
   resolveHyperliquidSubject,
 } from "./hyperliquid.js";
 export {
+  createKalshiAdapter,
+  createKalshiProvider,
+  KALSHI_API_BASE,
+  KALSHI_FAMILY,
+  KALSHI_PROVIDER_ID,
+  KALSHI_USER_AGENT,
+  kalshiMarketOpen,
+  parseKalshiMarket,
+  parseKalshiMarketsPage,
+  parseKalshiOrderbook,
+  parseKalshiSeries,
+  parseMarketTickers,
+  parseSeriesTickers,
+} from "./kalshi.js";
+export {
+  createPolymarketAdapter,
+  createPolymarketProvider,
+  POLYMARKET_CLOB_BASE,
+  POLYMARKET_FAMILY,
+  POLYMARKET_GAMMA_BASE,
+  POLYMARKET_PROVIDER_ID,
+  POLYMARKET_USER_AGENT,
+  parseMarketSlugs,
+  parseMidpoint,
+  parsePolymarketEvents,
+  parsePolymarketMarket,
+  parsePricesHistory,
+  suggestPolymarketSlugs,
+} from "./polymarket.js";
+export {
   createScriptedObservationProvider,
   type ObservationProvider,
   ObservationProviderRegistry,

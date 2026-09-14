@@ -146,6 +146,14 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
     page.getByRole("heading", { name: "Add Binance USD-M Futures source" }),
   ).toBeVisible();
   await expect(page.getByText(/annualised APR/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure Polymarket" }).click();
+  await expect(page.getByRole("heading", { name: "Add Polymarket source" })).toBeVisible();
+  await expect(page.getByText(/No API key/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure Kalshi" }).click();
+  await expect(page.getByRole("heading", { name: "Add Kalshi source" })).toBeVisible();
+  await expect(page.getByText(/KXCPI/i)).toBeVisible();
   await page.getByRole("link", { name: "View sources" }).click();
   await expect(page.getByText("coingecko.com")).toBeVisible();
   await page.getByRole("link", { name: "SearXNG", exact: true }).click();

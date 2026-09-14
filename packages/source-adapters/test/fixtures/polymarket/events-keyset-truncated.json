@@ -1,0 +1,324 @@
+{
+  "events": [
+    {
+      "id": "16183",
+      "slug": "kraken-ipo-in-2025",
+      "ticker": "kraken-ipo-in-2025",
+      "title": "Kraken IPO by ___ ?",
+      "description": "This market will resolve to \"Yes\" if Kraken (US-based cryptocurrency exchange) completes an Initial Public Offering (IPO) by December 31, 2025, 11:59 PM ET, as confirmed by official company announcements or credible news sources. The IPO refers to the first sale of stock by Kraken to the public on any recognized stock exchange.\n\nIf Kraken merges with another entity, is acquired, or ceases to exist",
+      "endDate": "2027-01-01T05:00:00Z",
+      "closed": false,
+      "active": true,
+      "liquidity": 4628.66156,
+      "liquidityClob": 4628.66156,
+      "volume": 1609323.383254,
+      "tags": [
+        {
+          "id": "21",
+          "label": "Crypto",
+          "slug": "crypto"
+        },
+        {
+          "id": "101300",
+          "label": "exchange",
+          "slug": "exchange"
+        },
+        {
+          "id": "120",
+          "label": "Finance",
+          "slug": "finance"
+        },
+        {
+          "id": "107",
+          "label": "Business",
+          "slug": "business"
+        },
+        {
+          "id": "101588",
+          "label": "2025 Predictions",
+          "slug": "2025-predictions"
+        },
+        {
+          "id": "102137",
+          "label": "Featured",
+          "slug": "featured"
+        },
+        {
+          "id": "600",
+          "label": "IPOs",
+          "slug": "ipos"
+        },
+        {
+          "id": "105297",
+          "label": "Crypto Listings",
+          "slug": "crypto-listings"
+        }
+      ],
+      "markets": [
+        {
+          "id": "516950",
+          "slug": "kraken-ipo-in-2025",
+          "question": "Kraken IPO in 2025?",
+          "closed": true,
+          "active": true,
+          "endDate": "2025-12-31T12:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"106229668102716149832209250222340847662201251266419359322746795373714233470739\", \"33007765079325382103458898680383691503895532108499178620460955049586020382226\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "494516.53254",
+          "volumeNum": 494516.53254,
+          "bestAsk": 0.002,
+          "oneDayPriceChange": -0.001,
+          "groupItemTitle": "December 31"
+        },
+        {
+          "id": "678876",
+          "slug": "kraken-ipo-by-march-31-2026",
+          "question": "Kraken IPO by March 31, 2026?",
+          "closed": true,
+          "active": true,
+          "endDate": "2026-04-01T04:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"33799186820745984796925628555218896548353763534512103584425851114581900224385\", \"103693433518125527001416636574099415821922498558487623412396163292963814003978\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "545638.9248109999",
+          "volumeNum": 545638.9248109999,
+          "bestAsk": 0.001,
+          "oneDayPriceChange": -0.005,
+          "groupItemTitle": "March 31, 2026"
+        },
+        {
+          "id": "3886788",
+          "slug": "kraken-ipo-by-december-31-2027",
+          "question": "Kraken IPO by December 31, 2027?",
+          "closed": false,
+          "active": true,
+          "endDate": "2028-01-01T05:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"60254242186181201116068695532944273957016007314867422632945541198596993319740\", \"77177480757748622879722286105150232441086434012708375359804859781251163696964\"]",
+          "outcomePrices": "[\"0.655\", \"0.345\"]",
+          "liquidity": "62.6659",
+          "liquidityNum": 62.6659,
+          "liquidityClob": 62.6659,
+          "volume": "203.627532",
+          "volumeNum": 203.627532,
+          "bestBid": 0.35,
+          "bestAsk": 0.96,
+          "oneHourPriceChange": 0.155,
+          "oneDayPriceChange": 0.125,
+          "groupItemTitle": "December 31, 2027"
+        },
+        {
+          "id": "3886789",
+          "slug": "kraken-ipo-by-june-30-2027",
+          "question": "Kraken IPO by June 30, 2027?",
+          "closed": false,
+          "active": true,
+          "endDate": "2027-07-01T04:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"99253304599951701801764273015201484991796200069427221361914092452921572867497\", \"7127391717356844418351322120166240591225990691848308827043119339251960725455\"]",
+          "outcomePrices": "[\"0.675\", \"0.325\"]",
+          "liquidity": "294.4481",
+          "liquidityNum": 294.4481,
+          "liquidityClob": 294.4481,
+          "volume": "168.912214",
+          "volumeNum": 168.912214,
+          "bestBid": 0.43,
+          "bestAsk": 0.92,
+          "oneHourPriceChange": 0.02,
+          "oneDayPriceChange": 0.205,
+          "groupItemTitle": "June 30, 2027"
+        },
+        {
+          "id": "3886790",
+          "slug": "kraken-ipo-by-march-31-2027",
+          "question": "Kraken IPO by March 31, 2027?",
+          "closed": false,
+          "active": true,
+          "endDate": "2027-04-01T04:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"84700415856070584330104645297599346660006820062384750722884976135229581322590\", \"13739225712399231609914585901957735947487883679063190195424375502492155064017\"]",
+          "outcomePrices": "[\"0.44\", \"0.56\"]",
+          "liquidity": "118.5423",
+          "liquidityNum": 118.5423,
+          "liquidityClob": 118.5423,
+          "volume": "1286.5196329999999",
+          "volumeNum": 1286.5196329999999,
+          "bestBid": 0.11,
+          "bestAsk": 0.77,
+          "oneHourPriceChange": 0.035,
+          "oneDayPriceChange": 0.005,
+          "groupItemTitle": "March 31, 2027"
+        },
+        {
+          "id": "691547",
+          "slug": "kraken-ipo-by-december-31-2026-513",
+          "question": "Kraken IPO by December 31, 2026?",
+          "closed": false,
+          "active": true,
+          "endDate": "2027-01-01T05:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"34626184950254225208692030156208941308358060420950772251072421141618169142241\", \"28557614648090529004584076028720900603196666949274543515794672175624115225556\"]",
+          "outcomePrices": "[\"0.0385\", \"0.9615\"]",
+          "liquidity": "4225.67326",
+          "liquidityNum": 4225.67326,
+          "liquidityClob": 4225.67326,
+          "volume": "567508.8665240003",
+          "volumeNum": 567508.8665240003,
+          "bestBid": 0.037,
+          "bestAsk": 0.04,
+          "oneDayPriceChange": -0.001,
+          "groupItemTitle": "December 31, 2026"
+        },
+        {
+          "id": "1642124",
+          "slug": "kraken-ipo-by-june-30-2026",
+          "question": "Kraken IPO by June 30, 2026?",
+          "closed": false,
+          "active": false,
+          "endDate": "2026-06-30T04:00:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "liquidity": "0",
+          "liquidityNum": 0,
+          "liquidityClob": 0,
+          "volume": "0",
+          "volumeNum": 0,
+          "bestBid": 0,
+          "bestAsk": 1,
+          "oneHourPriceChange": 0,
+          "oneDayPriceChange": 0,
+          "groupItemTitle": "June 30"
+        }
+      ]
+    },
+    {
+      "id": "16263",
+      "slug": "macron-out-in-2025",
+      "ticker": "macron-out-in-2025",
+      "title": "Macron out by...?",
+      "description": "This market will resolve to \"Yes\" if Emmanuel Macron ceases to be President of France for any length of time between January 2 and December 31, 2025, 11:59 PM ET (inclusive). Otherwise, this market will resolve to \"No\".\n\nIf Macron departs from office before the expiry date, the market should resolve immediately.\n\nThe primary resolution source for this market will be information from the government",
+      "endDate": "2027-01-01T04:59:00Z",
+      "closed": false,
+      "active": true,
+      "liquidity": 26921.27245,
+      "liquidityClob": 26921.27245,
+      "volume": 2154094.082033,
+      "tags": [
+        {
+          "id": "1378",
+          "label": "France",
+          "slug": "france"
+        },
+        {
+          "id": "2",
+          "label": "Politics",
+          "slug": "politics"
+        },
+        {
+          "id": "101619",
+          "label": "Macron",
+          "slug": "macron"
+        },
+        {
+          "id": "101588",
+          "label": "2025 Predictions",
+          "slug": "2025-predictions"
+        },
+        {
+          "id": "101970",
+          "label": "World",
+          "slug": "world"
+        },
+        {
+          "id": "100453",
+          "label": "resign",
+          "slug": "resign"
+        }
+      ],
+      "markets": [
+        {
+          "id": "517231",
+          "slug": "macron-out-in-2025-834",
+          "question": "Macron out in 2025?",
+          "closed": true,
+          "active": true,
+          "endDate": "2026-01-01T04:59:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"76829103262452682809495706312303596619517678311126635179788744002179270771878\", \"64363447502273727810951885622300334984823192995733592399845260605779604346480\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "1386219.767204",
+          "volumeNum": 1386219.767204,
+          "bestAsk": 0.001,
+          "oneDayPriceChange": -0.001,
+          "groupItemTitle": "December 31, 2025"
+        },
+        {
+          "id": "2694508",
+          "slug": "macron-out-by-july-31-2026-20260626155530286",
+          "question": "Macron out by July 31, 2026?",
+          "closed": true,
+          "active": true,
+          "endDate": "2026-08-01T03:59:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"28543399540889573521326455114444614843465304193358852739098843595402438285283\", \"64737144597035632498370333432882203102562861720967881889541302920852035334778\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "60827.430927999994",
+          "volumeNum": 60827.430927999994,
+          "bestAsk": 0.001,
+          "oneDayPriceChange": -0.0005,
+          "groupItemTitle": "July 31, 2026"
+        },
+        {
+          "id": "597964",
+          "slug": "macron-out-by-june-30-2026-273",
+          "question": "Macron out by June 30, 2026?",
+          "closed": true,
+          "active": true,
+          "endDate": "2026-07-01T03:59:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"16201530957950630406397949502319734794139620443510795733205872225099141120819\", \"22488814055465212843401871684243737932656687199587127613893702721105723939237\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "476199.881442",
+          "volumeNum": 476199.881442,
+          "bestAsk": 0.001,
+          "groupItemTitle": "June 30, 2026"
+        },
+        {
+          "id": "3206940",
+          "slug": "macron-out-by-december-31-2026-20260728190614227",
+          "question": "Macron out by December 31, 2026?",
+          "closed": false,
+          "active": true,
+          "endDate": "2027-01-01T04:59:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"92851423033817768518321486213778110446684071477423410956369859539830113572619\", \"58364840349378772688107584033558046878148460808736792786882559349343926878328\"]",
+          "outcomePrices": "[\"0.0375\", \"0.9625\"]",
+          "liquidity": "26331.69697",
+          "liquidityNum": 26331.69697,
+          "liquidityClob": 26331.69697,
+          "volume": "25222.495036999997",
+          "volumeNum": 25222.495036999997,
+          "bestBid": 0.037,
+          "bestAsk": 0.038,
+          "groupItemTitle": "December 31, 2026"
+        },
+        {
+          "id": "623939",
+          "slug": "macron-out-by-october-31-2025",
+          "question": "Macron out by October 31, 2025?",
+          "closed": true,
+          "active": true,
+          "endDate": "2025-11-01T03:59:00Z",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "clobTokenIds": "[\"34035142221712364354899416126623416304962260767590062792033879920204802585564\", \"63517326976374375632630658298716704665562106331315856506724933470892403292808\"]",
+          "outcomePrices": "[\"0\", \"1\"]",
+          "volume": "205624.507422",
+          "volumeNum": 205624.507422,
+          "bestAsk": 0.001,
+          "groupItemTitle": "October 31, 2025"
+        }
+      ]
+    }
+  ],
+  "next_cursor": "Sq5Vo-0-_PCOvdsSaKwraHpL5MKRLX0PFY1DoCezN7B7InYiOjEsImsiOiJldmVudHMiLCJvaCI6IjRmNTNjZGExOGMyYmFhMGMwMzU0YmI1ZjlhM2VjYmU1ZWQxMmFiNGQ4ZTExYmE4NzNjMmYxMTE2MTIwMmI5NDUiLCJrZXlzIjpbeyJ0Ijoic3RyaW5nIiwidiI6IjE2NDIzIn1dfQ"
+}

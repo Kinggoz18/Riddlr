@@ -55,7 +55,9 @@ import {
   createScriptedObservationProvider,
   DEFILLAMA_PROVIDER_ID,
   HYPERLIQUID_PROVIDER_ID,
+  KALSHI_PROVIDER_ID,
   ObservationProviderRegistry,
+  POLYMARKET_PROVIDER_ID,
 } from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -2693,6 +2695,128 @@ describe("setup, auth, and domain persistence", () => {
         (row) => row.metric === "open_interest" && row.subjectCanonicalId === "coingecko:bitcoin",
       ),
     ).toBe(true);
+  });
+
+  it("creates an opt-in Polymarket source and polls captured Gamma and CLOB bodies", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/polymarket",
+      headers: { cookie },
+      payload: { name: "Polymarket", marketSlugs: ["fed-rate-hike-in-2026"] },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("polymarket");
+    expect(created.json().source?.config?.marketSlugs).toEqual(["fed-rate-hike-in-2026"]);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/polymarket",
+      headers: { cookie },
+      payload: { name: "Polymarket again" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const adapter = listed.json().adapters.find((item: { id: string }) => item.id === "polymarket");
+    expect(adapter.capabilities.lookbackNotes).toMatch(/events\/keyset/);
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/polymarket");
+    const keyset = JSON.parse(readFileSync(join(fixtures, "events-keyset-truncated.json"), "utf8"));
+    const market = JSON.parse(readFileSync(join(fixtures, "market-fed-rate-hike.json"), "utf8"));
+    const mid = JSON.parse(readFileSync(join(fixtures, "midpoint.json"), "utf8"));
+    const hist = JSON.parse(readFileSync(join(fixtures, "prices-history.json"), "utf8"));
+    await ctx.redis.del(`riddlr:observe:lock:${POLYMARKET_PROVIDER_ID}`);
+    const polled = await pollObservationProvider(ctx, POLYMARKET_PROVIDER_ID, async (input) => {
+      const url = String(input);
+      if (url.includes("/events/keyset")) {
+        return Response.json(keyset);
+      }
+      if (url.includes("/markets?")) {
+        return Response.json(market);
+      }
+      if (url.includes("/midpoint")) {
+        return Response.json(mid);
+      }
+      if (url.includes("/prices-history")) {
+        return Response.json(hist);
+      }
+      return new Response("not found", { status: 404 });
+    });
+    expect(polled.error).toBeUndefined();
+    expect(polled.observations).toBeGreaterThan(0);
+    const series = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.provider, POLYMARKET_PROVIDER_ID));
+    expect(
+      series.some(
+        (row) =>
+          row.metric === "odds_yes" &&
+          row.subjectCanonicalId === "polymarket:fed-rate-hike-in-2026" &&
+          row.value === 0.905,
+      ),
+    ).toBe(true);
+    expect(
+      series.some((row) => row.metric === "odds_liquidity_usd" && row.value === 190183.1871),
+    ).toBe(true);
+  });
+
+  it("creates an opt-in Kalshi source and polls captured KXCPI series", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/kalshi",
+      headers: { cookie },
+      payload: { name: "Kalshi", seriesTickers: ["KXCPI"] },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("kalshi");
+    expect(created.json().source?.config?.seriesTickers).toEqual(["KXCPI"]);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/kalshi",
+      headers: { cookie },
+      payload: { name: "Kalshi again" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const adapter = listed.json().adapters.find((item: { id: string }) => item.id === "kalshi");
+    expect(adapter.capabilities.lookbackNotes).toMatch(/status=active/);
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/kalshi");
+    const seriesBody = JSON.parse(readFileSync(join(fixtures, "series-kxcpi.json"), "utf8"));
+    const markets = JSON.parse(
+      readFileSync(join(fixtures, "markets-kxcpi-truncated.json"), "utf8"),
+    );
+    await ctx.redis.del(`riddlr:observe:lock:${KALSHI_PROVIDER_ID}`);
+    const polled = await pollObservationProvider(ctx, KALSHI_PROVIDER_ID, async (input) => {
+      const url = String(input);
+      if (url.includes("/series/KXCPI")) {
+        return Response.json(seriesBody);
+      }
+      if (url.includes("/markets?")) {
+        return Response.json(markets);
+      }
+      return new Response("not found", { status: 404 });
+    });
+    expect(polled.error).toBeUndefined();
+    expect(polled.observations).toBeGreaterThan(0);
+    const series = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.provider, KALSHI_PROVIDER_ID));
+    expect(
+      series.some(
+        (row) =>
+          row.metric === "odds_yes" &&
+          row.subjectCanonicalId === "kalshi:KXCPI-26SEP-T0.6" &&
+          Math.abs(row.value - 0.175) < 1e-10,
+      ),
+    ).toBe(true);
+    expect(series.some((row) => row.metric === "volume" && row.value === 55474.97)).toBe(true);
   });
 
   it("invalidates unused sibling password-reset tokens", async () => {

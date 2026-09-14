@@ -4,6 +4,8 @@ import {
   detectFundingDivergenceForSubject,
   detectMarketStress,
   detectMarketStressForSubject,
+  detectOddsJump,
+  detectOddsJumpForSubject,
   detectorEvidenceFingerprint,
   detectPegDeviation,
   detectReturnShock,
@@ -289,5 +291,94 @@ describe("funding-divergence detector", () => {
   it("emits nothing when the other venue is missing", () => {
     const at = new Date("2026-09-13T12:00:00.000Z");
     expect(detectFundingDivergence([{ observedAt: at, value: 20 }], [])).toBeUndefined();
+  });
+});
+
+describe("odds-jump detector", () => {
+  it("emits when odds_yes moves 16 percentage points in 1h with liquidity", () => {
+    const start = new Date("2026-09-14T15:00:00.000Z");
+    const hit = detectOddsJumpForSubject("polymarket:fed-rate-hike-in-2026", {
+      oddsYes: [
+        { observedAt: start, value: 0.5 },
+        { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 0.66 },
+      ],
+      liquidityUsd: 10_000,
+    });
+    expect(hit?.detectorId).toBe("odds_jump");
+    expect(hit?.version).toBe("v1");
+    expect(hit?.claimKind).toBe("generic:macro_policy_decision");
+    expect(hit?.zScore).toBeCloseTo(16, 10);
+    expect(hit?.unit).toBe("percent");
+    expect(hit?.claimTitle).toBe(
+      "fed rate hike in 2026 16.00 pp odds jump in 1h (v1, threshold 15 pp)",
+    );
+  });
+
+  it("emits when odds_yes moves 26 percentage points in 24h", () => {
+    const start = new Date("2026-09-13T16:00:00.000Z");
+    const hit = detectOddsJump({
+      oddsYes: [
+        { observedAt: start, value: 0.4 },
+        { observedAt: new Date(start.getTime() + 24 * 60 * 60 * 1000), value: 0.66 },
+      ],
+      liquidityUsd: 20_000,
+    });
+    expect(hit?.claimTitle).toContain("24h");
+    expect(hit?.zScore).toBeCloseTo(26, 10);
+  });
+
+  it("emits nothing below the 15 percentage-point 1h threshold", () => {
+    const start = new Date("2026-09-14T15:00:00.000Z");
+    expect(
+      detectOddsJump({
+        oddsYes: [
+          { observedAt: start, value: 0.5 },
+          { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 0.6 },
+        ],
+        liquidityUsd: 10_000,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing below the 10,000 usd liquidity floor", () => {
+    const start = new Date("2026-09-14T15:00:00.000Z");
+    expect(
+      detectOddsJump({
+        oddsYes: [
+          { observedAt: start, value: 0.5 },
+          { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 0.7 },
+        ],
+        liquidityUsd: 9_999,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing with a single odds point", () => {
+    expect(
+      detectOddsJump({
+        oddsYes: [{ observedAt: new Date("2026-09-14T15:00:00.000Z"), value: 0.9 }],
+        liquidityUsd: 10_000,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("records venue agreement when the other venue also jumps", () => {
+    const start = new Date("2026-09-14T15:00:00.000Z");
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const hit = detectOddsJumpForSubject("coingecko:bitcoin", {
+      oddsYes: [
+        { observedAt: start, value: 0.4 },
+        { observedAt: end, value: 0.6 },
+      ],
+      otherVenueOddsYes: [
+        { observedAt: start, value: 0.41 },
+        { observedAt: end, value: 0.58 },
+      ],
+      liquidityUsd: 50_000,
+      claimKind: "crypto:macro_policy_decision",
+    });
+    expect(hit?.claimKind).toBe("crypto:macro_policy_decision");
+    expect(hit?.claimTitle).toContain("agreed");
+    expect(hit?.bodyText).toContain("agreed");
   });
 });

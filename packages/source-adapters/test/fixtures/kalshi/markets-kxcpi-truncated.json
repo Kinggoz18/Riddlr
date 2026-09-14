@@ -1,0 +1,53 @@
+{
+  "cursor": "CgwI8cDezAYQ4M3suQISEEtYQ1BJLTI2U0VQLVQwLjQ",
+  "markets": [
+    {
+      "ticker": "KXCPI-26SEP-T0.6",
+      "title": "Will CPI rise more than 0.6% in September 2026?",
+      "event_ticker": "KXCPI-26SEP",
+      "status": "active",
+      "yes_bid_dollars": "0.1700",
+      "yes_ask_dollars": "0.1800",
+      "last_price_dollars": "0.1700",
+      "volume_fp": "55474.97",
+      "volume_24h_fp": "991.45",
+      "close_time": "2026-10-14T12:25:00Z",
+      "liquidity_dollars": "0.0000",
+      "no_bid_dollars": "0.8200",
+      "no_ask_dollars": "0.8300",
+      "yes_sub_title": "Above 0.6%"
+    },
+    {
+      "ticker": "KXCPI-26SEP-T-0.4",
+      "title": "Will CPI rise more than -0.4% in September 2026?",
+      "event_ticker": "KXCPI-26SEP",
+      "status": "active",
+      "yes_bid_dollars": "0.9800",
+      "yes_ask_dollars": "0.9900",
+      "last_price_dollars": "0.9900",
+      "volume_fp": "1520.90",
+      "volume_24h_fp": "676.68",
+      "close_time": "2026-10-14T12:25:00Z",
+      "liquidity_dollars": "0.0000",
+      "no_bid_dollars": "0.0100",
+      "no_ask_dollars": "0.0200",
+      "yes_sub_title": "Above -0.4%"
+    },
+    {
+      "ticker": "KXCPI-26SEP-T-0.3",
+      "title": "Will CPI rise more than -0.3% in September 2026?",
+      "event_ticker": "KXCPI-26SEP",
+      "status": "active",
+      "yes_bid_dollars": "0.9800",
+      "yes_ask_dollars": "0.9900",
+      "last_price_dollars": "0.9900",
+      "volume_fp": "1605.75",
+      "volume_24h_fp": "245.00",
+      "close_time": "2026-10-14T12:25:00Z",
+      "liquidity_dollars": "0.0000",
+      "no_bid_dollars": "0.0100",
+      "no_ask_dollars": "0.0200",
+      "yes_sub_title": "Above -0.3%"
+    }
+  ]
+}

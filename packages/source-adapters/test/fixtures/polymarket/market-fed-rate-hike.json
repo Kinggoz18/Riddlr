@@ -1,0 +1,23 @@
+[
+  {
+    "id": "908713",
+    "slug": "fed-rate-hike-in-2026",
+    "question": "Fed rate hike in 2026?",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-12-09T00:00:00Z",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "clobTokenIds": "[\"75028752776148090296091099469912621384650554615761384992997579209329182670110\", \"93005850938352995663334573245996733794924636935158112548608169054144721737755\"]",
+    "outcomePrices": "[\"0.905\", \"0.095\"]",
+    "liquidity": "190183.1871",
+    "liquidityNum": 190183.1871,
+    "liquidityClob": 190183.1871,
+    "volume": "9308127.036213003",
+    "volumeNum": 9308127.036213003,
+    "bestBid": 0.9,
+    "bestAsk": 0.91,
+    "oneHourPriceChange": 0.01,
+    "oneDayPriceChange": 0.03,
+    "groupItemTitle": ""
+  }
+]

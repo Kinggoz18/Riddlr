@@ -349,6 +349,54 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "feeds", watchlist: [] })).toBe("");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "defillama", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "hyperliquid", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "polymarket", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "kalshi", watchlist: [] })).toBe("");
+  });
+
+  it("keeps odds_jump impact low unless both venues agree on a watched asset", () => {
+    const claim = {
+      marketDomainId: "crypto" as const,
+      kind: "crypto:macro_policy_decision",
+      predicate: "odds_jump",
+      polarity: "asserted" as const,
+      modality: "asserted" as const,
+      fingerprint: "odds",
+      title: "fed rate hike in 2026 16.00 pp odds jump in 1h (v1, threshold 15 pp)",
+      objectText: "up z=16.00",
+    };
+    const base = {
+      claims: [claim],
+      assets: [{ assetClass: "cryptocurrency" as const, canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+      hasTrustedFirsthand: false,
+      stale: false,
+      contradicted: false,
+      retracted: false,
+    };
+    expect(cryptoDomainModule.assessImpact(base).level).toBe("low");
+    expect(cryptoDomainModule.assessImpact(base).reason).toBe("odds_jump");
+    expect(
+      cryptoDomainModule.assessImpact({
+        ...base,
+        claims: [{ ...claim, objectText: "up z=16.00 agreed" }],
+      }).level,
+    ).toBe("moderate");
+    expect(
+      cryptoDomainModule.assessImpact({
+        ...base,
+        claims: [{ ...claim, objectText: "up z=16.00 agreed" }],
+      }).reason,
+    ).toBe("odds_jump_agreed");
+    expect(
+      cryptoDomainModule.assessImpact({
+        ...base,
+        watchlistOverlap: false,
+        claims: [{ ...claim, objectText: "up z=16.00 agreed" }],
+      }).level,
+    ).toBe("low");
   });
 
   it("rejects observed-anomaly kinds on the document claim path", () => {
