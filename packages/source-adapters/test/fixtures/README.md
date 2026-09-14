@@ -21,3 +21,13 @@ Captured from live provider responses. Secrets are not present in these files.
 | `searxng/news-bitcoin.json` | `GET http://searxng:8080/search?q=bitcoin&format=json&categories=news&time_range=day&language=en` (first three `results`) | 2026-09-14 |
 | `searxng/empty.json` | Empty JSON search body (`results: []`), the documented empty list | 2026-09-14 |
 | `searxng/news-bitcoin-drift-missing-url-title.json` | First captured news result with `url` and `title` removed to represent schema drift | 2026-09-14 |
+| `defillama/protocols-truncated.json` | `GET https://api.llama.fi/protocols` (first 50 rows with `gecko_id`) | 2026-09-14 |
+| `defillama/protocol-aave.json` | `GET https://api.llama.fi/protocol/aave` (`currentChainTvls` trimmed to Ethereum/borrowed/staking; `tvl` last three points) | 2026-09-14 |
+| `defillama/protocol-aave-drift-missing-tvl.json` | Same capture with `tvl` removed to represent schema drift | 2026-09-14 |
+| `defillama/chains-truncated.json` | `GET https://api.llama.fi/v2/chains` (first 40 rows) | 2026-09-14 |
+| `defillama/historical-chain-tvl-ethereum.json` | `GET https://api.llama.fi/v2/historicalChainTvl/Ethereum` (last five points) | 2026-09-14 |
+| `defillama/stablecoins-truncated.json` | `GET https://stablecoins.llama.fi/stablecoins?includePrices=true` (first eight `peggedAssets`) | 2026-09-14 |
+| `defillama/coins-current.json` | `GET https://coins.llama.fi/prices/current/coingecko:tether,coingecko:usd-coin` | 2026-09-14 |
+| `defillama/hacks-truncated.json` | `GET https://api.llama.fi/hacks` (first eight rows; captured `source` fields were empty) | 2026-09-14 |
+| `defillama/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `defillama/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |

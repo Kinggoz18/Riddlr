@@ -76,11 +76,13 @@ Live sources are SearXNG (bundled; one `categories=news` query per watched
 asset plus one general query), RSS/Atom feeds (operator-pasted URLs; more
 than one feed is allowed), Discord (operator-configured bot; more
 than one Discord source is allowed), X (operator-configured recent search with
-bounded `next_token`), and one active market-data source: CoinGecko,
+bounded `next_token`), opt-in DefiLlama observations (TVL, stablecoins, hacks),
+and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
 seed fills `assets` for watchlist search and text extraction. The observe worker
 polls CoinGecko `/simple/price` into `observation_series` for watched, held, and
-pinned assets. Return-shock and volume detectors open material events with
+pinned assets. DefiLlama, when enabled, polls on a 15-minute interval. Return-shock,
+volume, TVL-drawdown, and peg-deviation detectors open material events with
 reliability `observed` when a watched asset trips the threshold. On-chain scanning
 is not implemented.
 

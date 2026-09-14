@@ -348,6 +348,7 @@ describe("crypto domain module", () => {
     ).toHaveLength(13);
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
     expect(cryptoDomainModule.sourceQuery({ adapterId: "feeds", watchlist: [] })).toBe("");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "defillama", watchlist: [] })).toBe("");
   });
 
   it("rejects observed-anomaly kinds on the document claim path", () => {
@@ -380,6 +381,18 @@ describe("crypto domain module", () => {
           polarity: "asserted",
           modality: "asserted",
           excerpt: "z=4.25 over 20 quoted_volume samples",
+        },
+        evidence,
+      ),
+    ).toBeUndefined();
+    expect(
+      cryptoDomainModule.normalizeClaim(
+        {
+          kind: "crypto:observed_tvl_anomaly",
+          predicate: "tvl_drawdown",
+          polarity: "asserted",
+          modality: "asserted",
+          excerpt: "TVL down 20% in 24h",
         },
         evidence,
       ),

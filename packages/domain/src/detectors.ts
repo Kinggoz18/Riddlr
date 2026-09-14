@@ -1,4 +1,11 @@
-import { DEFAULT_DETECTOR_ABS_Z, DEFAULT_DETECTOR_WINDOW } from "./limits.js";
+import {
+  DEFAULT_DETECTOR_ABS_Z,
+  DEFAULT_DETECTOR_WINDOW,
+  DEFAULT_PEG_DEVIATION_PCT,
+  DEFAULT_TVL_DRAWDOWN_FLOOR_USD,
+  DEFAULT_TVL_DRAWDOWN_PCT,
+  TVL_DRAWDOWN_LOOKBACK_MS,
+} from "./limits.js";
 import type { SeriesObservation } from "./observations.js";
 
 export type DetectorSpec = {
@@ -9,6 +16,8 @@ export type DetectorSpec = {
   window: number;
   absZ: number;
   maxGapMs: number;
+  provider?: string;
+  floorUsd?: number;
 };
 
 export type SeriesPoint = {
@@ -53,6 +62,29 @@ export const VOLUME_ANOMALY_V1: DetectorSpec = {
   window: DEFAULT_DETECTOR_WINDOW,
   absZ: DEFAULT_DETECTOR_ABS_Z,
   maxGapMs: 3 * 60 * 1000,
+};
+
+export const TVL_DRAWDOWN_V1: DetectorSpec = {
+  id: "tvl_drawdown",
+  version: "v1",
+  metric: "tvl_usd",
+  claimKind: "generic:observed_tvl_anomaly",
+  window: 2,
+  absZ: DEFAULT_TVL_DRAWDOWN_PCT,
+  maxGapMs: 6 * 60 * 60 * 1000,
+  provider: "defillama",
+  floorUsd: DEFAULT_TVL_DRAWDOWN_FLOOR_USD,
+};
+
+export const PEG_DEVIATION_V1: DetectorSpec = {
+  id: "peg_deviation",
+  version: "v1",
+  metric: "stablecoin_basis",
+  claimKind: "generic:stablecoin_peg_change",
+  window: 2,
+  absZ: DEFAULT_PEG_DEVIATION_PCT,
+  maxGapMs: 40 * 60 * 1000,
+  provider: "defillama",
 };
 
 function sampleMean(values: readonly number[]): number {
@@ -244,6 +276,134 @@ export function detectVolumeAnomalyForSubject(
   spec: DetectorSpec = VOLUME_ANOMALY_V1,
 ): DetectorFinding | undefined {
   return detectVolumeAnomaly(points, spec, subjectCanonicalId);
+}
+
+function subjectLabel(subjectCanonicalId: string): string {
+  return subjectCanonicalId.split(":")[1]?.replace(/-/g, " ") ?? subjectCanonicalId;
+}
+
+export function detectTvlDrawdown(
+  points: readonly SeriesPoint[],
+  spec: DetectorSpec = TVL_DRAWDOWN_V1,
+  subjectCanonicalId = "",
+): DetectorFinding | undefined {
+  const ordered = sortPoints(points);
+  const last = ordered[ordered.length - 1];
+  if (!last) {
+    return undefined;
+  }
+  const floor = spec.floorUsd ?? DEFAULT_TVL_DRAWDOWN_FLOOR_USD;
+  const target = last.observedAt.getTime() - TVL_DRAWDOWN_LOOKBACK_MS;
+  let prior: SeriesPoint | undefined;
+  let best = Number.POSITIVE_INFINITY;
+  for (const point of ordered.slice(0, -1)) {
+    const delta = Math.abs(point.observedAt.getTime() - target);
+    if (delta <= spec.maxGapMs && delta < best) {
+      best = delta;
+      prior = point;
+    }
+  }
+  if (!prior || prior.value <= 0) {
+    return undefined;
+  }
+  if (Math.max(last.value, prior.value) < floor) {
+    return undefined;
+  }
+  const changePct = ((last.value - prior.value) / prior.value) * 100;
+  if (!Number.isFinite(changePct) || changePct > -spec.absZ) {
+    return undefined;
+  }
+  const drawdownText = Math.abs(changePct).toFixed(2);
+  return {
+    detectorId: spec.id,
+    version: spec.version,
+    metric: spec.metric,
+    claimKind: spec.claimKind,
+    subjectCanonicalId,
+    zScore: changePct,
+    value: last.value,
+    unit: "percent",
+    polarity: "down",
+    thresholdAbsZ: spec.absZ,
+    sampleCount: 2,
+    windowStart: prior.observedAt,
+    windowEnd: last.observedAt,
+    bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: TVL ${prior.value} → ${last.value} usd (${changePct.toFixed(2)}% in 24h, threshold ${spec.absZ}%, floor ${floor} usd).`,
+    claimTitle: `${subjectLabel(subjectCanonicalId)} ${drawdownText}% TVL drawdown in 24h (${spec.version}, threshold ${spec.absZ}%)`,
+    series: [prior, last],
+  };
+}
+
+export function detectTvlDrawdownForSubject(
+  subjectCanonicalId: string,
+  points: readonly SeriesPoint[],
+  spec: DetectorSpec = TVL_DRAWDOWN_V1,
+): DetectorFinding | undefined {
+  return detectTvlDrawdown(points, spec, subjectCanonicalId);
+}
+
+export function detectPegDeviation(
+  basisPoints: readonly SeriesPoint[],
+  spotPoints: readonly SeriesPoint[] = [],
+  spec: DetectorSpec = PEG_DEVIATION_V1,
+  subjectCanonicalId = "",
+): DetectorFinding | undefined {
+  const ordered = sortPoints(basisPoints);
+  const prev = ordered[ordered.length - 2];
+  const last = ordered[ordered.length - 1];
+  if (!prev || !last) {
+    return undefined;
+  }
+  const gap = last.observedAt.getTime() - prev.observedAt.getTime();
+  if (gap <= 0 || gap > spec.maxGapMs) {
+    return undefined;
+  }
+  if (Math.abs(prev.value) <= spec.absZ || Math.abs(last.value) <= spec.absZ) {
+    return undefined;
+  }
+  if (Math.sign(prev.value) !== Math.sign(last.value)) {
+    return undefined;
+  }
+  const spot = sortPoints(spotPoints).at(-1);
+  if (!spot || !Number.isFinite(spot.value)) {
+    return undefined;
+  }
+  const spotBasis = (spot.value - 1) * 100;
+  if (!Number.isFinite(spotBasis) || Math.abs(spotBasis) <= spec.absZ) {
+    return undefined;
+  }
+  if (Math.sign(spotBasis) !== Math.sign(last.value)) {
+    return undefined;
+  }
+  const polarity = last.value > 0 ? "up" : "down";
+  const basisText = Math.abs(last.value).toFixed(2);
+  return {
+    detectorId: spec.id,
+    version: spec.version,
+    metric: spec.metric,
+    claimKind: spec.claimKind,
+    subjectCanonicalId,
+    zScore: last.value,
+    value: last.value,
+    unit: "percent",
+    polarity,
+    thresholdAbsZ: spec.absZ,
+    sampleCount: 2,
+    windowStart: prev.observedAt,
+    windowEnd: last.observedAt,
+    bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: basis ${prev.value.toFixed(2)}% then ${last.value.toFixed(2)}% (threshold ${spec.absZ}%), corroborated by spot ${spot.value} usd (${spotBasis.toFixed(2)}%).`,
+    claimTitle: `${subjectLabel(subjectCanonicalId)} ${basisText}% peg deviation (${spec.version}, threshold ${spec.absZ}%, corroborated)`,
+    series: [prev, last],
+  };
+}
+
+export function detectPegDeviationForSubject(
+  subjectCanonicalId: string,
+  basisPoints: readonly SeriesPoint[],
+  spotPoints: readonly SeriesPoint[] = [],
+  spec: DetectorSpec = PEG_DEVIATION_V1,
+): DetectorFinding | undefined {
+  return detectPegDeviation(basisPoints, spotPoints, spec, subjectCanonicalId);
 }
 
 export function seriesPointsFromObservations(

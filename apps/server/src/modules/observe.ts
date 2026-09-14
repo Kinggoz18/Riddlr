@@ -20,7 +20,9 @@ import {
 } from "@riddlr/db";
 import {
   detectorEvidenceFingerprint,
+  detectPegDeviationForSubject,
   detectReturnShockForSubject,
+  detectTvlDrawdownForSubject,
   detectVolumeAnomalyForSubject,
   excerptHash,
   fingerprintClaim,
@@ -30,6 +32,7 @@ import {
   MAX_SERIES_WINDOW,
   normalizeEvidence,
   OBSERVATION_SERIES_ORIGIN_KEY,
+  type RawEvidence,
   takeBounded,
 } from "@riddlr/domain";
 import { CRYPTO_DETECTOR_SPECS } from "@riddlr/domain-crypto";
@@ -37,6 +40,8 @@ import { QUEUE_NAMES } from "@riddlr/queue";
 import {
   COINGECKO_SPOT_PROVIDER_ID,
   createCoinGeckoSpotProvider,
+  createDefiLlamaProvider,
+  DEFILLAMA_PROVIDER_ID,
   ObservationProviderRegistry,
   redactRequestUrl,
 } from "@riddlr/source-adapters";
@@ -52,6 +57,7 @@ const OBSERVE_LOCK = "riddlr:observe:lock:";
 export function createObservationProviders(): ObservationProviderRegistry {
   const registry = new ObservationProviderRegistry();
   registry.register(createCoinGeckoSpotProvider());
+  registry.register(createDefiLlamaProvider());
   return registry;
 }
 
@@ -326,7 +332,7 @@ async function persistDetectorFinding(
       version: finding.version,
       metric: finding.metric,
       subjectCanonicalId: finding.subjectCanonicalId,
-      unit: "usd",
+      unit: finding.unit,
       zScore: finding.zScore,
       thresholdAbsZ: finding.thresholdAbsZ,
       sampleCount: finding.sampleCount,
@@ -414,7 +420,7 @@ async function persistDetectorFinding(
     predicate: finding.detectorId,
     objectText: `${finding.polarity} z=${finding.zScore.toFixed(2)}`,
     value: finding.zScore,
-    unit: "sigma",
+    unit: finding.unit,
     polarity: "asserted" as const,
     modality: "asserted" as const,
     fingerprint: fingerprintClaim({
@@ -474,6 +480,165 @@ async function persistDetectorFinding(
   };
 }
 
+async function persistHackEvidence(
+  ctx: AppContext,
+  sourceId: string,
+  fetchRequestId: string | undefined,
+  raw: RawEvidence,
+  subjects: ReadonlySet<string>,
+) {
+  const payload = raw.adapterPayload ?? {};
+  const subjectCanonicalId =
+    typeof payload.subjectCanonicalId === "string" ? payload.subjectCanonicalId : undefined;
+  if (!subjectCanonicalId || !subjects.has(subjectCanonicalId)) {
+    return { persisted: false, reason: "unwatched" as const };
+  }
+  const agent = await selectObserveAgent(ctx, subjectCanonicalId);
+  if (!agent) {
+    return { persisted: false, reason: "no_agent" as const };
+  }
+  const normalized = normalizeEvidence(raw);
+  const publishedAt = normalized.publishedAt ?? normalized.fetchedAt;
+  const day = publishedAt.toISOString().slice(0, 10);
+  const [scan] = await ctx.db
+    .insert(scans)
+    .values({
+      agentId: agent.id,
+      status: "observe",
+      windowStart: publishedAt,
+      idempotencyKey: `observe:${agent.id}:${day}`,
+    })
+    .onConflictDoNothing()
+    .returning();
+  const scanRow =
+    scan ??
+    (
+      await ctx.db
+        .select()
+        .from(scans)
+        .where(eq(scans.idempotencyKey, `observe:${agent.id}:${day}`))
+        .limit(1)
+    )[0];
+  if (!scanRow) {
+    return { persisted: false, reason: "scan" as const };
+  }
+  const amount =
+    typeof payload.amount === "number" && Number.isFinite(payload.amount)
+      ? payload.amount
+      : undefined;
+  const [evidence] = await ctx.db
+    .insert(evidenceItems)
+    .values({
+      sourceId,
+      scanId: scanRow.id,
+      fingerprint: normalized.fingerprint,
+      contentHash: normalized.contentHash,
+      canonicalUrl: normalized.canonicalUrl,
+      title: normalized.title,
+      bodyText: normalized.bodyText,
+      publishedAt: normalized.publishedAt,
+      fetchedAt: normalized.fetchedAt,
+      adapterPayload: payload,
+      sourceFamily: raw.sourceFamily,
+      adapterId: raw.adapterId,
+      externalId: raw.externalId,
+      fetchRequestId,
+      contentCompleteness: "native_complete",
+      originKey: normalized.originKey,
+      referencedOriginKey: raw.referencedOriginKey,
+    })
+    .onConflictDoNothing()
+    .returning();
+  const evidenceRow =
+    evidence ??
+    (
+      await ctx.db
+        .select()
+        .from(evidenceItems)
+        .where(eq(evidenceItems.fingerprint, normalized.fingerprint))
+        .limit(1)
+    )[0];
+  if (!evidenceRow) {
+    return { persisted: false, reason: "evidence" as const };
+  }
+  await ctx.db
+    .insert(evidenceOccurrences)
+    .values({
+      evidenceId: evidenceRow.id,
+      scanId: scanRow.id,
+      sourceId,
+      fetchRequestId,
+      observedAt: publishedAt,
+    })
+    .onConflictDoNothing();
+  const objectText = normalized.bodyText?.slice(0, 180) ?? normalized.title ?? "hack";
+  const claim = {
+    marketDomainId: "crypto" as const,
+    kind: "crypto:security_incident",
+    subjectCanonicalId,
+    predicate: "security_incident",
+    objectText,
+    value: amount ?? null,
+    unit: amount != null ? "usd" : undefined,
+    polarity: "asserted" as const,
+    modality: "asserted" as const,
+    fingerprint: fingerprintClaim({
+      marketDomainId: "crypto",
+      kind: "crypto:security_incident",
+      subjectCanonicalId,
+      polarity: "asserted",
+      objectText,
+      value: amount,
+      timeBucket: day,
+    }),
+    title: normalized.title ?? `${subjectCanonicalId} security incident`,
+  };
+  const [savedClaim] = await ctx.db
+    .insert(claims)
+    .values({
+      marketDomainId: claim.marketDomainId,
+      kind: claim.kind,
+      subjectCanonicalId: claim.subjectCanonicalId,
+      predicate: claim.predicate,
+      objectText: claim.objectText,
+      value: claim.value,
+      unit: claim.unit,
+      polarity: claim.polarity,
+      modality: claim.modality,
+      fingerprint: claim.fingerprint,
+      title: claim.title,
+      policyVersion: "defillama-hacks-v1",
+      extractionVersion: "detector-defillama_hacks.v1",
+      effectiveStart: publishedAt,
+    })
+    .onConflictDoNothing()
+    .returning();
+  const persistedClaim =
+    savedClaim ??
+    (
+      await ctx.db.select().from(claims).where(eq(claims.fingerprint, claim.fingerprint)).limit(1)
+    )[0];
+  if (persistedClaim) {
+    const excerpt = objectText.slice(0, 180);
+    await ctx.db
+      .insert(claimEvidence)
+      .values({
+        claimId: persistedClaim.id,
+        evidenceId: evidenceRow.id,
+        stance: "supports",
+        excerpt,
+        excerptHash: excerptHash(excerpt),
+      })
+      .onConflictDoNothing();
+  }
+  return {
+    persisted: true,
+    reason: "ok" as const,
+    scan: scanRow,
+    evidenceId: evidenceRow.id,
+  };
+}
+
 async function runDetectors(
   ctx: AppContext,
   providerId: string,
@@ -487,13 +652,26 @@ async function runDetectors(
   >();
   for (const subject of takeBounded(subjects, ctx.config.RIDDLR_OBSERVE_MAX_SUBJECTS)) {
     for (const spec of CRYPTO_DETECTOR_SPECS) {
+      const specProvider = spec.provider ?? COINGECKO_SPOT_PROVIDER_ID;
+      if (specProvider !== providerId) {
+        continue;
+      }
       const points = await seriesWindow(ctx, providerId, spec.metric, subject);
       const hit =
         spec.id === "return_shock"
           ? detectReturnShockForSubject(subject, points, spec)
           : spec.id === "volume_anomaly"
             ? detectVolumeAnomalyForSubject(subject, points, spec)
-            : undefined;
+            : spec.id === "tvl_drawdown"
+              ? detectTvlDrawdownForSubject(subject, points, spec)
+              : spec.id === "peg_deviation"
+                ? detectPegDeviationForSubject(
+                    subject,
+                    points,
+                    await seriesWindow(ctx, COINGECKO_SPOT_PROVIDER_ID, "spot_price", subject),
+                    spec,
+                  )
+                : undefined;
       if (!hit) {
         ctx.metrics.detectorFindings.inc({ detector: spec.id, result: "none" });
         continue;
@@ -587,7 +765,41 @@ export async function observationHealth(ctx: AppContext) {
     freshnessGapSeconds,
     intervalSeconds: ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS,
     retentionDays: ctx.config.RIDDLR_OBSERVE_RETENTION_DAYS,
+    providers: await Promise.all(
+      providers(ctx)
+        .list()
+        .map(async (item) => ({
+          id: item.id,
+          lastPollAt: await ctx.redis.get(`${OBSERVE_LAST}${item.id}`),
+          lastResult: await ctx.redis.get(`${OBSERVE_RESULT}${item.id}`),
+          intervalSeconds:
+            item.id === COINGECKO_SPOT_PROVIDER_ID
+              ? ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS
+              : Math.round(item.defaultIntervalMs / 1000),
+        })),
+    ),
   };
+}
+
+function observationProviderForPoll(ctx: AppContext, providerId: string, fetchImpl?: typeof fetch) {
+  const registry = providers(ctx);
+  if (fetchImpl && providerId === COINGECKO_SPOT_PROVIDER_ID) {
+    return createCoinGeckoSpotProvider({
+      fetchImpl,
+      intervalMs: ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS * 1000,
+    });
+  }
+  if (fetchImpl && providerId === DEFILLAMA_PROVIDER_ID) {
+    return createDefiLlamaProvider({ fetchImpl, minIntervalMs: 0 });
+  }
+  return registry.require(providerId);
+}
+
+function intervalSecondsFor(ctx: AppContext, provider: { id: string; defaultIntervalMs: number }) {
+  if (provider.id === COINGECKO_SPOT_PROVIDER_ID) {
+    return ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS;
+  }
+  return Math.max(30, Math.ceil(provider.defaultIntervalMs / 1000));
 }
 
 export async function pollObservationProvider(
@@ -595,22 +807,37 @@ export async function pollObservationProvider(
   providerId: string,
   fetchImpl?: typeof fetch,
 ) {
-  const registry = providers(ctx);
-  const provider =
-    fetchImpl && providerId === COINGECKO_SPOT_PROVIDER_ID
-      ? createCoinGeckoSpotProvider({
-          fetchImpl,
-          intervalMs: ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS * 1000,
-        })
-      : registry.require(providerId);
-  const lockTtl = ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS;
+  const provider = observationProviderForPoll(ctx, providerId, fetchImpl);
+  if (provider.optIn) {
+    const [existing] = await ctx.db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.adapterId, provider.id), eq(sources.enabled, true)))
+      .limit(1);
+    if (!existing) {
+      ctx.metrics.observePolls.inc({ provider: provider.id, result: "source_disabled" });
+      return { observations: 0, error: "source_disabled" };
+    }
+  }
+  const lockTtl = intervalSecondsFor(ctx, provider);
   const locked = await ctx.redis.set(`${OBSERVE_LOCK}${provider.id}`, "1", "EX", lockTtl, "NX");
   if (!locked) {
     ctx.metrics.observePolls.inc({ provider: provider.id, result: "lock_held" });
     return { observations: 0, error: "lock_held" };
   }
   const subjects = await listObserveSubjects(ctx);
-  const source = await ensureObservationSource(ctx, provider.id);
+  const source = provider.optIn
+    ? (
+        await ctx.db
+          .select()
+          .from(sources)
+          .where(and(eq(sources.adapterId, provider.id), eq(sources.enabled, true)))
+          .limit(1)
+      )[0]
+    : await ensureObservationSource(ctx, provider.id);
+  if (!source) {
+    return { observations: 0, error: "source_disabled" };
+  }
   const headers =
     provider.id === COINGECKO_SPOT_PROVIDER_ID ? await coingeckoTokenHeaders(ctx) : {};
   const now = new Date();
@@ -619,10 +846,16 @@ export async function pollObservationProvider(
   let lastFetchId: string | undefined;
   let lastError: string | undefined;
   let lastClass: string | undefined;
-  const batches: string[][] = [];
-  for (let index = 0; index < subjects.length; index += batchSize) {
-    batches.push(subjects.slice(index, index + batchSize));
-  }
+  const batches: string[][] = provider.optIn
+    ? [subjects]
+    : (() => {
+        const groups: string[][] = [];
+        for (let index = 0; index < subjects.length; index += batchSize) {
+          groups.push(subjects.slice(index, index + batchSize));
+        }
+        return groups;
+      })();
+  const subjectSet = new Set(subjects);
   for (const batch of takeBounded(batches, 40)) {
     const requestHash = createHash("sha256")
       .update(JSON.stringify({ provider: provider.id, ids: batch, at: now.toISOString() }))
@@ -636,10 +869,13 @@ export async function pollObservationProvider(
         status: "running",
       })
       .returning();
-    const result = await provider.observe(headers, {
-      subjectCanonicalIds: batch,
-      observedAt: now,
-    });
+    const result = await provider.observe(
+      { ...source.config, ...headers },
+      {
+        subjectCanonicalIds: batch,
+        observedAt: now,
+      },
+    );
     lastClass = result.errors[0]?.class;
     lastError = result.errors[0]?.message;
     if (fetchRequest) {
@@ -650,7 +886,7 @@ export async function pollObservationProvider(
           status: result.errors.length && result.observations.length === 0 ? "failed" : "succeeded",
           errorClass: result.errors[0]?.class,
           finishedAt: new Date(),
-          evidenceCount: result.observations.length,
+          evidenceCount: result.observations.length + (result.evidence?.length ?? 0),
           requestUrl: result.requestUrl ? redactRequestUrl(result.requestUrl) : undefined,
           responseStatus: result.responseStatus,
         })
@@ -662,6 +898,7 @@ export async function pollObservationProvider(
         lastHealthOk: result.observations.length > 0 || result.errors.length === 0,
         lastHealthMessage: result.errors[0]?.message ?? "ok",
         lastHealthAt: new Date(),
+        ...(result.persistConfig ? { config: { ...source.config, ...result.persistConfig } } : {}),
       })
       .where(eq(sources.id, source.id));
     if (result.errors.some((item) => item.class === "rate_limited")) {
@@ -677,6 +914,24 @@ export async function pollObservationProvider(
         fetchRequestId: fetchRequest?.id,
       })),
     );
+    const clustered = new Map<
+      string,
+      { scan: NonNullable<Awaited<ReturnType<typeof persistHackEvidence>>["scan"]>; ids: string[] }
+    >();
+    for (const item of result.evidence ?? []) {
+      const saved = await persistHackEvidence(ctx, source.id, fetchRequest?.id, item, subjectSet);
+      if (!saved.persisted || !saved.scan || !saved.evidenceId) {
+        continue;
+      }
+      const current = clustered.get(saved.scan.id) ?? { scan: saved.scan, ids: [] };
+      if (!current.ids.includes(saved.evidenceId)) {
+        current.ids.push(saved.evidenceId);
+      }
+      clustered.set(saved.scan.id, current);
+    }
+    for (const item of clustered.values()) {
+      await clusterScanEvents(ctx, item.scan, item.ids);
+    }
   }
   await runDetectors(ctx, provider.id, source.id, lastFetchId, subjects);
   await retainObservationSeries(ctx);
@@ -692,8 +947,21 @@ export async function enqueueObserveIfDue(ctx: AppContext) {
     return;
   }
   const now = Date.now();
-  const intervalMs = ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS * 1000;
   for (const provider of providers(ctx).list()) {
+    if (provider.optIn) {
+      const [existing] = await ctx.db
+        .select({ id: sources.id })
+        .from(sources)
+        .where(and(eq(sources.adapterId, provider.id), eq(sources.enabled, true)))
+        .limit(1);
+      if (!existing) {
+        continue;
+      }
+    }
+    const intervalMs =
+      provider.id === COINGECKO_SPOT_PROVIDER_ID
+        ? ctx.config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS * 1000
+        : provider.defaultIntervalMs;
     const last = await ctx.redis.get(`${OBSERVE_LAST}${provider.id}`);
     const due = !last || now - new Date(last).getTime() >= intervalMs;
     if (!due) {

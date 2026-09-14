@@ -132,6 +132,10 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Configure RSS/Atom" }).click();
   await expect(page.getByRole("heading", { name: "Add RSS/Atom source" })).toBeVisible();
   await expect(page.getByText(/If-None-Match/)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure DefiLlama" }).click();
+  await expect(page.getByRole("heading", { name: "Add DefiLlama source" })).toBeVisible();
+  await expect(page.getByText(/Personal, non-commercial/i)).toBeVisible();
   await page.getByRole("link", { name: "View sources" }).click();
   await expect(page.getByText("coingecko.com")).toBeVisible();
   await page.getByRole("link", { name: "SearXNG", exact: true }).click();

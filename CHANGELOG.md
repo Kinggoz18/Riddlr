@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- DefiLlama opt-in observation source: protocol and chain TVL, stablecoin
+  supply, secondary prices, and hourly hacks. TVL-drawdown and peg-deviation
+  detectors. Sources → Add source → Configure DefiLlama. See
+  [docs/integrations/defillama.md](docs/integrations/defillama.md).
+
 - SearXNG runs one `categories=news` query per watched asset (cap 12) plus one
   domain-general query, dedupes hits by canonical URL, and blocks default
   price-tracker hosts from producing claims. Sources → SearXNG → Edit source

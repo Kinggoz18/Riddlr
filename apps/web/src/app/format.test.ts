@@ -76,6 +76,7 @@ describe("agent labels", () => {
     expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
     expect(adapterLabel("feeds")).toBe("RSS/Atom");
+    expect(adapterLabel("defillama")).toBe("DefiLlama");
   });
 });
 

@@ -9,9 +9,12 @@ was assessed on.
 The worker `observe` queue (`riddlr.observe.poll`) polls the union of enabled
 agents' watchlists, portfolio holdings, and operator-pinned series. A subject
 nobody watches is not polled. CoinGecko `/simple/price` is the shipped spot
-provider. Interval `RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` (default 60, max 300).
-Batch size default 100. Concurrency `RIDDLR_OBSERVE_CONCURRENCY` (default 2,
-max 4). `RIDDLR_ENV=test` does not enqueue; tests call `pollObservationProvider`.
+provider (60s, auto-created). DefiLlama is an opt-in provider (15 minutes) for
+TVL, stablecoins, and hacks; it is not auto-created. Interval
+`RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` (default 60, max 300) applies to
+CoinGecko spot. Batch size default 100. Concurrency `RIDDLR_OBSERVE_CONCURRENCY`
+(default 2, max 4). `RIDDLR_ENV=test` does not enqueue; tests call
+`pollObservationProvider`.
 
 ## Retention
 
@@ -24,10 +27,15 @@ bounded batches. Missing polls are gaps. The worker does not write zeros.
 `return_shock.v1` is the sample z-score of the last 20 log returns of `spot_price`.
 `volume_anomaly.v1` is the sample z-score of the last 20 `quoted_volume` points.
 Threshold `|z| >= 3`. Fewer than the window, zero variance, a non-positive price,
-or a gap wider than three poll intervals emit nothing. A finding is native-complete
+or a gap wider than three poll intervals emit nothing. `tvl_drawdown.v1` fires
+when DefiLlama `tvl_usd` is down more than 15% versus a point about 24h earlier
+and the larger point is at least $1,000,000. `peg_deviation.v1` fires when
+DefiLlama `stablecoin_basis` is beyond 1% on two consecutive polls and CoinGecko
+`spot_price` is also beyond 1% from peg. A finding is native-complete
 evidence with `sourceFamily: observation` and a claim
-`crypto:observed_<metric>_anomaly`. The same detector, subject, and polarity
-fingerprint to one evidence row per UTC day.
+`crypto:observed_<metric>_anomaly` (peg uses `crypto:stablecoin_peg_change`).
+The same detector, subject, and polarity fingerprint to one evidence row per UTC
+day.
 
 Findings cluster into events without a web article. A watched (or pinned) asset
 with a detector claim is material (`observed_anomaly`). Reliability is `observed`,
@@ -51,5 +59,6 @@ to poll it without a watchlist. The dashboard footer reads "Price data by CoinGe
 | `malformed` | HTML 200, oversized body, or a non-object JSON body | Captured empty `vs_currencies` 422 body is this class |
 | `lock_held` | A second poll while the interval NX lock is held | Wait for the in-flight poll |
 
-See [integrations/coingecko.md](integrations/coingecko.md) and
+See [integrations/coingecko.md](integrations/coingecko.md),
+[integrations/defillama.md](integrations/defillama.md), and
 [ADR 0025](adr/0025-observation-layer.md).

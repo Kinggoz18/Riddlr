@@ -3,6 +3,8 @@ import {
   CATALYST_KINDS,
   MARKET_DOMAIN_IDS,
   MAX_DAILY_TOKEN_BUDGET,
+  MAX_DEFILLAMA_CHAIN_SLUGS,
+  MAX_DEFILLAMA_PROTOCOL_FETCHES,
   MAX_FEED_POLL_INTERVAL_SECONDS,
   MIN_DAILY_TOKEN_BUDGET,
   MIN_FEED_POLL_INTERVAL_SECONDS,
@@ -217,6 +219,15 @@ export const feedSourceSchema = z.object({
     .int()
     .min(MIN_FEED_POLL_INTERVAL_SECONDS)
     .max(MAX_FEED_POLL_INTERVAL_SECONDS)
+    .optional(),
+});
+
+export const defillamaSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("DefiLlama"),
+  chainSlugs: z.array(z.string().min(1).max(64)).max(MAX_DEFILLAMA_CHAIN_SLUGS).optional(),
+  protocolSlugs: z
+    .array(z.string().regex(/^[A-Za-z0-9._-]+$/))
+    .max(MAX_DEFILLAMA_PROTOCOL_FETCHES)
     .optional(),
 });
 

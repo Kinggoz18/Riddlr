@@ -13,12 +13,15 @@ export type ObserveResult = {
   requestUrl?: string;
   responseStatus?: number;
   stale?: boolean;
+  evidence?: import("@riddlr/domain").RawEvidence[];
+  persistConfig?: Record<string, unknown>;
 };
 
 export type ObservationProvider = {
   id: string;
   metrics: readonly string[];
   defaultIntervalMs: number;
+  optIn?: boolean;
   observe(config: Record<string, unknown>, query: ObserveQuery): Promise<ObserveResult>;
 };
 

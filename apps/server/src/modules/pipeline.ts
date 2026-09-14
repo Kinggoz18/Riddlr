@@ -23,6 +23,7 @@ import {
   evidenceRelations,
   instanceSettings,
   observationPins,
+  observationSeries,
   observations,
   portfolioHoldings,
   providerConfigs,
@@ -69,6 +70,7 @@ import {
   MAX_SEARXNG_ASSET_QUERIES,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
+  type MarketObservation,
   nextEventStatus,
   normalizeEvidence,
   observationsFromDetectorPayload,
@@ -99,6 +101,7 @@ import {
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
   createCryptoComAdapter,
+  createDefiLlamaAdapter,
   createDiscordAdapter,
   createFeedsAdapter,
   createSearxngAdapter,
@@ -161,6 +164,72 @@ function strongestStance(stances: string[]): string {
   );
 }
 
+async function defiLlamaContextObservations(
+  ctx: AppContext,
+  canonicalIds: readonly string[],
+): Promise<MarketObservation[]> {
+  const ids = takeBounded([...new Set(canonicalIds.filter(Boolean))], 16);
+  if (ids.length === 0) {
+    return [];
+  }
+  const rows = await ctx.db
+    .select({
+      subjectCanonicalId: observationSeries.subjectCanonicalId,
+      value: observationSeries.value,
+      unit: observationSeries.unit,
+      observedAt: observationSeries.observedAt,
+    })
+    .from(observationSeries)
+    .where(
+      and(
+        eq(observationSeries.provider, "defillama"),
+        eq(observationSeries.metric, "tvl_usd"),
+        eq(observationSeries.resolution, "raw"),
+        inArray(observationSeries.subjectCanonicalId, ids),
+      ),
+    )
+    .orderBy(desc(observationSeries.observedAt))
+    .limit(ids.length * 8);
+  const bySubject = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const list = bySubject.get(row.subjectCanonicalId) ?? [];
+    if (list.length < 8) {
+      list.push(row);
+      bySubject.set(row.subjectCanonicalId, list);
+    }
+  }
+  const out: MarketObservation[] = [];
+  for (const [subject, series] of bySubject) {
+    const latest = series[0];
+    if (!latest) {
+      continue;
+    }
+    out.push({
+      kind: "tvl_usd",
+      assetCanonicalId: subject,
+      value: latest.value,
+      unit: latest.unit,
+      observedAt: latest.observedAt,
+      sourceId: "defillama",
+    });
+    const target = latest.observedAt.getTime() - 24 * 60 * 60 * 1000;
+    const prior = series.find(
+      (item) => Math.abs(item.observedAt.getTime() - target) <= 6 * 60 * 60 * 1000,
+    );
+    if (prior && prior.value > 0 && prior !== latest) {
+      out.push({
+        kind: "tvl_change_1d",
+        assetCanonicalId: subject,
+        value: ((latest.value - prior.value) / prior.value) * 100,
+        unit: "percent",
+        observedAt: latest.observedAt,
+        sourceId: "defillama",
+      });
+    }
+  }
+  return out;
+}
+
 export async function runScan(
   ctx: AppContext,
   scanId: string,
@@ -201,6 +270,7 @@ export async function runScan(
     adapters.register(createDiscordAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createXAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createFeedsAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createDefiLlamaAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
@@ -805,6 +875,10 @@ export async function clusterScanEvents(
           ),
         ),
         ...module.extractObservations(clusterNorm, registry),
+        ...(await defiLlamaContextObservations(
+          ctx,
+          extracted.map((item) => item.canonicalId),
+        )),
       ],
       MAX_OBSERVATIONS_PER_EVENT,
     );

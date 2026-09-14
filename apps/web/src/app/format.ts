@@ -365,6 +365,8 @@ export function adapterLabel(adapterId: string) {
       return "X";
     case "feeds":
       return "RSS/Atom";
+    case "defillama":
+      return "DefiLlama";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

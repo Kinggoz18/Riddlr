@@ -77,6 +77,11 @@ const ADAPTERS = [
     body: "Exchange announcements, protocol blogs, central-bank feeds, Substack, and YouTube channel feeds. You can add more than one.",
   },
   {
+    id: "defillama",
+    name: "DefiLlama",
+    body: "Protocol TVL, stablecoin supply, and hacks. Opt-in. Personal, non-commercial; results stay in this operator database.",
+  },
+  {
     id: "discord",
     name: "Discord",
     body: "Recent channel messages. You can add more than one Discord source.",
@@ -136,7 +141,7 @@ function SourcesList() {
     <>
       <PageHeader
         title="Sources"
-        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time."
+        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time. DefiLlama is opt-in observation."
         actions={<SourcesSubnav />}
       />
       {rows.length === 0 ? (
@@ -346,7 +351,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other: only one is active."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama is a single opt-in observation source."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -492,6 +497,87 @@ function FeedForm() {
           </Field>
           <p className="ui-actions">
             <Button type="submit">Save RSS/Atom source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function DefiLlamaForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("DefiLlama");
+  const [chainSlugs, setChainSlugs] = useState<string[]>([]);
+  const [protocolSlugs, setProtocolSlugs] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "defillama");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add DefiLlama source"
+        description="Opt-in TVL, stablecoin supply, and hacks. Personal, non-commercial terms: results stay in this operator database and are not re-exposed."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/defillama", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  chainSlugs,
+                  protocolSlugs,
+                }),
+              });
+              toast("DefiLlama saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save DefiLlama"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="defillama-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Pinned chains"
+            hint="Chain TVL for names DefiLlama uses, such as Ethereum. Leave empty to skip chain TVL."
+          >
+            <ChipInput
+              id="defillama-chains"
+              values={chainSlugs}
+              onChange={setChainSlugs}
+              placeholder="Ethereum"
+            />
+          </Field>
+          <Field
+            label="Extra protocol slugs"
+            hint="Optional DefiLlama slugs to poll in addition to watchlist gecko_id mapping. Cap 16."
+          >
+            <ChipInput
+              id="defillama-protocols"
+              values={protocolSlugs}
+              onChange={setProtocolSlugs}
+              placeholder="aave"
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save DefiLlama source</Button>
           </p>
         </form>
       </Card>
@@ -883,6 +969,9 @@ function SourceCreate() {
   if (adapter === "feeds") {
     return <FeedForm />;
   }
+  if (adapter === "defillama") {
+    return <DefiLlamaForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -1030,6 +1119,25 @@ function SourceDetail() {
               {typeof config.pollIntervalSeconds === "number" ? config.pollIntervalSeconds : 300}s
             </span>
           </p>
+        </Card>
+      ) : null}
+      {row.adapterId === "defillama" ? (
+        <Card>
+          <h2>DefiLlama</h2>
+          <p className="field-note">
+            Personal, non-commercial terms. Operator-local cache only. Poll every 15 minutes for TVL
+            and stablecoins; hacks hourly. Watchlist gecko_id maps to protocol slugs.
+          </p>
+          <h2>Pinned chains</h2>
+          <ChipList
+            values={Array.isArray(config.chainSlugs) ? config.chainSlugs.map(String) : []}
+            empty="No chain TVL"
+          />
+          <h2>Extra protocol slugs</h2>
+          <ChipList
+            values={Array.isArray(config.protocolSlugs) ? config.protocolSlugs.map(String) : []}
+            empty="Watchlist mapping only"
+          />
         </Card>
       ) : null}
       {["coingecko", "coinmarketcap", "cryptocom"].includes(row.adapterId) ? (

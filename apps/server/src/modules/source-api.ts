@@ -2,6 +2,7 @@ import {
   coingeckoSourceSchema,
   coinmarketcapSourceSchema,
   cryptocomSourceSchema,
+  defillamaSourceSchema,
   discordSourceSchema,
   feedSourceSchema,
   pageQuerySchema,
@@ -28,6 +29,7 @@ import {
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
   createCryptoComAdapter,
+  createDefiLlamaAdapter,
   createDiscordAdapter,
   createFeedsAdapter,
   createSearxngAdapter,
@@ -79,6 +81,7 @@ export function registerSourceRoutes(
   const coingecko = createCoinGeckoAdapter();
   const coinmarketcap = createCoinMarketCapAdapter();
   const cryptocom = createCryptoComAdapter();
+  const defillama = createDefiLlamaAdapter();
 
   app.get("/api/v1/sources", { preHandler: authed }, async () => {
     const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
@@ -106,6 +109,11 @@ export function registerSourceRoutes(
           family: feeds.family,
           capabilities: feeds.capabilities,
           suggestedFeeds: SUGGESTED_FEEDS,
+        },
+        {
+          id: defillama.id,
+          family: defillama.family,
+          capabilities: defillama.capabilities,
         },
         {
           id: coingecko.id,
@@ -281,6 +289,24 @@ export function registerSourceRoutes(
     });
   });
 
+  app.post("/api/v1/sources/defillama", { preHandler: authed }, async (request, reply) => {
+    const body = defillamaSourceSchema.parse(request.body);
+    const chainSlugs = body.chainSlugs ?? [];
+    const protocolSlugs = body.protocolSlugs ?? [];
+    const validated = await defillama.validate({ chainSlugs, protocolSlugs });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "observation",
+      adapterId: "defillama",
+      name: body.name,
+      config: { chainSlugs, protocolSlugs },
+    });
+  });
+
   app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const [row] = await ctx.db.select().from(sources).where(eq(sources.id, id)).limit(1);
@@ -372,7 +398,9 @@ export function registerSourceRoutes(
           ? x
           : row.adapterId === "feeds"
             ? feeds
-            : (marketAdapter(row.adapterId) ?? searxng);
+            : row.adapterId === "defillama"
+              ? defillama
+              : (marketAdapter(row.adapterId) ?? searxng);
     const health = await adapter.healthCheck(await sourceRuntimeConfig(ctx, row));
     await ctx.db
       .update(sources)
@@ -682,6 +710,56 @@ async function insertMarketSource(
     .returning();
   if (source) {
     await setActiveMarketSource(ctx, source.id);
+    await attachSourceToAgents(ctx, source.id);
+  }
+  const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+  await ctx.db.insert(auditLogs).values({
+    actorUserId: auth?.user.id,
+    action: "source.create",
+    resource: source?.id,
+  });
+  return { source: source ? publicSource(source) : undefined };
+}
+
+async function insertUniqueSource(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  input: {
+    family: string;
+    adapterId: string;
+    name: string;
+    config: Record<string, unknown>;
+  },
+) {
+  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+    return reply.code(400).send({
+      error: {
+        code: "source_limit",
+        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+      },
+    });
+  }
+  if (existing.some((row) => row.adapterId === input.adapterId)) {
+    return reply.code(409).send({
+      error: {
+        code: "source_exists",
+        message: `${input.name} is already configured.`,
+      },
+    });
+  }
+  const [source] = await ctx.db
+    .insert(sources)
+    .values({
+      family: input.family,
+      adapterId: input.adapterId,
+      enabled: true,
+      name: input.name,
+      config: input.config,
+    })
+    .returning();
+  if (source) {
     await attachSourceToAgents(ctx, source.id);
   }
   const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;

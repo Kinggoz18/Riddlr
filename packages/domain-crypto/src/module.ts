@@ -18,10 +18,12 @@ import {
   MAX_SEARXNG_ASSET_QUERIES,
   type MarketObservation,
   type NormalizedEvidence,
+  PEG_DEVIATION_V1,
   RETURN_SHOCK_V1,
   type RegistryAsset,
   resolveEvidenceAssets,
   selectPrincipalCatalyst,
+  TVL_DRAWDOWN_V1,
   takeBounded,
   VOLUME_ANOMALY_V1,
   watchlistSearchQuery,
@@ -109,6 +111,7 @@ export const CRYPTO_CLAIM_KINDS = [
   "crypto:general_report",
   "crypto:observed_spot_price_anomaly",
   "crypto:observed_quoted_volume_anomaly",
+  "crypto:observed_tvl_anomaly",
 ] as const;
 
 export const CRYPTO_CLAIM_TO_CATALYST: Record<
@@ -134,6 +137,7 @@ export const CRYPTO_CLAIM_TO_CATALYST: Record<
   "crypto:general_report": undefined,
   "crypto:observed_spot_price_anomaly": "observed_anomaly",
   "crypto:observed_quoted_volume_anomaly": "observed_anomaly",
+  "crypto:observed_tvl_anomaly": "observed_anomaly",
 };
 
 export const CRYPTO_CATALYST_TO_CLAIM: Partial<
@@ -160,6 +164,8 @@ export const CRYPTO_IMPACT_POLICY_VERSION = "crypto-impact-1";
 export const CRYPTO_DETECTOR_SPECS: readonly DetectorSpec[] = [
   { ...RETURN_SHOCK_V1, claimKind: "crypto:observed_spot_price_anomaly" },
   { ...VOLUME_ANOMALY_V1, claimKind: "crypto:observed_quoted_volume_anomaly" },
+  { ...TVL_DRAWDOWN_V1, claimKind: "crypto:observed_tvl_anomaly" },
+  { ...PEG_DEVIATION_V1, claimKind: "crypto:stablecoin_peg_change" },
 ];
 
 const CLAIM_PATTERNS: Array<{
@@ -339,7 +345,7 @@ export const cryptoDomainModule: DomainModule = {
     if (input.adapterId === "x" || input.adapterId === "discord") {
       return [watchlistSearchQuery(watchlist, "crypto")];
     }
-    if (input.adapterId === "feeds") {
+    if (input.adapterId === "feeds" || input.adapterId === "defillama") {
       return [""];
     }
     return [watchlist.map((item) => item.canonicalId).join(" ")];
@@ -481,7 +487,8 @@ export const cryptoDomainModule: DomainModule = {
     }
     if (
       domainKind === "crypto:observed_spot_price_anomaly" ||
-      domainKind === "crypto:observed_quoted_volume_anomaly"
+      domainKind === "crypto:observed_quoted_volume_anomaly" ||
+      domainKind === "crypto:observed_tvl_anomaly"
     ) {
       return undefined;
     }
@@ -539,6 +546,14 @@ export const cryptoDomainModule: DomainModule = {
       `Watchlist: ${watchlist.map((item) => item.canonicalId).join(", ") || "none"}`,
       `Sourced observations: ${observations.map((item) => item.kind).join(", ") || "none"}`,
     ];
+    for (const item of observations) {
+      if (item.kind === "tvl_usd" && item.assetCanonicalId) {
+        notes.push(`Protocol TVL ${item.assetCanonicalId}: ${item.value} ${item.unit ?? "usd"}`);
+      }
+      if (item.kind === "tvl_change_1d" && item.assetCanonicalId) {
+        notes.push(`Protocol TVL 24h change ${item.assetCanonicalId}: ${item.value}%`);
+      }
+    }
     return {
       domainId: "crypto",
       observations,
@@ -615,6 +630,7 @@ export const cryptoDomainModule: DomainModule = {
     if (
       (kinds.has("crypto:observed_spot_price_anomaly") ||
         kinds.has("crypto:observed_quoted_volume_anomaly") ||
+        kinds.has("crypto:observed_tvl_anomaly") ||
         principal === "observed_anomaly") &&
       (input.watchlistOverlap || input.portfolioOverlap)
     ) {

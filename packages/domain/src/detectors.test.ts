@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   detectorEvidenceFingerprint,
+  detectPegDeviation,
   detectReturnShock,
   detectReturnShockForSubject,
+  detectTvlDrawdown,
+  detectTvlDrawdownForSubject,
   detectVolumeAnomaly,
   isObservedAnomalyKind,
   RETURN_SHOCK_V1,
@@ -82,7 +85,100 @@ describe("return-shock detector", () => {
   it("recognises observed-anomaly claim kinds", () => {
     expect(isObservedAnomalyKind("crypto:observed_spot_price_anomaly")).toBe(true);
     expect(isObservedAnomalyKind("generic:observed_quoted_volume_anomaly")).toBe(true);
+    expect(isObservedAnomalyKind("crypto:observed_tvl_anomaly")).toBe(true);
     expect(isObservedAnomalyKind("crypto:market_move")).toBe(false);
+  });
+});
+
+describe("tvl-drawdown detector", () => {
+  it("emits when 24h TVL is down more than 15% and above the floor", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    const points = [
+      { observedAt: start, value: 100_000_000 },
+      { observedAt: new Date(start.getTime() + 24 * 60 * 60 * 1000), value: 80_000_000 },
+    ];
+    const hit = detectTvlDrawdownForSubject("coingecko:aave", points);
+    expect(hit?.detectorId).toBe("tvl_drawdown");
+    expect(hit?.version).toBe("v1");
+    expect(hit?.claimKind).toBe("generic:observed_tvl_anomaly");
+    expect(hit?.polarity).toBe("down");
+    expect(hit?.zScore).toBe(-20);
+    expect(hit?.value).toBe(80_000_000);
+    expect(hit?.unit).toBe("percent");
+    expect(hit?.claimTitle).toBe("aave 20.00% TVL drawdown in 24h (v1, threshold 15%)");
+  });
+
+  it("emits nothing for a 10% drawdown", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    expect(
+      detectTvlDrawdown([
+        { observedAt: start, value: 100_000_000 },
+        { observedAt: new Date(start.getTime() + 24 * 60 * 60 * 1000), value: 90_000_000 },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing when both points are below the 1M usd floor", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    expect(
+      detectTvlDrawdown([
+        { observedAt: start, value: 500_000 },
+        { observedAt: new Date(start.getTime() + 24 * 60 * 60 * 1000), value: 400_000 },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing without a point near 24h ago", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    expect(
+      detectTvlDrawdown([
+        { observedAt: start, value: 100_000_000 },
+        { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 80_000_000 },
+      ]),
+    ).toBeUndefined();
+  });
+});
+
+describe("peg-deviation detector", () => {
+  const start = new Date("2026-09-13T12:00:00.000Z");
+  const later = new Date(start.getTime() + 15 * 60 * 1000);
+  const basis = [
+    { observedAt: start, value: -1.5 },
+    { observedAt: later, value: -2.4 },
+  ];
+
+  it("emits when |basis| > 1% twice and CoinGecko spot corroborates", () => {
+    const hit = detectPegDeviation(
+      basis,
+      [{ observedAt: later, value: 0.976 }],
+      undefined,
+      "coingecko:tether",
+    );
+    expect(hit?.detectorId).toBe("peg_deviation");
+    expect(hit?.claimKind).toBe("generic:stablecoin_peg_change");
+    expect(hit?.polarity).toBe("down");
+    expect(hit?.zScore).toBe(-2.4);
+    expect(hit?.claimTitle).toBe("tether 2.40% peg deviation (v1, threshold 1%, corroborated)");
+  });
+
+  it("emits nothing without a CoinGecko or CLOB corroborating price", () => {
+    expect(detectPegDeviation(basis, [])).toBeUndefined();
+  });
+
+  it("emits nothing when spot is still within 1% of peg", () => {
+    expect(detectPegDeviation(basis, [{ observedAt: later, value: 0.999 }])).toBeUndefined();
+  });
+
+  it("emits nothing when consecutive basis signs disagree", () => {
+    expect(
+      detectPegDeviation(
+        [
+          { observedAt: start, value: -1.5 },
+          { observedAt: new Date(start.getTime() + 15 * 60 * 1000), value: 2.4 },
+        ],
+        [{ observedAt: new Date(start.getTime() + 15 * 60 * 1000), value: 0.976 }],
+      ),
+    ).toBeUndefined();
   });
 });
 

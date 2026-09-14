@@ -1,0 +1,16 @@
+{
+  "coins": {
+    "coingecko:tether": {
+      "price": 0.999689651045691,
+      "symbol": "USDT",
+      "timestamp": 1789397620,
+      "confidence": 0.99
+    },
+    "coingecko:usd-coin": {
+      "price": 0.9998108899416146,
+      "symbol": "USDC",
+      "timestamp": 1789397620,
+      "confidence": 0.99
+    }
+  }
+}

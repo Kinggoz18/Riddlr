@@ -52,6 +52,7 @@ import { QUEUE_NAMES } from "@riddlr/queue";
 import {
   COINGECKO_SPOT_PROVIDER_ID,
   createScriptedObservationProvider,
+  DEFILLAMA_PROVIDER_ID,
   ObservationProviderRegistry,
 } from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
@@ -2502,6 +2503,85 @@ describe("setup, auth, and domain persistence", () => {
       .from(observationSeries)
       .where(eq(observationSeries.resolution, "daily"));
     expect(daily.some((row) => row.value === 90)).toBe(true);
+  });
+
+  it("creates an opt-in DefiLlama source and polls captured TVL, stables, and chain series", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/defillama",
+      headers: { cookie },
+      payload: { name: "DefiLlama", chainSlugs: ["Ethereum"], protocolSlugs: ["aave"] },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("defillama");
+    expect(created.json().source?.config?.chainSlugs).toEqual(["Ethereum"]);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/defillama",
+      headers: { cookie },
+      payload: { name: "DefiLlama again", chainSlugs: ["Ethereum"] },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const adapter = listed.json().adapters.find((item: { id: string }) => item.id === "defillama");
+    expect(adapter.capabilities.lookbackNotes).toMatch(/Personal, non-commercial/);
+
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/defillama");
+    const protocols = JSON.parse(readFileSync(join(fixtures, "protocols-truncated.json"), "utf8"));
+    const detail = JSON.parse(readFileSync(join(fixtures, "protocol-aave.json"), "utf8"));
+    const stables = JSON.parse(readFileSync(join(fixtures, "stablecoins-truncated.json"), "utf8"));
+    const coins = JSON.parse(readFileSync(join(fixtures, "coins-current.json"), "utf8"));
+    const hacks = JSON.parse(readFileSync(join(fixtures, "hacks-truncated.json"), "utf8"));
+    const hist = JSON.parse(
+      readFileSync(join(fixtures, "historical-chain-tvl-ethereum.json"), "utf8"),
+    );
+    await ctx.redis.del(`riddlr:observe:lock:${DEFILLAMA_PROVIDER_ID}`);
+    const polled = await pollObservationProvider(ctx, DEFILLAMA_PROVIDER_ID, async (input) => {
+      const url = String(input);
+      if (url.endsWith("/protocols")) {
+        return Response.json(protocols);
+      }
+      if (url.includes("/protocol/")) {
+        return Response.json(detail);
+      }
+      if (url.includes("/stablecoins")) {
+        return Response.json(stables);
+      }
+      if (url.includes("/prices/current/")) {
+        return Response.json(coins);
+      }
+      if (url.endsWith("/hacks")) {
+        return Response.json(hacks);
+      }
+      if (url.includes("/historicalChainTvl/Ethereum")) {
+        return Response.json(hist);
+      }
+      return new Response("not found", { status: 404 });
+    });
+    expect(polled.error).toBeUndefined();
+    expect(polled.observations).toBeGreaterThan(0);
+    const series = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.provider, DEFILLAMA_PROVIDER_ID));
+    expect(
+      series.some((row) => row.metric === "tvl_usd" && row.subjectCanonicalId === "defillama:aave"),
+    ).toBe(true);
+    expect(
+      series.some(
+        (row) =>
+          row.metric === "chain_tvl_usd" && row.subjectCanonicalId === "defillama:chain:Ethereum",
+      ),
+    ).toBe(true);
+    expect(
+      series.some(
+        (row) => row.metric === "stablecoin_basis" && row.subjectCanonicalId === "coingecko:tether",
+      ),
+    ).toBe(true);
   });
 
   it("invalidates unused sibling password-reset tokens", async () => {

@@ -3,6 +3,11 @@ export const OBSERVATION_METRICS = [
   "quoted_volume",
   "quoted_market_cap",
   "price_change_24h",
+  "tvl_usd",
+  "chain_tvl_usd",
+  "stablecoin_circulating",
+  "stablecoin_price",
+  "stablecoin_basis",
 ] as const;
 export type ObservationMetric = (typeof OBSERVATION_METRICS)[number];
 

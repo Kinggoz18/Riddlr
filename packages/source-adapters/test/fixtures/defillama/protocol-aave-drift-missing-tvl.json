@@ -1,0 +1,12 @@
+{
+  "id": "parent#aave",
+  "name": "Aave",
+  "symbol": "AAVE",
+  "gecko_id": "aave",
+  "currentChainTvls": {
+    "Ethereum": 15417704730,
+    "borrowed": 12623329734,
+    "staking": 314346123
+  },
+  "chainTvls": {}
+}

@@ -1,0 +1,124 @@
+{
+  "peggedAssets": [
+    {
+      "id": "1",
+      "name": "Tether",
+      "symbol": "USDT",
+      "gecko_id": "tether",
+      "pegType": "peggedUSD",
+      "pegMechanism": "fiat-backed",
+      "price": 0.9996376019163478,
+      "circulating": {
+        "peggedUSD": 183333861644.22153
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 183471811672.56058
+      }
+    },
+    {
+      "id": "2",
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "gecko_id": "usd-coin",
+      "pegType": "peggedUSD",
+      "pegMechanism": "fiat-backed",
+      "price": 0.9998001192262176,
+      "circulating": {
+        "peggedUSD": 74283914906.07756
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 74403203608.96313
+      }
+    },
+    {
+      "id": "209",
+      "name": "Sky Dollar",
+      "symbol": "USDS",
+      "gecko_id": "usds",
+      "pegType": "peggedUSD",
+      "pegMechanism": "crypto-backed",
+      "price": 0.9996301622765783,
+      "circulating": {
+        "peggedUSD": 6716874965.242097
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 6432874530.709619
+      }
+    },
+    {
+      "id": "5",
+      "name": "Dai",
+      "symbol": "DAI",
+      "gecko_id": "dai",
+      "pegType": "peggedUSD",
+      "pegMechanism": "crypto-backed",
+      "price": 0.9999100081000165,
+      "circulating": {
+        "peggedUSD": 4801444808.107323
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 4793574303.277754
+      }
+    },
+    {
+      "id": "146",
+      "name": "Ethena USDe",
+      "symbol": "USDe",
+      "gecko_id": "ethena-usde",
+      "pegType": "peggedUSD",
+      "pegMechanism": "crypto-backed",
+      "price": 0.9995404862473757,
+      "circulating": {
+        "peggedUSD": 4609996319.060891
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 4603553830.867672
+      }
+    },
+    {
+      "id": "262",
+      "name": "World Liberty Financial USD",
+      "symbol": "USD1",
+      "gecko_id": "usd1-wlfi",
+      "pegType": "peggedUSD",
+      "pegMechanism": "fiat-backed",
+      "price": 0.9994902239624446,
+      "circulating": {
+        "peggedUSD": 4341187484.958528
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 4323203723.158046
+      }
+    },
+    {
+      "id": "286",
+      "name": "Global Dollar",
+      "symbol": "USDG",
+      "gecko_id": "global-dollar",
+      "pegType": "peggedUSD",
+      "pegMechanism": "fiat-backed",
+      "price": 0.9998029184835215,
+      "circulating": {
+        "peggedUSD": 3232665992.9330416
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 3243833791.947772
+      }
+    },
+    {
+      "id": "120",
+      "name": "PayPal USD",
+      "symbol": "PYUSD",
+      "gecko_id": "paypal-usd",
+      "pegType": "peggedUSD",
+      "pegMechanism": "fiat-backed",
+      "price": 0.9997566050071306,
+      "circulating": {
+        "peggedUSD": 2745884352.873812
+      },
+      "circulatingPrevDay": {
+        "peggedUSD": 2761923691.576673
+      }
+    }
+  ]
+}

@@ -153,9 +153,9 @@ function HealthPage() {
             </strong>
           </p>
           <p className="field-note">
-            Interval {observations?.intervalSeconds ?? 60}s. Retention{" "}
-            {observations?.retentionDays ?? 90} days then daily downsample. Last poll{" "}
-            {observations?.lastPollAt ?? "never"}.
+            Interval {observations?.intervalSeconds ?? 60}s for CoinGecko spot. DefiLlama (opt-in)
+            polls every 15 minutes. Retention {observations?.retentionDays ?? 90} days then daily
+            downsample. Last poll {observations?.lastPollAt ?? "never"}.
           </p>
         </Card>
       </section>
