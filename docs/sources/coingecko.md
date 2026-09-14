@@ -11,3 +11,5 @@ Alchemy and Helius sources. Balance snapshots are not shipped.
 
 The same API also seeds the asset registry used by watchlist search and text
 extraction. See [integrations/coingecko.md](../integrations/coingecko.md).
+
+`/global`, `/search/trending`, and `/coins/{id}/market_chart` are not shipped.

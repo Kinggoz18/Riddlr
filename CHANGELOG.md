@@ -13,6 +13,12 @@ All notable changes to Riddlr are documented in this file.
   [docs/integrations/openfigi.md](docs/integrations/openfigi.md), and
   [docs/adr/0031-equities-domain.md](docs/adr/0031-equities-domain.md).
 
+- Operator pages in `docs/integrations/` cover every shipped external API
+  (endpoints, auth, limits, licence, mapping, agent use, failure classes,
+  fixtures). [docs/observations.md](docs/observations.md) lists providers that
+  are not shipped. Equities claim mapping is in
+  [docs/catalysts.md](docs/catalysts.md).
+
 - Morning view (Overview), asset pages with observation charts, event lifecycle
   timelines, and a signal scorecard with precision and retraction rate. See
   [docs/dashboard.md](docs/dashboard.md) and

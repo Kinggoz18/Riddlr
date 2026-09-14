@@ -7,6 +7,7 @@ Signals. Quantitative kinds require `value` and `unit`. Claims without a
 resolvable subject are rejected unless the kind is subject-free
 (`macro_policy_decision`, `scheduled_release`). Full-document understanding is
 the primary structured extractor; regex is the first pass for pre-filter and
-negation. Snippets never produce claims.
+negation. Snippets never produce claims. Equities claim mapping is in
+[catalysts.md](../catalysts.md).
 
 **Status:** accepted

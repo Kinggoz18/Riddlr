@@ -18,3 +18,6 @@ detour. The test environment does not call the network.
 The pipeline discovers candidates from clustered evidence, then analyzes
 **material events only**. Discovery does not require a model call. It does
 not dump raw search hits into a frontier model.
+
+Endpoints, cache keys, failure classes, and fixtures:
+[integrations/llm.md](integrations/llm.md).

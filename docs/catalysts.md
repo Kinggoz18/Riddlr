@@ -67,9 +67,22 @@ and Signals.
 | `crypto:observed_spot_price_anomaly`, `crypto:observed_quoted_volume_anomaly` | `observed_anomaly` |
 | `crypto:principal_statement` | `principal_statement` |
 
-`crypto:general_report` is rejected. Equities kinds (`insider_transaction`,
-`earnings_or_guidance`) have no Crypto mapping and are dropped on the Crypto
-document path.
+`crypto:general_report` is rejected.
+
+## Equities mapping
+
+| Equities claim kind | Taxonomy |
+| --- | --- |
+| `equities:earnings` | `earnings_or_guidance` |
+| `equities:insider_transaction` | `insider_transaction` |
+| `equities:listing_or_delisting` | `listing_or_delisting` |
+| `equities:insolvency` | `insolvency_or_withdrawal_halt` |
+| `equities:officer_change`, `equities:impairment_or_exit`, `equities:ownership_change`, `equities:material_corporate_event` | `material_corporate_event` |
+
+`equities:general_report` is rejected. Form 4 is `insider_transaction` and is
+never high impact alone. 8-K items `2.02` and `1.03` default high. See
+[integrations/edgar.md](integrations/edgar.md) and
+[adr/0031-equities-domain.md](adr/0031-equities-domain.md).
 
 See [ADR 0026](adr/0026-catalyst-taxonomy.md) and
 [ADR 0028](adr/0028-typed-signal-policies.md).

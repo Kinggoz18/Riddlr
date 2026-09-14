@@ -13,7 +13,7 @@ fixtures, RSS/Atom feed fixtures, DefiLlama fixtures, Hyperliquid fixtures, Bina
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock, volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence and odds-jump detectors, catalyst
-taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, morning since window and 24h change, EDGAR Atom/Form 4/EFTS fixtures, OpenFIGI mapping fixtures, and coming-soon rejection. Architecture tests keep generic packages from importing
+taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, morning since window and 24h change, EDGAR Atom/Form 4/EFTS fixtures, OpenFIGI mapping fixtures, operator integration pages for shipped APIs, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto` or `@riddlr/domain-equities`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 

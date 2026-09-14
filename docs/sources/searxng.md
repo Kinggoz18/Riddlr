@@ -17,6 +17,8 @@ Default price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest
 of the list under Sources → Publisher hosts) cannot produce claims. Unblock a
 host there if you need its pages. CoinGecko observations still poll.
 
+See [integrations/searxng.md](../integrations/searxng.md).
+
 Eligible URLs are fetched with SSRF checks, robots.txt, a per-scan and per-host
 cap, and a decompressed byte limit. Main content is cleaned once; unchanged
 cleaned content is not sent to the model again.

@@ -8,5 +8,7 @@ ids. Ambiguous symbols fail closed unless a longer name or cashtag is present.
 
 Operators add assets by search over the registry. Unknown canonical ids are
 rejected. Rank leaving the top N never deactivates a watched or held asset.
+Equities ids are `sec:` plus a 10-digit CIK. OpenFIGI mapping is documented in
+[0031](0031-equities-domain.md).
 
 **Status:** accepted

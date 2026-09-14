@@ -9,3 +9,5 @@ such as `BTC_USD` map from watchlist slugs (`bitcoin` → `BTC_USD`).
 
 Enabling this source pauses CoinGecko and CoinMarketCap. Only one market-data
 source is active at a time.
+
+See [integrations/cryptocom.md](../integrations/cryptocom.md).

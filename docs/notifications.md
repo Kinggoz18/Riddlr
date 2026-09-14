@@ -20,7 +20,9 @@ agent page. Confirmation, dispute, and retraction follow the original
 destinations even when the original send failed.
 
 Observation threshold alerts are labeled Observation and are never signals.
-See [discord-webhooks.md](integrations/discord-webhooks.md).
+See [discord-webhooks.md](integrations/discord-webhooks.md),
+[telegram.md](integrations/telegram.md), and
+[whatsapp.md](integrations/whatsapp.md).
 
 ## Telegram
 

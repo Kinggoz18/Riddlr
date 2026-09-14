@@ -43,6 +43,9 @@ The observe worker polls `GET /simple/price?ids=<up to 100>&vs_currencies=usd&in
 
 See [observations.md](../observations.md).
 
+`GET /global`, `GET /search/trending`, and `GET /coins/{id}/market_chart` are
+not shipped.
+
 ## Failure classes
 
 | Class | What you see | Fix |

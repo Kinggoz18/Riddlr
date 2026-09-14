@@ -11,5 +11,7 @@ application code. `return_shock.v1` and `volume_anomaly.v1` emit native-complete
 evidence with `sourceFamily: observation` and a versioned claim. A watched
 asset with a detector claim forms a material event with reliability `observed`.
 Per-event `observations` remain the snapshot an event was assessed on.
+Opt-in providers: DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket,
+Kalshi. FRED, CFTC COT, and EIA are not shipped.
 
 **Status:** accepted

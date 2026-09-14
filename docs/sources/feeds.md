@@ -17,3 +17,5 @@ Official feeds in the plan examples:
 - `https://www.ecb.europa.eu/rss/press.html`
 - Substack `https://<pub>.substack.com/feed`
 - YouTube `https://www.youtube.com/feeds/videos.xml?channel_id=`
+
+See [integrations/feeds.md](../integrations/feeds.md).

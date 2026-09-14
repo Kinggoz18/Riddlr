@@ -83,3 +83,19 @@ See [integrations/coingecko.md](integrations/coingecko.md),
 [integrations/polymarket.md](integrations/polymarket.md),
 [integrations/kalshi.md](integrations/kalshi.md), and
 [ADR 0025](adr/0025-observation-layer.md).
+
+CoinMarketCap and Crypto.com Exchange are scan-time quote adapters, not
+observation providers. See
+[integrations/coinmarketcap.md](integrations/coinmarketcap.md) and
+[integrations/cryptocom.md](integrations/cryptocom.md).
+
+## Not shipped
+
+These section 8 APIs are not in the product. There is no source card, no
+observe poll, and no domain module for them.
+
+- FRED, CFTC COT, EIA (macro and commodities context series)
+- Tally governance GraphQL (Snapshot is shipped)
+- GDELT 2.0, Bluesky Jetstream, Reddit OAuth, token-unlock calendars
+- CoinGecko `/global`, `/search/trending`, and `/coins/{id}/market_chart`
+- Alchemy and Helius **balance** snapshots (address-activity webhooks are shipped)

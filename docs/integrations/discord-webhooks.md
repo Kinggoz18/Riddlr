@@ -56,6 +56,16 @@ Settings → **Notifications** → **Observation alerts** sets thresholds on
 signals. Quiet hours and per-destination cooldown apply. Minimum risk does
 not. Dedup is one delivery per rule, subject, UTC hour, and target.
 
+## Failure classes
+
+| Class | What you see | Fix |
+| --- | --- | --- |
+| `auth` | GET/POST 401 or 404; target list shows `auth` | Webhook deleted; paste a new URL |
+| HTTP 400 embeds | Falls back to `content` only (≤ 2,000 chars) | Headline/description too long or invalid embed |
+| HTTP 429 | Honors `retry_after` up to 5s, two retries | Wait; overflow is a failed delivery, not a drop |
+| Minute budget | Informational skipped; high/critical still attempt | Next minute |
+| Queue overflow | Failed delivery (`32` pending) | Slow the agent; do not raise the cap |
+
 ## Fixtures
 
 Live Execute Webhook capture was not available in this environment (no operator
@@ -66,6 +76,5 @@ fetch seam with documented status codes: type-1 GET body, 429 `{ "retry_after":
 Verified 2026-09-14 against
 https://discord.com/developers/docs/resources/webhook#execute-webhook
 and https://discord.com/developers/docs/resources/webhook#get-webhook.
-URL shape from section 8.17 of the asset-intelligence plan.
 
 Official docs: https://discord.com/developers/docs/resources/webhook
