@@ -31,6 +31,7 @@ import {
 import { probeLlmProvider } from "@riddlr/llm";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { ensureDefaultEquitiesAssets } from "./asset-registry.js";
 import { ensureDefaultPriceTrackerHostPolicies } from "./intelligence.js";
 
 const skillDir = join(dirname(fileURLToPath(import.meta.url)), "../../../../skills/crypto");
@@ -132,6 +133,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
   const existing = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
   if (existing[0]) {
     await ensureShippedCryptoSkills(ctx, existing[0].id);
+    await ensureDefaultEquitiesAssets(ctx);
     return existing[0];
   }
   const [agent] = await ctx.db
@@ -232,6 +234,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       .values({ agentId: agent.id, sourceId: market.id })
       .onConflictDoNothing();
   }
+  await ensureDefaultEquitiesAssets(ctx);
   return agent;
 }
 

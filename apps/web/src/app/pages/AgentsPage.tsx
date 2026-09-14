@@ -9,6 +9,7 @@ import {
   assetLabel,
   catalystKindLabel,
   DEFAULT_DAILY_TOKEN_BUDGET,
+  EQUITIES_OBJECTIVE_OPTIONS,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
   OBJECTIVE_OPTIONS,
@@ -62,6 +63,7 @@ export type Agent = {
       assetClass: string;
       symbol?: string | null;
       name?: string | null;
+      identifierUnresolved?: boolean;
     }>;
   } | null;
   notificationRoutes?: Array<{
@@ -195,16 +197,24 @@ function AgentForm(props: {
   const [selectedSources, setSelectedSources] = useState(
     props.agent?.sourceIds ?? props.agent?.sources?.map((item) => item.id) ?? [],
   );
+  const [domainId, setDomainId] = useState(props.agent?.domains[0] ?? "crypto");
   const [selectedObjectives, setSelectedObjectives] = useState(
-    props.agent?.objectives ?? ["general_crypto_intelligence"],
+    props.agent?.objectives ??
+      (domainId === "equities"
+        ? EQUITIES_OBJECTIVE_OPTIONS.map(([id]) => id)
+        : ["general_crypto_intelligence"]),
   );
   const [enabled, setEnabled] = useState(props.agent?.enabled ?? true);
 
   useEffect(() => {
     if (!props.agent && selectedSources.length === 0 && props.sourceCatalog.length > 0) {
-      setSelectedSources(props.sourceCatalog.map((item) => item.id));
+      setSelectedSources(
+        domainId === "equities"
+          ? props.sourceCatalog.filter((item) => item.adapterId === "edgar").map((item) => item.id)
+          : props.sourceCatalog.map((item) => item.id),
+      );
     }
-  }, [props.agent, props.sourceCatalog, selectedSources.length]);
+  }, [props.agent, props.sourceCatalog, selectedSources.length, domainId]);
 
   return (
     <>
@@ -221,7 +231,7 @@ function AgentForm(props: {
               const payload = {
                 name,
                 description,
-                marketDomainIds: ["crypto"],
+                marketDomainIds: [domainId],
                 schedule,
                 tokenBudget: tokenBudgetUnlimited ? null : Number(tokenBudget),
                 skillIds: selectedSkills,
@@ -274,6 +284,47 @@ function AgentForm(props: {
               required
             />
           </Field>
+          {props.agent ? (
+            <Field label="Market domain" hint="Set when the agent is created.">
+              <input id="agent-domain" value={domainId} readOnly />
+            </Field>
+          ) : (
+            <Field
+              label="Market domain"
+              hint="Crypto is the default. Equities runs SEC EDGAR for watched issuers."
+            >
+              <select
+                id="agent-domain"
+                value={domainId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDomainId(next);
+                  setSelectedObjectives(
+                    next === "equities"
+                      ? EQUITIES_OBJECTIVE_OPTIONS.map(([id]) => id)
+                      : ["general_crypto_intelligence"],
+                  );
+                  if (next === "equities") {
+                    setSelectedSources(
+                      props.sourceCatalog
+                        .filter((item) => item.adapterId === "edgar")
+                        .map((item) => item.id),
+                    );
+                    if (!description || description === "Watches Bitcoin for material events.") {
+                      setDescription(
+                        "An Equities watcher. It scans SEC EDGAR filings for watched issuers, clusters evidence into events, and analyzes only material events. It cannot trade.",
+                      );
+                    }
+                  } else {
+                    setSelectedSources(props.sourceCatalog.map((item) => item.id));
+                  }
+                }}
+              >
+                <option value="crypto">Crypto</option>
+                <option value="equities">Equities</option>
+              </select>
+            </Field>
+          )}
           {props.agent ? (
             <label className="check-row" htmlFor="agent-enabled">
               <input
@@ -330,7 +381,11 @@ function AgentForm(props: {
           </Field>
           <Field
             label="Watchlist"
-            hint="Search the CoinGecko registry by name, symbol, or cashtag. Canonical IDs are stored underneath."
+            hint={
+              domainId === "equities"
+                ? "Search the registry by ticker, name, or sec: CIK. Canonical IDs are stored underneath."
+                : "Search the asset registry by name, symbol, or cashtag. Canonical IDs are stored underneath."
+            }
           >
             <AssetPicker
               id="canonical-asset-ids"
@@ -345,19 +400,21 @@ function AgentForm(props: {
           </Field>
           <fieldset className="check-list">
             <legend>Objectives</legend>
-            {OBJECTIVE_OPTIONS.map(([id, label]) => (
-              <label key={id} className="check-row" htmlFor={`objective-${id}`}>
-                <input
-                  id={`objective-${id}`}
-                  type="checkbox"
-                  checked={selectedObjectives.includes(id)}
-                  onChange={(e) =>
-                    setSelectedObjectives((current) => toggle(current, id, e.target.checked))
-                  }
-                />
-                {label}
-              </label>
-            ))}
+            {(domainId === "equities" ? EQUITIES_OBJECTIVE_OPTIONS : OBJECTIVE_OPTIONS).map(
+              ([id, label]) => (
+                <label key={id} className="check-row" htmlFor={`objective-${id}`}>
+                  <input
+                    id={`objective-${id}`}
+                    type="checkbox"
+                    checked={selectedObjectives.includes(id)}
+                    onChange={(e) =>
+                      setSelectedObjectives((current) => toggle(current, id, e.target.checked))
+                    }
+                  />
+                  {label}
+                </label>
+              ),
+            )}
           </fieldset>
           <fieldset className="check-list">
             <legend>Sources</legend>

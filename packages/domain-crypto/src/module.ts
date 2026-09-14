@@ -407,7 +407,8 @@ export const cryptoDomainModule: DomainModule = {
       input.adapterId === "kalshi" ||
       input.adapterId === "snapshot" ||
       input.adapterId === "alchemy" ||
-      input.adapterId === "helius"
+      input.adapterId === "helius" ||
+      input.adapterId === "edgar"
     ) {
       return [""];
     }

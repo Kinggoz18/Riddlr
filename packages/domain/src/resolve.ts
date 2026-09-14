@@ -1,5 +1,6 @@
 import type { ExtractedAsset, RegistryAsset } from "./domain-module.js";
 import { MAX_ALIASES_PER_ASSET, MAX_ASSETS_PER_DOCUMENT, takeBounded } from "./limits.js";
+import { ASSET_CLASS_DOMAIN } from "./market-domains.js";
 
 export type ResolverRules = {
   minAliasLength: number;
@@ -26,6 +27,15 @@ export function toExtractedAsset(asset: RegistryAsset): ExtractedAsset {
   };
 }
 
+export function identifierUnresolved(
+  asset: Pick<RegistryAsset, "assetClass" | "externalIds">,
+): boolean {
+  if (ASSET_CLASS_DOMAIN[asset.assetClass] !== "equities") {
+    return false;
+  }
+  return !asset.externalIds.figi;
+}
+
 export function aliasesForAsset(asset: RegistryAsset): string[] {
   const aliases: string[] = [];
   const seen = new Set<string>();
@@ -49,6 +59,10 @@ export function aliasesForAsset(asset: RegistryAsset): string[] {
     add(`$${asset.symbol}`);
   }
   add(asset.externalIds.coingeckoId);
+  add(asset.externalIds.cik);
+  add(asset.externalIds.ticker);
+  add(asset.externalIds.figi);
+  add(asset.externalIds.isin);
   add(asset.canonicalId);
   const slug = asset.canonicalId.split(":")[1];
   add(slug);

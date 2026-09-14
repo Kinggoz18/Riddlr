@@ -2,7 +2,7 @@
   "name": "riddlr",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first, asset-class-agnostic intelligence engine. Crypto is the currently supported market domain.",
+  "description": "Local-first, asset-class-agnostic intelligence engine. Crypto and Equities are supported market domains.",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @riddlr/server --filter @riddlr/web --parallel dev",
-    "build": "pnpm --filter @riddlr/domain build && pnpm --filter @riddlr/crypto build && pnpm --filter @riddlr/config build && pnpm --filter @riddlr/api-contract build && pnpm --filter @riddlr/observability build && pnpm --filter @riddlr/db build && pnpm --filter @riddlr/queue build && pnpm --filter @riddlr/source-adapters build && pnpm --filter @riddlr/llm build && pnpm --filter @riddlr/notifications build && pnpm --filter @riddlr/domain-crypto build && pnpm --filter @riddlr/ui build && pnpm --filter @riddlr/server build && pnpm --filter @riddlr/web build",
+    "build": "pnpm --filter @riddlr/domain build && pnpm --filter @riddlr/crypto build && pnpm --filter @riddlr/config build && pnpm --filter @riddlr/api-contract build && pnpm --filter @riddlr/observability build && pnpm --filter @riddlr/db build && pnpm --filter @riddlr/queue build && pnpm --filter @riddlr/source-adapters build && pnpm --filter @riddlr/llm build && pnpm --filter @riddlr/notifications build && pnpm --filter @riddlr/domain-crypto build && pnpm --filter @riddlr/domain-equities build && pnpm --filter @riddlr/ui build && pnpm --filter @riddlr/server build && pnpm --filter @riddlr/web build",
     "lint": "biome check .",
     "format": "biome check --write .",
     "typecheck": "pnpm -r --if-present typecheck",

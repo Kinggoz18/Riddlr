@@ -10,10 +10,13 @@ not the same concept.
 
 - **Crypto** — cryptocurrencies, meme coins, and stablecoins. Default agent
   domain. Real SearXNG source, real analysis path.
+- **Equities** — stocks, ETFs, and indexes. `@riddlr/domain-equities`. SEC
+  EDGAR filings (Form 4, 8-K items, EFTS) and OpenFIGI identifier mapping.
+  Operators create Equities agents. Canonical ids are `sec:` plus a 10-digit
+  CIK.
 
 ## Coming soon / planned
 
-- Equities (stocks, ETFs)
 - Forex (fiat currencies, pairs)
 - Commodities
 - Macro (inflation, rates, employment, policy)

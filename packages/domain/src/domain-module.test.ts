@@ -172,6 +172,6 @@ describe("domain module contract", () => {
 
   it("fails closed when a domain module is not registered", () => {
     expect(() => new DomainModuleRegistry().require("equities")).toThrow(/No domain module/);
-    expect(() => assertSupportedMarketDomains(["equities"])).toThrow(UnsupportedMarketDomainError);
+    expect(() => assertSupportedMarketDomains(["forex"])).toThrow(UnsupportedMarketDomainError);
   });
 });

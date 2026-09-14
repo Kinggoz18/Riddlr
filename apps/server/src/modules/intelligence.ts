@@ -111,6 +111,39 @@ export async function upsertSourceIdentity(
   return persisted?.id;
 }
 
+export async function ensureOfficialSecIssuer(
+  ctx: AppContext,
+  cik: string,
+  displayName?: string,
+): Promise<void> {
+  const identityId = await upsertSourceIdentity(ctx, {
+    platform: "sec",
+    externalId: cik,
+    displayName: displayName ?? cik,
+    hostname: "www.sec.gov",
+  });
+  if (!identityId) {
+    return;
+  }
+  const policies = await ctx.db
+    .select()
+    .from(sourceIdentityPolicies)
+    .where(eq(sourceIdentityPolicies.identityId, identityId))
+    .limit(50);
+  if (policies.some((row) => row.active)) {
+    return;
+  }
+  const revision = policies.reduce((max, row) => Math.max(max, row.revision), 0) + 1;
+  await ctx.db.insert(sourceIdentityPolicies).values({
+    identityId,
+    revision,
+    trustTier: "official_firsthand",
+    allowedUses: ["discovery", "analysis", "early_warning", "confirmation"],
+    notes: `SEC issuer ${cik}`,
+    active: true,
+  });
+}
+
 export async function ensureOfficialSnapshotSpace(
   ctx: AppContext,
   spaceId: string,

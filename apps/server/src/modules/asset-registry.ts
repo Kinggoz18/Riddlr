@@ -6,6 +6,8 @@ import {
   COINGECKO_MARKETS_PER_PAGE,
   MAX_ALIASES_PER_ASSET,
   MAX_ASSET_SEARCH_RESULTS,
+  MAX_EQUITIES_REGISTRY,
+  MAX_OPENFIGI_JOBS_UNAUTH,
   MAX_REGISTRY_ASSETS,
   MAX_REGISTRY_LIST_BYTES,
   MAX_REGISTRY_MARKETS_PAGES,
@@ -18,15 +20,22 @@ import {
   cryptoAssetClassFor,
   snapshotSpacesForWatchlist,
 } from "@riddlr/domain-crypto";
+import { DEFAULT_EQUITIES_WATCHLIST, equitiesAssetClassFor } from "@riddlr/domain-equities";
 import {
   assertSafeHttpUrl,
   COINGECKO_API_BASE,
   type CoinGeckoRegistryMarket,
   classifyHttpStatus,
+  EDGAR_COMPANY_TICKERS_URL,
+  edgarUserAgent,
   joinCoinGeckoRegistry,
+  mapOpenFigiIdentifiers,
   parseCoinGeckoRegistryList,
   parseCoinGeckoRegistryMarkets,
+  parseContactEmail,
+  parseSecCompanyTickers,
   readBoundedJson,
+  secCanonicalId,
 } from "@riddlr/source-adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { AppContext } from "../context.js";
@@ -40,7 +49,7 @@ export function asRegistryAsset(row: {
   symbol: string | null;
   name: string | null;
   aliases: string[] | null;
-  externalIds: { coingeckoId?: string; caip19?: string[]; snapshotSpaces?: string[] } | null;
+  externalIds: RegistryAsset["externalIds"] | null;
   marketCapRank: number | null;
   status: string;
 }): RegistryAsset {
@@ -287,7 +296,10 @@ export async function seedAssetRegistry(
     const existing = await ctx.db.select().from(assets).limit(MAX_REGISTRY_ASSETS);
     const stale = existing.filter(
       (row) =>
-        row.status === "active" && !seededIds.has(row.canonicalId) && !watched.has(row.canonicalId),
+        row.status === "active" &&
+        row.canonicalId.startsWith("coingecko:") &&
+        !seededIds.has(row.canonicalId) &&
+        !watched.has(row.canonicalId),
     );
     if (stale.length > 0) {
       await ctx.db
@@ -315,6 +327,7 @@ export async function seedAssetRegistryIfDue(
   ctx: AppContext,
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
+  await ensureDefaultEquitiesAssets(ctx);
   if (ctx.config.RIDDLR_ENV === "test") {
     return;
   }
@@ -329,5 +342,203 @@ export async function seedAssetRegistryIfDue(
   const result = await seedAssetRegistry(ctx, fetchImpl);
   if (result.error) {
     ctx.logger.warn({ err: result.error }, "asset registry seed failed");
+  }
+  const equities = await seedEquitiesRegistry(ctx, fetchImpl);
+  if (equities.error) {
+    ctx.logger.warn({ err: equities.error }, "equities registry seed failed");
+  }
+}
+
+const AAPL_OPENFIGI = "BBG000B9XRY4";
+const EQUITIES_SEED_LOCK = "riddlr:equities:seed:lock";
+
+export async function ensureDefaultEquitiesAssets(ctx: AppContext): Promise<void> {
+  for (const item of DEFAULT_EQUITIES_WATCHLIST) {
+    const cik = item.canonicalId.startsWith("sec:") ? item.canonicalId.slice(4) : undefined;
+    const figi = item.symbol === "AAPL" ? AAPL_OPENFIGI : undefined;
+    const draft: RegistryAsset = {
+      assetClass: item.assetClass,
+      canonicalId: item.canonicalId,
+      symbol: item.symbol ?? null,
+      name: item.displayName ?? null,
+      aliases: [],
+      externalIds: {
+        cik,
+        ticker: item.symbol,
+        figi,
+        compositeFigi: figi,
+        exchangeCode: "US",
+        figiStatus: figi ? "mapped" : undefined,
+      },
+      marketCapRank: null,
+      status: "active",
+    };
+    const aliases = takeBounded(aliasesForAsset(draft), MAX_ALIASES_PER_ASSET);
+    await ctx.db
+      .insert(assets)
+      .values({
+        assetClass: draft.assetClass,
+        canonicalId: draft.canonicalId,
+        symbol: draft.symbol,
+        name: draft.name,
+        aliases,
+        externalIds: draft.externalIds,
+        status: "active",
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: [assets.assetClass, assets.canonicalId] });
+  }
+}
+
+export async function seedEquitiesRegistry(
+  ctx: AppContext,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ upserted: number; error?: string }> {
+  const locked = await ctx.redis.set(EQUITIES_SEED_LOCK, "1", "EX", 600, "NX");
+  if (locked !== "OK") {
+    return { upserted: 0 };
+  }
+  try {
+    await ensureDefaultEquitiesAssets(ctx);
+    const [edgar] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "edgar"))
+      .limit(1);
+    const email = parseContactEmail(edgar?.config?.contactEmail);
+    if (!email) {
+      return {
+        upserted: 0,
+        error: "Configure EDGAR contact email before seeding company tickers.",
+      };
+    }
+    assertSafeHttpUrl(EDGAR_COMPANY_TICKERS_URL);
+    const fetched = await fetchJson(
+      new URL(EDGAR_COMPANY_TICKERS_URL),
+      { accept: "application/json", "user-agent": edgarUserAgent(email) },
+      MAX_REGISTRY_LIST_BYTES,
+      fetchImpl,
+    );
+    if (fetched.errorClass) {
+      return { upserted: 0, error: `company_tickers ${fetched.errorClass}` };
+    }
+    const parsed = parseSecCompanyTickers(fetched.payload);
+    if (parsed.errors[0]) {
+      return { upserted: 0, error: parsed.errors[0].message };
+    }
+    const watched = await listWatchedCanonicalIds(ctx);
+    const existingRows = await ctx.db.select().from(assets).limit(MAX_REGISTRY_ASSETS);
+    const existingById = new Map(
+      existingRows.map((row) => [row.canonicalId, asRegistryAsset(row)]),
+    );
+    let upserted = 0;
+    for (const row of takeBounded(parsed.rows, MAX_EQUITIES_REGISTRY)) {
+      const canonicalId = secCanonicalId(row.cik);
+      const existing = existingById.get(canonicalId);
+      const assetClass = existing?.assetClass ?? equitiesAssetClassFor(row.title);
+      const draft: RegistryAsset = {
+        assetClass,
+        canonicalId,
+        symbol: row.ticker,
+        name: row.title,
+        aliases: [],
+        externalIds: {
+          ...(existing?.externalIds ?? {}),
+          cik: row.cik,
+          ticker: row.ticker,
+        },
+        marketCapRank: existing?.marketCapRank ?? null,
+        status: "active",
+      };
+      const aliases = takeBounded(aliasesForAsset(draft), MAX_ALIASES_PER_ASSET);
+      await ctx.db
+        .insert(assets)
+        .values({
+          assetClass: draft.assetClass,
+          canonicalId,
+          symbol: draft.symbol,
+          name: draft.name,
+          aliases,
+          externalIds: draft.externalIds,
+          status: "active",
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [assets.assetClass, assets.canonicalId],
+          set: {
+            symbol: draft.symbol,
+            name: draft.name,
+            aliases,
+            externalIds: draft.externalIds,
+            status: "active",
+            updatedAt: new Date(),
+          },
+        });
+      upserted += 1;
+    }
+    const unmapped = (await listRegistryAssets(ctx)).filter(
+      (item) =>
+        (item.assetClass === "stock" || item.assetClass === "etf" || item.assetClass === "index") &&
+        !item.externalIds.figi &&
+        Boolean(item.symbol) &&
+        (watched.has(item.canonicalId) ||
+          DEFAULT_EQUITIES_WATCHLIST.some((row) => row.canonicalId === item.canonicalId)),
+    );
+    await mapOpenFigiForAssets(ctx, unmapped, fetchImpl);
+    return { upserted };
+  } finally {
+    await ctx.redis.del(EQUITIES_SEED_LOCK);
+  }
+}
+
+export async function mapOpenFigiForAssets(
+  ctx: AppContext,
+  candidates: RegistryAsset[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (ctx.config.RIDDLR_ENV === "test") {
+    return;
+  }
+  const jobs = takeBounded(
+    candidates
+      .filter((item) => item.symbol && !item.externalIds.figi)
+      .map((item) => ({
+        idType: "TICKER" as const,
+        idValue: item.symbol as string,
+        exchCode: item.externalIds.exchangeCode ?? "US",
+      })),
+    MAX_OPENFIGI_JOBS_UNAUTH,
+  );
+  if (jobs.length === 0) {
+    return;
+  }
+  const mapped = await mapOpenFigiIdentifiers({ jobs, fetchImpl });
+  if (mapped.error) {
+    ctx.logger.warn({ err: mapped.error }, "OpenFIGI mapping failed");
+    return;
+  }
+  for (const result of mapped.results) {
+    const ticker = result.job.idValue.toUpperCase();
+    const matches = candidates.filter((item) => item.symbol?.toUpperCase() === ticker);
+    for (const asset of matches) {
+      const next = { ...asset.externalIds };
+      if (result.status === "mapped" && result.match) {
+        next.figi = result.match.figi;
+        next.compositeFigi = result.match.compositeFigi;
+        next.exchangeCode = result.match.exchCode ?? next.exchangeCode ?? "US";
+        next.figiStatus = "mapped";
+      } else if (result.status === "multi_match") {
+        next.figiStatus = "multi_match";
+      } else {
+        next.figiStatus = "unmapped";
+      }
+      await ctx.db
+        .update(assets)
+        .set({
+          externalIds: next,
+          updatedAt: new Date(),
+        })
+        .where(eq(assets.canonicalId, asset.canonicalId));
+    }
   }
 }

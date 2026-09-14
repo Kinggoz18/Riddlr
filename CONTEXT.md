@@ -1,7 +1,7 @@
 # Riddlr
 
 Riddlr is a local-first intelligence engine. The core is asset-class agnostic.
-Crypto is the currently supported market domain.
+Crypto and Equities are the currently supported market domains.
 
 ## Language
 

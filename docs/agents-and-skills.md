@@ -4,8 +4,8 @@ The default agent is **Riddlr Intelligence Agent**, kind `system_default`,
 domain `crypto`. It is the first-run Crypto watcher: it scans attached sources
 on a schedule, discovers candidates from evidence, and analyzes material
 clusters. A candidate is not a trade. It cannot trade. Operators may create
-additional Crypto agents. Coming-soon domains cannot create agents or start
-scans.
+additional Crypto or Equities agents. Coming-soon domains cannot create agents
+or start scans.
 
 Each agent has:
 

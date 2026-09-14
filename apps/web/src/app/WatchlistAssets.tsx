@@ -37,6 +37,7 @@ export function WatchlistAssets(props: {
                     : klass
                       ? `${ticker} · ${klass}`
                       : ticker}
+                  {item.identifierUnresolved ? " · identifier unresolved" : ""}
                 </small>
               </span>
             </>

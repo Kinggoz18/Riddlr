@@ -40,6 +40,7 @@ describe("package boundaries", () => {
       for (const file of filesUnder(dir)) {
         const text = readFileSync(file, "utf8");
         expect(text, file).not.toMatch(/@riddlr\/domain-crypto/);
+        expect(text, file).not.toMatch(/@riddlr\/domain-equities/);
         if (name !== "domain") {
           expect(text, file).not.toMatch(/cryptocurrency bitcoin ethereum stablecoin news/);
         }
@@ -55,6 +56,7 @@ describe("package boundaries", () => {
     for (const file of files) {
       const text = readFileSync(file, "utf8");
       expect(text, file).not.toMatch(/@riddlr\/domain-crypto/);
+      expect(text, file).not.toMatch(/@riddlr\/domain-equities/);
       expect(text, file).not.toMatch(/cryptocurrency bitcoin ethereum stablecoin news/);
     }
   });

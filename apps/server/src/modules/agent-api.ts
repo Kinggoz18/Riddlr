@@ -22,12 +22,15 @@ import {
   watchlists,
 } from "@riddlr/db";
 import {
+  ASSET_CLASS_DOMAIN,
+  type AssetClass,
   assertCanonicalAssetId,
   assertSafeSkillMarkdown,
   assertSkillSlug,
   assertSupportedMarketDomains,
   DEFAULT_AGENT_DESCRIPTION,
   InvalidWatchlistItemError,
+  identifierUnresolved,
   MAX_ASSET_SEARCH_RESULTS,
   MAX_NOTIFICATION_ROUTES_PER_AGENT,
   MAX_SKILLS_PER_AGENT,
@@ -42,7 +45,13 @@ import { asc, count, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { AppContext } from "../context.js";
-import { findRegistryAsset, searchAssets } from "./asset-registry.js";
+import {
+  ensureDefaultEquitiesAssets,
+  findRegistryAsset,
+  listRegistryAssets,
+  mapOpenFigiForAssets,
+  searchAssets,
+} from "./asset-registry.js";
 import { latestSpotQuotes } from "./observe.js";
 import { enqueueAgentScan } from "./scans.js";
 
@@ -100,17 +109,27 @@ function failSkill(error: unknown, reply: FastifyReply) {
   throw error;
 }
 
-async function resolveWatchlistItem(ctx: AppContext, item: z.infer<typeof watchlistItemSchema>) {
+async function resolveWatchlistItem(
+  ctx: AppContext,
+  item: z.infer<typeof watchlistItemSchema>,
+  allowedDomains: readonly string[],
+) {
   const canonicalId = assertCanonicalAssetId(item.canonicalId.trim().toLowerCase());
-  const module = ctx.domains.require("crypto");
-  if (item.assetClass && !module.assetClasses.includes(item.assetClass)) {
-    throw new InvalidWatchlistItemError(
-      "Watchlist asset class is not available on the Crypto domain.",
-    );
-  }
   const found = await findRegistryAsset(ctx, canonicalId);
   if (!found || found.status === "inactive") {
     throw new InvalidWatchlistItemError(`Unknown asset ${canonicalId}.`);
+  }
+  const domainId = ASSET_CLASS_DOMAIN[found.assetClass];
+  if (!allowedDomains.includes(domainId)) {
+    throw new InvalidWatchlistItemError(
+      `Asset ${canonicalId} belongs to ${domainId}, which is not on this agent.`,
+    );
+  }
+  const module = ctx.domains.require(domainId);
+  if (item.assetClass && !module.assetClasses.includes(item.assetClass)) {
+    throw new InvalidWatchlistItemError(
+      `Watchlist asset class is not available on the ${domainId} domain.`,
+    );
   }
   const resolved = module.canonicalizeAsset(
     {
@@ -154,10 +173,17 @@ async function replaceWatchlist(
   name: string,
   items: z.infer<typeof watchlistItemSchema>[],
 ) {
+  await ensureDefaultEquitiesAssets(ctx);
+  const domainRows = await ctx.db
+    .select()
+    .from(agentMarketDomains)
+    .where(eq(agentMarketDomains.agentId, agentId))
+    .limit(8);
+  const allowedDomains = domainRows.map((row) => row.marketDomainId);
   const watchlist = await ensureWatchlist(ctx, agentId, name);
   const resolved = [];
   for (const item of takeBounded(items, MAX_WATCHLIST_ITEMS)) {
-    resolved.push(await resolveWatchlistItem(ctx, item));
+    resolved.push(await resolveWatchlistItem(ctx, item, allowedDomains));
   }
   await ctx.db.delete(watchlistItems).where(eq(watchlistItems.watchlistId, watchlist.id));
   for (const item of resolved) {
@@ -172,6 +198,14 @@ async function replaceWatchlist(
       })
       .onConflictDoNothing();
   }
+  const mapped = [];
+  for (const item of resolved) {
+    const found = await findRegistryAsset(ctx, item.canonicalId);
+    if (found) {
+      mapped.push(found);
+    }
+  }
+  await mapOpenFigiForAssets(ctx, mapped);
   return watchlist;
 }
 
@@ -268,6 +302,8 @@ async function listAgentsPayload(ctx: AppContext) {
           .where(inArray(sources.id, [...new Set(sourceRows.map((item) => item.sourceId))]))
           .limit(32)
       : [];
+  const registry = await listRegistryAssets(ctx);
+  const registryById = new Map(registry.map((item) => [item.canonicalId, item]));
   const quotes = await latestSpotQuotes(
     ctx,
     itemRows.map((item) => item.canonicalId),
@@ -338,14 +374,16 @@ async function listAgentsPayload(ctx: AppContext) {
                 .map((item) => ({
                   id: item.id,
                   canonicalId: item.canonicalId,
-                  assetClass: item.assetClass as
-                    | "cryptocurrency"
-                    | "meme_coin"
-                    | "stablecoin"
-                    | undefined,
+                  assetClass: item.assetClass as AssetClass,
                   symbol: item.symbol ?? undefined,
                   name: item.name ?? undefined,
                   lastQuote: quotes[item.canonicalId],
+                  identifierUnresolved: identifierUnresolved(
+                    registryById.get(item.canonicalId) ?? {
+                      assetClass: item.assetClass as AssetClass,
+                      externalIds: {},
+                    },
+                  ),
                 })),
             }
           : null,

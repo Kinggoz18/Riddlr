@@ -72,7 +72,8 @@ test("first-run onboarding is four steps with crypto supported and other domains
   await page.getByRole("button", { name: "Save provider" }).click();
   await expect(page.getByRole("heading", { name: "Choose markets" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Crypto/ })).toBeChecked();
-  for (const name of ["Equities", "Forex", "Commodities", "Macro"]) {
+  await expect(page.getByRole("checkbox", { name: /Equities/ })).toBeEnabled();
+  for (const name of ["Forex", "Commodities", "Macro"]) {
     await expect(page.getByRole("checkbox", { name: new RegExp(name) })).toBeDisabled();
   }
   await expect(page.getByText("Coming soon").first()).toBeVisible();
@@ -159,6 +160,10 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await page.getByRole("link", { name: "Configure Snapshot" }).click();
   await expect(page.getByRole("heading", { name: "Add Snapshot source" })).toBeVisible();
   await expect(page.getByText(/No API key/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure SEC EDGAR" }).click();
+  await expect(page.getByRole("heading", { name: "Add SEC EDGAR source" })).toBeVisible();
+  await expect(page.getByLabel("Contact email")).toBeVisible();
   await page.getByRole("link", { name: "Add source" }).click();
   await page.getByRole("link", { name: "Configure Alchemy" }).click();
   await expect(page.getByRole("heading", { name: "Add Alchemy source" })).toBeVisible();

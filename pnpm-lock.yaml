@@ -117,6 +117,9 @@ importers:
       '@riddlr/domain-crypto':
         specifier: workspace:*
         version: link:../../packages/domain-crypto
+      '@riddlr/domain-equities':
+        specifier: workspace:*
+        version: link:../../packages/domain-equities
       '@riddlr/llm':
         specifier: workspace:*
         version: link:../../packages/llm
@@ -318,6 +321,22 @@ importers:
         version: 3.2.4(@types/node@22.18.0)(tsx@4.23.13)(yaml@2.9.0)
 
   packages/domain-crypto:
+    dependencies:
+      '@riddlr/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.18.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/node@22.18.0)(tsx@4.23.13)(yaml@2.9.0)
+
+  packages/domain-equities:
     dependencies:
       '@riddlr/domain':
         specifier: workspace:*

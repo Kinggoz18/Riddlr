@@ -6,6 +6,7 @@ import {
   cryptocomSourceSchema,
   defillamaSourceSchema,
   discordSourceSchema,
+  edgarSourceSchema,
   feedSourceSchema,
   heliusSourceSchema,
   hyperliquidSourceSchema,
@@ -54,6 +55,7 @@ import {
   createCryptoComAdapter,
   createDefiLlamaAdapter,
   createDiscordAdapter,
+  createEdgarAdapter,
   createFeedsAdapter,
   createHeliusAdapter,
   createHeliusTransferWebhook,
@@ -124,6 +126,7 @@ export function registerSourceRoutes(
   const polymarket = createPolymarketAdapter();
   const kalshi = createKalshiAdapter();
   const snapshot = createSnapshotAdapter();
+  const edgar = createEdgarAdapter();
   const alchemy = createAlchemyAdapter();
   const helius = createHeliusAdapter();
 
@@ -147,6 +150,8 @@ export function registerSourceRoutes(
         return kalshi;
       case "snapshot":
         return snapshot;
+      case "edgar":
+        return edgar;
       case "alchemy":
         return alchemy;
       case "helius":
@@ -212,6 +217,11 @@ export function registerSourceRoutes(
           id: snapshot.id,
           family: snapshot.family,
           capabilities: snapshot.capabilities,
+        },
+        {
+          id: edgar.id,
+          family: edgar.family,
+          capabilities: edgar.capabilities,
         },
         {
           id: alchemy.id,
@@ -520,6 +530,22 @@ export function registerSourceRoutes(
       resource: source?.id,
     });
     return { source: source ? publicSource(source) : undefined };
+  });
+
+  app.post("/api/v1/sources/edgar", { preHandler: authed }, async (request, reply) => {
+    const body = edgarSourceSchema.parse(request.body);
+    const validated = await edgar.validate({ contactEmail: body.contactEmail });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "filing",
+      adapterId: "edgar",
+      name: body.name,
+      config: { contactEmail: body.contactEmail },
+    });
   });
 
   app.post("/api/v1/sources/alchemy", { preHandler: authed }, async (request, reply) => {

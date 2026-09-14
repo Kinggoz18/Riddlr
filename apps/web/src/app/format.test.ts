@@ -47,6 +47,7 @@ describe("clock hour formatting", () => {
 describe("agent labels", () => {
   it("humanizes objective ids and schedules", () => {
     expect(objectiveLabel("risk_signals")).toBe("Risk signals");
+    expect(objectiveLabel("general_equities_intelligence")).toBe("General equities intelligence");
     expect(objectiveLabel("potential_opportunities")).toBe("Potential opportunities");
     expect(objectiveLabel("unknown_goal")).toBe("unknown goal");
     expect(scheduleLabel("1h")).toBe("Every hour");
@@ -93,12 +94,14 @@ describe("agent labels", () => {
     expect(adapterLabel("snapshot")).toBe("Snapshot");
     expect(adapterLabel("alchemy")).toBe("Alchemy");
     expect(adapterLabel("helius")).toBe("Helius");
+    expect(adapterLabel("edgar")).toBe("SEC EDGAR");
   });
 });
 
 describe("asset display fallback", () => {
   it("labels catalog ids and falls back to the slug for unknown registry ids", () => {
     expect(assetLabel("coingecko:bitcoin")).toBe("Bitcoin · BTC");
+    expect(assetLabel("sec:0000320193")).toBe("Apple Inc. · AAPL");
     expect(assetLabel("coingecko:zcash")).toBe("zcash");
   });
 

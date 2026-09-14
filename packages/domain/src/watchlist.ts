@@ -13,7 +13,7 @@ export class InvalidWatchlistItemError extends Error {
 export function assertCanonicalAssetId(value: string): string {
   if (!CANONICAL_ASSET_ID_RE.test(value)) {
     throw new InvalidWatchlistItemError(
-      "Watchlist items require a canonical id such as coingecko:bitcoin, not a bare ticker.",
+      "Watchlist items require a canonical id such as coingecko:bitcoin or sec:0000320193, not a bare ticker.",
     );
   }
   return value;

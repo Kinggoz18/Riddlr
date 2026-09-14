@@ -26,7 +26,7 @@ function WatchlistIndex() {
     <>
       <PageHeader
         title="Watchlists"
-        description={`Named assets each agent watches. Canonical IDs such as coingecko:bitcoin are stored underneath. Cap is ${MAX_WATCHLIST_ITEMS} assets per list.`}
+        description={`Named assets each agent watches. Canonical IDs such as coingecko:bitcoin or sec:0000320193 are stored underneath. Cap is ${MAX_WATCHLIST_ITEMS} assets per list.`}
       />
       {!data ? <Skeleton label="Loading watchlists…" /> : null}
       {data?.length === 0 ? (

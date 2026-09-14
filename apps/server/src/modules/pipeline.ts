@@ -40,6 +40,7 @@ import {
   watchlists,
 } from "@riddlr/db";
 import {
+  type AssetClass,
   absorbMarketDataClusters,
   absorbObservationClusters,
   analysisReservationTokens,
@@ -67,6 +68,7 @@ import {
   isNearDuplicate,
   isObservedAnomalyKind,
   lineageOriginKey,
+  MAX_EFTS_KEYWORDS,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
   MAX_OBSERVE_PINS,
@@ -110,6 +112,7 @@ import {
   createCryptoComAdapter,
   createDefiLlamaAdapter,
   createDiscordAdapter,
+  createEdgarAdapter,
   createFeedsAdapter,
   createHeliusAdapter,
   createHyperliquidAdapter,
@@ -119,6 +122,7 @@ import {
   createSnapshotAdapter,
   createXAdapter,
   type FetchResult,
+  padCik,
   parseSnapshotSpaces,
   redactRequestUrl,
   SourceAdapterRegistry,
@@ -136,6 +140,7 @@ import {
 } from "./event-lifecycle.js";
 import {
   enrichAndUnderstandScan,
+  ensureOfficialSecIssuer,
   ensureOfficialSnapshotSpace,
   loadTrustMaps,
   upsertSourceIdentity,
@@ -404,6 +409,7 @@ export async function runScan(
     adapters.register(createSnapshotAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createAlchemyAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createHeliusAdapter());
+    adapters.register(createEdgarAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
@@ -455,6 +461,14 @@ export async function runScan(
           ...derived.spaces,
         ])) {
           await ensureOfficialSnapshotSpace(ctx, space);
+        }
+      }
+      if (source.adapterId === "edgar") {
+        runtimeConfig.scanMode = module.id === "crypto" ? "efts" : "issuer";
+        runtimeConfig.watchedCiks = ciksFromWatchlist(agentContext.watchlist);
+        runtimeConfig.eftsKeywords = eftsKeywordsFromWatchlist(agentContext.watchlist);
+        for (const cik of runtimeConfig.watchedCiks as string[]) {
+          await ensureOfficialSecIssuer(ctx, cik);
         }
       }
       if (source.secretId) {
@@ -620,6 +634,12 @@ export async function runScan(
 
     const usedIds: string[] = [];
     const byHash = new Map<string, string>();
+    for (const item of collected) {
+      const identity = item.normalized.sourceIdentity;
+      if (identity?.platform === "sec") {
+        await ensureOfficialSecIssuer(ctx, identity.externalId, identity.displayName);
+      }
+    }
     const trustMaps = await loadTrustMaps(ctx);
     for (const item of collected) {
       const existing = byHash.get(item.normalized.contentHash);
@@ -1609,7 +1629,7 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
           canonicalId: item.canonicalId,
           symbol: item.symbol ?? undefined,
           name: item.name ?? undefined,
-          assetClass: item.assetClass as "cryptocurrency" | "meme_coin" | "stablecoin",
+          assetClass: item.assetClass as AssetClass,
         },
         registry,
       ),
@@ -1622,6 +1642,39 @@ async function loadAgentScanContext(ctx: AppContext, agentId: string) {
     module,
     marketDomainId: module.id,
   };
+}
+
+function ciksFromWatchlist(watchlist: Array<{ canonicalId: string }>): string[] {
+  const ciks: string[] = [];
+  for (const item of watchlist) {
+    if (!item.canonicalId.startsWith("sec:")) {
+      continue;
+    }
+    const cik = padCik(item.canonicalId.slice(4));
+    if (cik) {
+      ciks.push(cik);
+    }
+  }
+  return [...new Set(ciks)];
+}
+
+function eftsKeywordsFromWatchlist(
+  watchlist: Array<{ symbol?: string; displayName?: string }>,
+): string[] {
+  const words: string[] = [];
+  for (const item of watchlist) {
+    if (item.symbol && item.symbol.trim().length >= 3) {
+      words.push(item.symbol.trim().toLowerCase());
+    }
+    if (item.displayName) {
+      for (const part of item.displayName.toLowerCase().split(/\s+/)) {
+        if (part.length >= 3) {
+          words.push(part);
+        }
+      }
+    }
+  }
+  return takeBounded([...new Set(words)], MAX_EFTS_KEYWORDS);
 }
 
 function fallbackFacts(

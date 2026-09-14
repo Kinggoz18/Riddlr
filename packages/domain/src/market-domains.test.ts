@@ -10,7 +10,7 @@ import {
 } from "./index.js";
 
 describe("market domain registry", () => {
-  it("contains five domains and only crypto is supported", () => {
+  it("contains five domains and supports crypto and equities", () => {
     expect(MARKET_DOMAIN_REGISTRY).toHaveLength(5);
     expect(MARKET_DOMAIN_REGISTRY.map((item) => item.id)).toEqual([
       "crypto",
@@ -21,8 +21,13 @@ describe("market domain registry", () => {
     ]);
     expect(MARKET_DOMAIN_REGISTRY.filter((item) => item.supported).map((item) => item.id)).toEqual([
       "crypto",
+      "equities",
     ]);
-    for (const id of ["equities", "forex", "commodities", "macro"] as const) {
+    const equities = MARKET_DOMAIN_REGISTRY.find((item) => item.id === "equities");
+    expect(equities?.comingSoon).toBe(false);
+    expect(equities?.selectable).toBe(true);
+    expect(equities?.status).toBe("supported");
+    for (const id of ["forex", "commodities", "macro"] as const) {
       const row = MARKET_DOMAIN_REGISTRY.find((item) => item.id === id);
       expect(row?.comingSoon).toBe(true);
       expect(row?.selectable).toBe(false);
@@ -39,13 +44,13 @@ describe("market domain registry", () => {
   });
 
   it("rejects coming-soon domains for execution", () => {
-    expect(() => assertSupportedMarketDomains(["equities"])).toThrow(UnsupportedMarketDomainError);
     expect(() => assertSupportedMarketDomains(["forex"])).toThrow(UnsupportedMarketDomainError);
     expect(() => assertSupportedMarketDomains(["commodities"])).toThrow(
       UnsupportedMarketDomainError,
     );
     expect(() => assertSupportedMarketDomains(["macro"])).toThrow(UnsupportedMarketDomainError);
     expect(assertSupportedMarketDomains(["crypto"])).toEqual(["crypto"]);
+    expect(assertSupportedMarketDomains(["equities"])).toEqual(["equities"]);
   });
 
   it("keeps onboarding to four steps", () => {

@@ -18,6 +18,13 @@ export type AssetExternalIds = {
   coingeckoId?: string;
   caip19?: string[];
   snapshotSpaces?: string[];
+  cik?: string;
+  ticker?: string;
+  figi?: string;
+  compositeFigi?: string;
+  isin?: string;
+  exchangeCode?: string;
+  figiStatus?: "mapped" | "unmapped" | "multi_match";
 };
 
 export type RegistryAsset = {

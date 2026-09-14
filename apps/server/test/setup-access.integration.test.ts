@@ -6,6 +6,7 @@ import { decodeMasterKey, generateMasterKey, randomToken } from "@riddlr/crypto"
 import { createDb, migrate } from "@riddlr/db";
 import { DomainModuleRegistry } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
+import { equitiesDomainModule } from "@riddlr/domain-equities";
 import { createLogger, createMetrics } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import { Queue } from "bullmq";
@@ -52,6 +53,7 @@ describe("setup access paths", () => {
     const cookieSecret = randomToken();
     const domains = new DomainModuleRegistry();
     domains.register(cryptoDomainModule);
+    domains.register(equitiesDomainModule);
     const config = parseEnv({
       RIDDLR_ENV: "test",
       RIDDLR_HTTP_HOST: "127.0.0.1",

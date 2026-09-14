@@ -83,3 +83,28 @@ Captured from live provider responses. Secrets are not present in these files.
 | `x/empty-data.json` | Empty recent-search `data` array with `meta.result_count` 0 | 2026-09-14 |
 | `x/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
 | `x/search-drift-missing-id.json` | Recent-search `data` row with `id` removed to represent schema drift | 2026-09-14 |
+| `edgar/atom-8k-truncated.xml` | `GET https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=100&output=atom` (first four entries; CIMG `0001527613` items `5.02`,`9.01`) | 2026-09-14 |
+| `edgar/atom-8k-empty.xml` | Same capture with all `<entry>` elements removed | 2026-09-14 |
+| `edgar/atom-8k-drift-missing-title.xml` | First captured entry with `<title>` removed to represent schema drift | 2026-09-14 |
+| `edgar/atom-form4-truncated.xml` | `GET https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&count=100&output=atom` (truncated) | 2026-09-14 |
+| `edgar/403-undeclared-tool.html` | HTTP 403 undeclared automated tool body from a Mozilla-compatible User-Agent | 2026-09-14 |
+| `edgar/company-tickers-truncated.json` | `GET https://www.sec.gov/files/company_tickers.json` (NVDA, AAPL `cik_str` 320193, GOOGL, MSFT, AMZN, BRK-B, SPY, QQQ) | 2026-09-14 |
+| `edgar/company-tickers-empty.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `edgar/company-tickers-drift-missing-ticker.json` | First captured ticker row with `ticker` removed to represent schema drift | 2026-09-14 |
+| `edgar/submissions-cik0000320193-truncated.json` | `GET https://data.sec.gov/submissions/CIK0000320193.json` (truncated) | 2026-09-14 |
+| `edgar/submissions-empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `edgar/submissions-drift-missing-accession.json` | Captured submissions recent filing with accession removed to represent schema drift | 2026-09-14 |
+| `edgar/8k-index-truncated.html` | Apple 8-K index HTML accession `0000320193-26-000018` | 2026-09-14 |
+| `edgar/8k-document-truncated.html` | Apple 8-K primary document `aapl-20260730.htm` (truncated iXBRL) | 2026-09-14 |
+| `edgar/8k-meta.json` | Capture notes for that Apple 8-K (items `2.02,9.01`) | 2026-09-14 |
+| `edgar/form4.xml` | Apple officer Form 4 XML (Newstead Jennifer, code `S`, 1438 shares @ 317.23) | 2026-09-14 |
+| `edgar/form4-drift-missing-code.xml` | Same Form 4 with transaction code removed to represent schema drift | 2026-09-14 |
+| `edgar/html-200-8k-index.html` | HTML 200 used as a non-Atom body | 2026-09-14 |
+| `edgar/efts-bitcoin-8k-truncated.json` | `GET https://efts.sec.gov/LATEST/search-index?q=bitcoin&forms=8-K` (truncated; first hit CIK `0002027708`) | 2026-09-14 |
+| `edgar/efts-bitcoin-8k-status.txt` | HTTP status for that EFTS capture | 2026-09-14 |
+| `edgar/efts-empty.json` | Empty EFTS hits body | 2026-09-14 |
+| `edgar/efts-drift-missing-id.json` | Captured EFTS hit with `id` removed to represent schema drift | 2026-09-14 |
+| `openfigi/mapping-hit-miss-multi.json` | `POST https://api.openfigi.com/v3/mapping` jobs AAPL+US, NOTATICKERXYZ, SAN (SAN truncated to three matches) | 2026-09-14 |
+| `openfigi/mapping-empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `openfigi/mapping-empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `openfigi/mapping-drift-missing-figi.json` | Captured AAPL match with `figi` removed to represent schema drift | 2026-09-14 |

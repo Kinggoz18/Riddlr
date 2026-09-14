@@ -50,7 +50,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0027](adr/0027-event-lifecycle-outcomes.md), and
 [ADR 0028](adr/0028-typed-signal-policies.md), and
 [ADR 0029](adr/0029-discord-webhook-delivery.md), and
-[ADR 0030](adr/0030-dashboard-charting.md).
+[ADR 0030](adr/0030-dashboard-charting.md), and
+[ADR 0031](adr/0031-equities-domain.md).
 
 ## Trust boundaries
 
@@ -62,19 +63,19 @@ Trusted: Riddlr code, PostgreSQL, Valkey on the internal network, master key.
 
 ```
 source-adapters, llm, notifications, queue  →  domain
-domain-crypto  →  domain
-apps/server  →  domain-crypto (composition root only)
+domain-crypto, domain-equities  →  domain
+apps/server  →  domain-crypto and domain-equities (composition root only)
 packages/crypto  →  cryptography, never market logic
 ```
 
 ## Market domains
 
-See [market-domains.md](market-domains.md). Crypto is supported. Equities,
+See [market-domains.md](market-domains.md). Crypto and Equities are supported.
 Forex, Commodities, and Macro are coming soon.
 
 ## Agents
 
-Operators create Crypto agents with a schedule, token budget (default 100000,
+Operators create Crypto or Equities agents with a schedule, token budget (default 100000,
 or unlimited), skills, and a watchlist. Coming-soon domains cannot execute. See
 [agents-and-skills.md](agents-and-skills.md) and
 [watchlists.md](watchlists.md).
@@ -85,7 +86,7 @@ than one feed is allowed), Discord (operator-configured invited bot; embeds,
 threads, and 72h lookback; more than one Discord source is allowed), X
 (operator-configured named-principal recent search with spend caps and bounded
 `next_token`), opt-in DefiLlama observations (TVL, stablecoins, hacks), opt-in Hyperliquid and
-Binance USD-M Futures perp observations, opt-in Polymarket and Kalshi prediction-market odds, opt-in Snapshot governance proposals, opt-in Alchemy and Helius address-activity webhooks, and one active market-data source: CoinGecko,
+Binance USD-M Futures perp observations, opt-in Polymarket and Kalshi prediction-market odds, opt-in Snapshot governance proposals, opt-in SEC EDGAR filings, opt-in Alchemy and Helius address-activity webhooks, and one active market-data source: CoinGecko,
 CoinMarketCap, or Crypto.com Exchange public tickers. The CoinGecko registry
 seed fills `assets` for watchlist search and text extraction. The observe worker
 polls CoinGecko `/simple/price` into `observation_series` for watched, held, and

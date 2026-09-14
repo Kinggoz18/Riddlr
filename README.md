@@ -4,9 +4,9 @@ Riddlr is a **local-first intelligence engine**. It monitors configured sources,
 collects evidence, correlates independent proof, and produces schema-validated
 read-only signals.
 
-The **core is asset-class agnostic**. The currently **supported** market domain
-is **Crypto**. Equities, Forex, Commodities, and Macro are **planned / coming
-soon** and cannot execute scans.
+The **core is asset-class agnostic**. **Crypto** and **Equities** are
+**supported**. Forex, Commodities, and Macro are **planned / coming soon** and
+cannot execute scans.
 
 Riddlr is not a tracker, not a trading bot, and not an AI wrapper around a news
 feed. It never trades, never signs, and never asks for private keys.
@@ -51,7 +51,8 @@ setup codes expire after 15 minutes. See [Install](docs/install.md).
 - One active market-data source at a time: CoinGecko, CoinMarketCap, or Crypto.com Exchange public tickers
 - Read-only portfolios of public addresses and declared holdings
 - The default **Riddlr Intelligence Agent**, the first-run Crypto watcher
-- Additional Crypto agents, markdown skills, and canonical-ID watchlists
+- Additional Crypto or Equities agents, markdown skills, and canonical-ID watchlists
+- Optional SEC EDGAR filings (contact email required) and OpenFIGI identifier mapping
 - Overview, Signals (eight typed policies with proof), Events, Scorecard, Agents, Sources, Watchlists, Notifications, Portfolios, Scan History, AI Usage, and System Health
 - Side navigation with light or dark appearance (dark is the default)
 
@@ -61,7 +62,7 @@ PostgreSQL is the source of truth. Valkey is infrastructure (queues, locks,
 rate limits, short-lived cache). Fastify serves the API. A separate worker
 process runs BullMQ jobs. The dashboard is a Vite/React control plane. Domain
 implementations register at the application edge; generic packages never import
-Crypto-specific code.
+Crypto- or Equities-specific code.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -82,6 +83,8 @@ See [docs/architecture.md](docs/architecture.md).
 - [Polymarket](docs/sources/polymarket.md)
 - [Kalshi](docs/sources/kalshi.md)
 - [Snapshot](docs/sources/snapshot.md)
+- [SEC EDGAR](docs/sources/edgar.md)
+- [OpenFIGI](docs/integrations/openfigi.md)
 - [Alchemy](docs/sources/alchemy.md)
 - [Helius](docs/sources/helius.md)
 - [Discord](docs/sources/discord.md)

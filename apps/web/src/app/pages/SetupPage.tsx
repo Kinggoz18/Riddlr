@@ -444,7 +444,7 @@ function SetupPage() {
                   type="checkbox"
                   checked={domain.id === "crypto"}
                   disabled={!domain.selectable}
-                  readOnly
+                  readOnly={domain.id === "crypto"}
                 />
                 <span>
                   {domain.name}{" "}

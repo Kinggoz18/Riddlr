@@ -1,7 +1,7 @@
 # Contributing to Riddlr
 
 Thank you for contributing. Riddlr is a local-first intelligence engine with an
-asset-class-agnostic core. Crypto is the only fully implemented market domain.
+asset-class-agnostic core. Crypto and Equities are supported market domains.
 
 ## Developer Certificate of Origin
 
@@ -24,9 +24,9 @@ Git can add this with `git commit -s`.
 ## Architecture constraints
 
 - Core packages (`domain`, `source-adapters`, `llm`, `queue`, `notifications`)
-  must not import `@riddlr/domain-crypto`.
+  must not import `@riddlr/domain-crypto` or `@riddlr/domain-equities`.
 - `packages/crypto` is cryptography (AES, Argon2id, TOTP). Market crypto lives in
-  `@riddlr/domain-crypto`.
+  `@riddlr/domain-crypto`. Equities lives in `@riddlr/domain-equities`.
 - Coming-soon market domains must not become executable.
 - The LLM is read-only. Do not add trading, signing, or secret access.
 

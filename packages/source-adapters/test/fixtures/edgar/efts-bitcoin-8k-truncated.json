@@ -1,0 +1,153 @@
+{
+  "took": 52,
+  "timed_out": false,
+  "hits": {
+    "total": {
+      "value": 2604,
+      "relation": "eq"
+    },
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0001213900-25-064922:ea024932301ex99-2_cantor1.htm",
+        "_score": 13.09339,
+        "_source": {
+          "ciks": [
+            "0002027708"
+          ],
+          "period_ending": "2025-07-16",
+          "file_num": [
+            "001-42464"
+          ],
+          "display_names": [
+            "Cantor Equity Partners I, Inc.  (CEPO)  (CIK 0002027708)"
+          ],
+          "xsl": null,
+          "sequence": "3",
+          "root_forms": [
+            "8-K"
+          ],
+          "file_date": "2025-07-17",
+          "biz_states": [
+            "NY"
+          ],
+          "sics": [
+            "6770"
+          ],
+          "form": "8-K",
+          "adsh": "0001213900-25-064922",
+          "film_num": [
+            "251129056"
+          ],
+          "biz_locations": [
+            "New York, NY"
+          ],
+          "file_type": "EX-99.2",
+          "file_description": "FORM OF INVESTOR PRESENTATION",
+          "inc_states": [
+            "E9"
+          ],
+          "items": [
+            "7.01",
+            "9.01"
+          ]
+        }
+      },
+      {
+        "_index": "edgar_file",
+        "_id": "0001193125-26-237907:mstr-ex99_1.htm",
+        "_score": 13.03787,
+        "_source": {
+          "ciks": [
+            "0001050446"
+          ],
+          "period_ending": "2026-05-26",
+          "file_num": [
+            "001-42509"
+          ],
+          "display_names": [
+            "Strategy Inc  (MSTR, STRC, STRD, STRF, STRK)  (CIK 0001050446)"
+          ],
+          "xsl": null,
+          "sequence": "2",
+          "root_forms": [
+            "8-K"
+          ],
+          "file_date": "2026-05-26",
+          "biz_states": [
+            "VA"
+          ],
+          "sics": [
+            "6199"
+          ],
+          "form": "8-K",
+          "adsh": "0001193125-26-237907",
+          "film_num": [
+            "261015970"
+          ],
+          "biz_locations": [
+            "Tysons Corner, VA"
+          ],
+          "file_type": "EX-99.1",
+          "file_description": "EX-99.1",
+          "inc_states": [
+            "DE"
+          ],
+          "items": [
+            "7.01",
+            "8.01",
+            "9.01"
+          ]
+        }
+      },
+      {
+        "_index": "edgar_file",
+        "_id": "0001193125-25-258690:mstr-ex99_1.htm",
+        "_score": 13.033678,
+        "_source": {
+          "ciks": [
+            "0001050446"
+          ],
+          "period_ending": "2025-10-30",
+          "file_num": [
+            "001-42509"
+          ],
+          "display_names": [
+            "Strategy Inc  (MSTR, STRC, STRD, STRF, STRK)  (CIK 0001050446)"
+          ],
+          "xsl": null,
+          "sequence": "2",
+          "root_forms": [
+            "8-K"
+          ],
+          "file_date": "2025-10-30",
+          "biz_states": [
+            "VA"
+          ],
+          "sics": [
+            "6199"
+          ],
+          "form": "8-K",
+          "adsh": "0001193125-25-258690",
+          "film_num": [
+            "251436260"
+          ],
+          "biz_locations": [
+            "Tysons Corner, VA"
+          ],
+          "file_type": "EX-99.1",
+          "file_description": "EX-99.1",
+          "inc_states": [
+            "DE"
+          ],
+          "items": [
+            "2.02",
+            "7.01",
+            "8.01",
+            "9.01"
+          ]
+        }
+      }
+    ]
+  }
+}

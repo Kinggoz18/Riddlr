@@ -1,5 +1,6 @@
 import {
   AGENT_SCHEDULES,
+  ASSET_CLASSES,
   CATALYST_KINDS,
   DASHBOARD_CHART_METRICS,
   DISCORD_WEBHOOK_URL_RE,
@@ -119,7 +120,7 @@ export const setupStatusSchema = z.object({
 
 export const watchlistItemSchema = z.object({
   canonicalId: z.string().min(3).max(160),
-  assetClass: z.enum(["cryptocurrency", "meme_coin", "stablecoin"]).optional(),
+  assetClass: z.enum(ASSET_CLASSES).optional(),
   symbol: z.string().max(24).optional(),
   name: z.string().max(80).optional(),
 });
@@ -296,6 +297,11 @@ export const snapshotSourceSchema = z.object({
     .array(z.string().regex(/^[A-Za-z0-9._-]{3,80}$/))
     .max(MAX_SNAPSHOT_SPACES)
     .optional(),
+});
+
+export const edgarSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("SEC EDGAR"),
+  contactEmail: z.string().trim().email().max(254),
 });
 
 export const alchemySourceSchema = z.object({

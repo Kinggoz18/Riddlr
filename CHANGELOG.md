@@ -4,6 +4,15 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Equities is a supported market domain on SEC EDGAR (Form 4, 8-K items, EFTS)
+  with OpenFIGI identifier mapping. Canonical ids are `sec:` plus a 10-digit
+  CIK. The default agent stays Crypto. Onboarding stays four steps. Forex,
+  Commodities, and Macro stay coming soon. See
+  [docs/market-domains.md](docs/market-domains.md),
+  [docs/integrations/edgar.md](docs/integrations/edgar.md),
+  [docs/integrations/openfigi.md](docs/integrations/openfigi.md), and
+  [docs/adr/0031-equities-domain.md](docs/adr/0031-equities-domain.md).
+
 - Morning view (Overview), asset pages with observation charts, event lifecycle
   timelines, and a signal scorecard with precision and retraction rate. See
   [docs/dashboard.md](docs/dashboard.md) and

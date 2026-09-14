@@ -3,6 +3,7 @@ import { decodeMasterKey } from "@riddlr/crypto";
 import { createDb, type Database, migrate } from "@riddlr/db";
 import { DomainModuleRegistry } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
+import { equitiesDomainModule } from "@riddlr/domain-equities";
 import { createLogger, createMetrics } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import type { ObservationProviderRegistry } from "@riddlr/source-adapters";
@@ -52,6 +53,7 @@ export async function createContext(): Promise<AppContext> {
   });
   const domains = new DomainModuleRegistry();
   domains.register(cryptoDomainModule);
+  domains.register(equitiesDomainModule);
   const masterKey = decodeMasterKey(config.encryptionMasterKey);
   const masterKeys = [masterKey];
   if (config.previousMasterKey) {

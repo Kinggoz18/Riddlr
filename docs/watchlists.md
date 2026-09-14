@@ -1,16 +1,18 @@
 # Watchlists
 
 A watchlist belongs to one agent. Items are **canonical asset IDs**, such as
-`coingecko:bitcoin`, not bare tickers.
+`coingecko:bitcoin` or `sec:0000320193`, not bare tickers.
 
-The Crypto module resolves each item through the `assets` registry. Unknown
-IDs and inactive (unwatched, out of top N) ids are rejected. The instance cap
-is 50 items per watchlist.
+The registered domain module for the item's asset class resolves each item
+through the `assets` registry. Unknown IDs and inactive (unwatched, out of
+top N) ids are rejected. Equities items with no FIGI show as identifier
+unresolved. The instance cap is 50 items per watchlist.
 
 The dashboard picker searches the registry by name, symbol, or cashtag.
 Canonical IDs are stored underneath. Bootstrap rows cover Bitcoin, Ethereum,
-Tether, USD Coin, and Solana before the first CoinGecko seed. After a seed,
-any of the top N assets can be added.
+Tether, USD Coin, and Solana before the first CoinGecko seed, and Apple and
+Microsoft before the first company-tickers seed. After a seed, any of the
+top N crypto assets and the bounded EDGAR ticker list can be added.
 
 Overview and agent boards show the first eight named assets, then a View more
 link, and the latest CoinGecko spot quote when `observation_series` has a row.
@@ -24,4 +26,5 @@ The default agent is seeded with Bitcoin, Ethereum, and Tether. Context notes
 include the watchlist. Watchlists do not invent market metrics.
 
 See [integrations/coingecko.md](integrations/coingecko.md) for seed interval,
-top N, and failure classes.
+top N, and failure classes. See [integrations/edgar.md](integrations/edgar.md)
+and [integrations/openfigi.md](integrations/openfigi.md) for Equities.

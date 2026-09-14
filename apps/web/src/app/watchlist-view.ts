@@ -7,6 +7,7 @@ export type WatchlistAsset = {
   symbol?: string | null;
   name?: string | null;
   lastQuote?: { value: number; unit: string; observedAt: string; provider: string };
+  identifierUnresolved?: boolean;
 };
 
 export type WatchlistSummary = {

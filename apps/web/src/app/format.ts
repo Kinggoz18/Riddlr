@@ -64,6 +64,7 @@ export const ASSET_CATALOG: AssetOption[] = [
   { canonicalId: "coingecko:binancecoin", symbol: "BNB", name: "BNB" },
   { canonicalId: "coingecko:ripple", symbol: "XRP", name: "XRP" },
   { canonicalId: "coingecko:dogecoin", symbol: "DOGE", name: "Dogecoin" },
+  { canonicalId: "sec:0000320193", symbol: "AAPL", name: "Apple Inc." },
 ];
 
 export function assetLabel(canonicalId: string) {
@@ -107,6 +108,12 @@ export function assetClassLabel(assetClass?: string | null) {
       return "Meme coin";
     case "stablecoin":
       return "Stablecoin";
+    case "stock":
+      return "Stock";
+    case "etf":
+      return "ETF";
+    case "index":
+      return "Index";
     default:
       return assetClass ? assetClass.replaceAll("_", " ") : undefined;
   }
@@ -315,8 +322,20 @@ export const OBJECTIVE_OPTIONS = [
   ["general_market_trends", "General market trends"],
 ] as const;
 
+export const EQUITIES_OBJECTIVE_OPTIONS = [
+  ["general_equities_intelligence", "General equities intelligence"],
+  ["major_events", "Major events"],
+  ["risk_signals", "Risk signals"],
+  ["cross_source_corroboration", "Cross-source corroboration"],
+  ["asset_specific_changes", "Asset-specific changes"],
+] as const;
+
 export function objectiveLabel(id: string) {
-  return OBJECTIVE_OPTIONS.find(([key]) => key === id)?.[1] ?? id.replaceAll("_", " ");
+  return (
+    OBJECTIVE_OPTIONS.find(([key]) => key === id)?.[1] ??
+    EQUITIES_OBJECTIVE_OPTIONS.find(([key]) => key === id)?.[1] ??
+    id.replaceAll("_", " ")
+  );
 }
 
 export function scheduleLabel(schedule: string) {
@@ -435,6 +454,8 @@ export function adapterLabel(adapterId: string) {
       return "Alchemy";
     case "helius":
       return "Helius";
+    case "edgar":
+      return "SEC EDGAR";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

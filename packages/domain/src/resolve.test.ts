@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RegistryAsset } from "./domain-module.js";
 import { MAX_ASSETS_PER_DOCUMENT } from "./limits.js";
-import { canonicalizeFromRegistry, resolveAssetsInText, searchRegistry } from "./resolve.js";
+import {
+  canonicalizeFromRegistry,
+  identifierUnresolved,
+  resolveAssetsInText,
+  searchRegistry,
+} from "./resolve.js";
 
 const rules = {
   minAliasLength: 3,
@@ -257,5 +262,26 @@ describe("registry-driven asset resolution", () => {
         8,
       ).map((item) => item.canonicalId),
     ).toEqual([]);
+  });
+
+  it("flags equities without a FIGI as identifier unresolved", () => {
+    expect(
+      identifierUnresolved({
+        assetClass: "stock",
+        externalIds: { cik: "0000789019", ticker: "MSFT" },
+      }),
+    ).toBe(true);
+    expect(
+      identifierUnresolved({
+        assetClass: "stock",
+        externalIds: { cik: "0000320193", ticker: "AAPL", figi: "BBG000B9XRY4" },
+      }),
+    ).toBe(false);
+    expect(
+      identifierUnresolved({
+        assetClass: "cryptocurrency",
+        externalIds: { coingeckoId: "bitcoin" },
+      }),
+    ).toBe(false);
   });
 });

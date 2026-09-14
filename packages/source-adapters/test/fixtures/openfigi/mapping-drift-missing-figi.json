@@ -1,0 +1,60 @@
+[
+  {
+    "data": [
+      {
+        "name": "APPLE INC",
+        "ticker": "AAPL",
+        "exchCode": "US",
+        "compositeFIGI": "BBG000B9XRY4",
+        "securityType": "Common Stock",
+        "marketSector": "Equity",
+        "shareClassFIGI": "BBG001S5N8V8",
+        "securityType2": "Common Stock",
+        "securityDescription": "AAPL"
+      }
+    ]
+  },
+  {
+    "warning": "No identifier found."
+  },
+  {
+    "data": [
+      {
+        "figi": "BBG000BQ7RJ2",
+        "name": "SANFORD LIMITED",
+        "ticker": "SAN",
+        "exchCode": "NZ",
+        "compositeFIGI": "BBG000BQ7R57",
+        "securityType": "Common Stock",
+        "marketSector": "Equity",
+        "shareClassFIGI": "BBG001S6HJJ3",
+        "securityType2": "Common Stock",
+        "securityDescription": "SAN"
+      },
+      {
+        "figi": "BBG000BTJS47",
+        "name": "BANCO SANTANDER SA-SPON ADR",
+        "ticker": "SAN",
+        "exchCode": "US",
+        "compositeFIGI": "BBG000BTJS47",
+        "securityType": "ADR",
+        "marketSector": "Equity",
+        "shareClassFIGI": "BBG001S5WCX7",
+        "securityType2": "Depositary Receipt",
+        "securityDescription": "SAN"
+      },
+      {
+        "figi": "BBG000BTJS92",
+        "name": "BANCO SANTANDER SA-SPON ADR",
+        "ticker": "SAN",
+        "exchCode": "UA",
+        "compositeFIGI": "BBG000BTJS47",
+        "securityType": "ADR",
+        "marketSector": "Equity",
+        "shareClassFIGI": "BBG001S5WCX7",
+        "securityType2": "Depositary Receipt",
+        "securityDescription": "SAN"
+      }
+    ]
+  }
+]

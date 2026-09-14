@@ -109,6 +109,11 @@ const ADAPTERS = [
     body: "Governance proposals from Snapshot GraphQL. Opt-in. No API key. Pin space ids. Official trust for the space itself. Tally is not shipped.",
   },
   {
+    id: "edgar",
+    name: "SEC EDGAR",
+    body: "SEC filings. Opt-in. Operator contact email required for User-Agent Riddlr/<version> <email>. Equities agents filter by watchlist CIKs. Crypto agents use EFTS keywords only.",
+  },
+  {
     id: "alchemy",
     name: "Alchemy",
     body: "EVM address-activity webhooks. Opt-in. Notify token required. Signing key stored encrypted. Never paste a seed phrase or private key.",
@@ -496,7 +501,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, Snapshot, Alchemy, and Helius are single opt-in sources."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, Binance USD-M Futures, Polymarket, Kalshi, Snapshot, SEC EDGAR, Alchemy, and Helius are single opt-in sources."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -1588,6 +1593,76 @@ function MarketForm(props: {
   );
 }
 
+function EdgarForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("SEC EDGAR");
+  const [contactEmail, setContactEmail] = useState("");
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "edgar");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add SEC EDGAR source"
+        description="Opt-in SEC filings. The SEC requires User-Agent Riddlr/<version> plus an operator contact email. Equities agents keep watched issuers. Crypto agents search EFTS keywords only."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/edgar", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  contactEmail,
+                }),
+              });
+              toast("EDGAR saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save EDGAR"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="edgar-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Contact email"
+            hint="SEC User-Agent is Riddlr/0.1 plus this address. Do not use a Mozilla string or a GitHub URL."
+          >
+            <input
+              id="edgar-contact-email"
+              type="email"
+              autoComplete="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              required
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save EDGAR source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
 function SourceCreate() {
   const { adapter } = useParams();
   if (adapter === "feeds") {
@@ -1610,6 +1685,9 @@ function SourceCreate() {
   }
   if (adapter === "snapshot") {
     return <SnapshotForm />;
+  }
+  if (adapter === "edgar") {
+    return <EdgarForm />;
   }
   if (adapter === "alchemy") {
     return <AlchemyForm />;
@@ -1859,6 +1937,19 @@ function SourceDetail() {
             values={Array.isArray(config.spaces) ? config.spaces.map(String) : []}
             empty="Watchlist mapping only"
           />
+        </Card>
+      ) : null}
+      {row.adapterId === "edgar" ? (
+        <Card>
+          <h2>SEC EDGAR</h2>
+          <p className="field-note">
+            User-Agent Riddlr/0.1 plus the contact email on this source. Fair-use cap 10 requests/s.
+            Equities agents filter Atom by watchlist CIKs. Crypto agents use EFTS keyword search,
+            one query per watched keyword per hour.
+          </p>
+          <p className="record-meta">
+            Contact email: {typeof config.contactEmail === "string" ? config.contactEmail : "unset"}
+          </p>
         </Card>
       ) : null}
       {row.adapterId === "alchemy" ? (

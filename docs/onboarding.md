@@ -13,11 +13,13 @@ First-run is **four steps**. There is no fifth step.
    model, and API key (encrypted at rest, never shown again). **Skip for now**
    continues without a model; scans still collect evidence. Add a provider later
    in Settings.
-4. **Domains and sources** — Crypto is selected. Equities, Forex, Commodities,
-   and Macro are disabled Coming soon. Optional Telegram. Finish creates the
+4. **Domains and sources** — Crypto is selected and stays the default agent.
+   Equities is selectable (supported). Forex, Commodities, and Macro are
+   disabled Coming soon. Optional Telegram. Finish creates the
    default **Riddlr Intelligence Agent** with SearXNG, CoinGecko, and a
    Bitcoin / Ethereum / Tether watchlist. That agent is the Crypto watcher:
    scheduled scans, candidate discovery, and analysis of material events.
+   Create an Equities agent after setup and add SEC EDGAR.
 
 After Finish, setup routes close. The origin shows **Sign in**. Password-only
 sign-in works until authenticator is enabled.

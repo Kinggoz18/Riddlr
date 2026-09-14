@@ -45,6 +45,8 @@ import {
   signalOutcomes,
   signals,
   skills,
+  sourceIdentities,
+  sourceIdentityPolicies,
   sources,
   users,
   watchlistItems,
@@ -54,6 +56,7 @@ import {
 
 import { DomainModuleRegistry, normalizeEvidence } from "@riddlr/domain";
 import { cryptoDomainModule } from "@riddlr/domain-crypto";
+import { equitiesDomainModule } from "@riddlr/domain-equities";
 import { createLogger, createMetrics, snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import {
@@ -75,6 +78,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { AppContext } from "../src/context.js";
 import {
+  ensureDefaultEquitiesAssets,
   findRegistryAsset,
   listRegistryAssets,
   seedAssetRegistry,
@@ -153,6 +157,7 @@ describe("setup, auth, and domain persistence", () => {
     const cookieSecret = randomToken();
     const domains = new DomainModuleRegistry();
     domains.register(cryptoDomainModule);
+    domains.register(equitiesDomainModule);
     const config = parseEnv({
       RIDDLR_ENV: "test",
       RIDDLR_HTTP_HOST: "127.0.0.1",
@@ -183,6 +188,7 @@ describe("setup, auth, and domain persistence", () => {
       masterKeys: [masterKey],
       domains,
     };
+    await ensureDefaultEquitiesAssets(ctx);
     app = await buildApp(ctx);
     stop = async () => {
       await app.close();
@@ -204,7 +210,13 @@ describe("setup, auth, and domain persistence", () => {
     expect(statusBody.domains.find((item: { id: string }) => item.id === "crypto").supported).toBe(
       true,
     );
-    for (const id of ["equities", "forex", "commodities", "macro"]) {
+    expect(
+      statusBody.domains.find((item: { id: string }) => item.id === "equities").supported,
+    ).toBe(true);
+    expect(
+      statusBody.domains.find((item: { id: string }) => item.id === "equities").comingSoon,
+    ).toBe(false);
+    for (const id of ["forex", "commodities", "macro"]) {
       expect(statusBody.domains.find((item: { id: string }) => item.id === id).comingSoon).toBe(
         true,
       );
@@ -264,7 +276,7 @@ describe("setup, auth, and domain persistence", () => {
       method: "POST",
       url: "/api/v1/setup/complete",
       headers: { cookie },
-      payload: { marketDomainIds: ["equities"] },
+      payload: { marketDomainIds: ["forex"] },
     });
     expect(comingSoon.statusCode).toBe(400);
 
@@ -447,7 +459,7 @@ describe("setup, auth, and domain persistence", () => {
     expect(agentId).toBeDefined();
     await ctx.db.insert(agentMarketDomains).values({
       agentId: agentId as string,
-      marketDomainId: "equities",
+      marketDomainId: "forex",
     });
     const scan = await app.inject({
       method: "POST",
@@ -455,9 +467,7 @@ describe("setup, auth, and domain persistence", () => {
       headers: { cookie },
     });
     expect(scan.statusCode).toBe(400);
-    await ctx.db
-      .delete(agentMarketDomains)
-      .where(eq(agentMarketDomains.marketDomainId, "equities"));
+    await ctx.db.delete(agentMarketDomains).where(eq(agentMarketDomains.marketDomainId, "forex"));
     const allowed = await app.inject({
       method: "POST",
       url: `/api/v1/agents/${agentId}/scan`,
@@ -1317,12 +1327,31 @@ describe("setup, auth, and domain persistence", () => {
       url: "/api/v1/agents",
       headers: { cookie },
       payload: {
-        name: "Equities watcher",
-        marketDomainIds: ["equities"],
+        name: "Forex watcher",
+        marketDomainIds: ["forex"],
         schedule: "1h",
       },
     });
     expect(comingSoon.statusCode).toBe(400);
+
+    const equitiesAgent = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "Equities watcher",
+        marketDomainIds: ["equities"],
+        schedule: "1h",
+        watchlistItems: [{ canonicalId: "sec:0000320193" }],
+      },
+    });
+    expect(equitiesAgent.statusCode).toBe(200);
+    expect(equitiesAgent.json().agent.domains).toEqual(["equities"]);
+    expect(
+      (equitiesAgent.json().agent.watchlist.items as Array<{ canonicalId: string }>).map(
+        (item) => item.canonicalId,
+      ),
+    ).toEqual(["sec:0000320193"]);
 
     const ticker = await app.inject({
       method: "POST",
@@ -2300,6 +2329,15 @@ describe("setup, auth, and domain persistence", () => {
         aliases: ["pepe"],
         status: "active",
       },
+      {
+        assetClass: "stock",
+        canonicalId: "sec:0001527613",
+        symbol: "IMG",
+        name: "CIMG Inc.",
+        aliases: ["img", "cimg inc."],
+        externalIds: { cik: "0001527613", ticker: "IMG" },
+        status: "active",
+      },
     ]);
     const [watchlist] = await ctx.db.select().from(watchlists).limit(1);
     expect(watchlist).toBeDefined();
@@ -2334,6 +2372,7 @@ describe("setup, auth, and domain persistence", () => {
 
     expect((await findRegistryAsset(ctx, "coingecko:litecoin"))?.status).toBe("inactive");
     expect((await findRegistryAsset(ctx, "coingecko:pepe"))?.status).toBe("active");
+    expect((await findRegistryAsset(ctx, "sec:0001527613"))?.status).toBe("active");
 
     const search = await app.inject({
       method: "GET",
@@ -3166,6 +3205,182 @@ describe("setup, auth, and domain persistence", () => {
           row.canonicalUrl?.includes("grovefinance.eth/proposal/"),
       ),
     ).toBe(true);
+  });
+
+  it("creates an EDGAR source, scans an Equities agent, and notifies on an official 8-K", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/edgar",
+      headers: { cookie },
+      payload: { name: "SEC EDGAR", contactEmail: "ops@example.com" },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("edgar");
+    expect(created.json().source?.config?.contactEmail).toBe("ops@example.com");
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/edgar",
+      headers: { cookie },
+      payload: { name: "EDGAR again", contactEmail: "ops@example.com" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const adapter = listed.json().adapters.find((item: { id: string }) => item.id === "edgar");
+    expect(adapter.capabilities.lookbackNotes).toMatch(/User-Agent/);
+    if (!(await findRegistryAsset(ctx, "sec:0001527613"))) {
+      await ctx.db.insert(assets).values({
+        assetClass: "stock",
+        canonicalId: "sec:0001527613",
+        symbol: "IMG",
+        name: "CIMG Inc.",
+        aliases: ["img", "cimg inc.", "0001527613"],
+        externalIds: { cik: "0001527613", ticker: "IMG" },
+        status: "active",
+      });
+    }
+    const policy = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/notifications",
+      headers: { cookie },
+      payload: { minRisk: "moderate", cooldownMinutes: 0, earlyWarnings: true },
+    });
+    expect(policy.statusCode).toBe(200);
+    const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abce";
+    const webhookUrl = `https://discord.com/api/webhooks/123456789012345679/${token}`;
+    await createDiscordWebhookTarget(
+      ctx,
+      { webhookUrl, primary: true },
+      {
+        lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+        fetchImpl: async (input) => {
+          if (String(input).includes("?wait=true")) {
+            return Response.json({ id: "should-not-validate" });
+          }
+          return Response.json({ type: 1, channel_id: "channel-edgar", name: "edgar" });
+        },
+      },
+    );
+    const agent = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      headers: { cookie },
+      payload: {
+        name: "EDGAR 8-K watcher",
+        description: "Watches CIMG 8-K filings on EDGAR only.",
+        marketDomainIds: ["equities"],
+        sourceIds: [created.json().source.id],
+        watchlistItems: [{ canonicalId: "sec:0001527613" }],
+      },
+    });
+    expect(agent.statusCode).toBe(200);
+    expect(agent.json().agent.domains).toEqual(["equities"]);
+    const atom = readFileSync(
+      join(process.cwd(), "packages/source-adapters/test/fixtures/edgar/atom-8k-truncated.xml"),
+      "utf8",
+    );
+    const emptyAtom = readFileSync(
+      join(process.cwd(), "packages/source-adapters/test/fixtures/edgar/atom-8k-empty.xml"),
+      "utf8",
+    );
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent.json().agent.id as string,
+        status: "queued",
+        windowStart: new Date("2026-09-14T00:00:00.000Z"),
+        idempotencyKey: "pipeline:equities:edgar-1",
+      })
+      .returning();
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      if (url.includes("/search")) {
+        return Response.json({ results: [] });
+      }
+      if (url.includes("/chat/completions") || url.includes("/v1/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          messages?: Array<{ role: string; content: string }>;
+        };
+        const user = body.messages?.find((item) => item.role === "user")?.content ?? "";
+        const ids = proofIdsFromAnalysisPrompt(user);
+        return Response.json({
+          id: "chatcmpl-edgar",
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  headline: "CIMG 8-K officer change",
+                  whyItMatters: "Official 8-K item 5.02 on a watched issuer.",
+                  proof: {
+                    evidenceIds: ids.evidenceIds.slice(0, 1),
+                    claimIds: ids.claimIds.slice(0, 1),
+                    summary: "SEC 8-K item 5.02.",
+                  },
+                  action: "Read the filing. Do not trade.",
+                  risk: "high",
+                  confidence: 0.8,
+                  assets: ["sec:0001527613"],
+                  eventType: "material_corporate_event",
+                  marketContext: "SEC EDGAR.",
+                  contradictoryEvidence: "none",
+                  invalidationConditions: "amended 8-K retracts the item.",
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 40, completion_tokens: 20 },
+        });
+      }
+      if (url.includes("discord.com/api/webhooks") && url.includes("wait=true")) {
+        return Response.json({ id: "discord-edgar-1" });
+      }
+      if (url.includes("browse-edgar") && url.includes("type=8-K")) {
+        return new Response(atom, { headers: { "content-type": "application/atom+xml" } });
+      }
+      if (url.includes("browse-edgar")) {
+        return new Response(emptyAtom, { headers: { "content-type": "application/atom+xml" } });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    const evidence = await ctx.db.select().from(evidenceItems);
+    expect(
+      evidence.some(
+        (row) =>
+          row.adapterId === "edgar" &&
+          row.sourceFamily === "filing" &&
+          row.contentCompleteness === "native_complete" &&
+          row.canonicalUrl?.includes("1527613") &&
+          (row.adapterPayload as { items?: string[] } | null)?.items?.includes("5.02"),
+      ),
+    ).toBe(true);
+    const identities = await ctx.db
+      .select()
+      .from(sourceIdentities)
+      .where(eq(sourceIdentities.platform, "sec"));
+    expect(identities.some((row) => row.externalId === "0001527613")).toBe(true);
+    const identityId = identities.find((row) => row.externalId === "0001527613")?.id;
+    const policies = await ctx.db
+      .select()
+      .from(sourceIdentityPolicies)
+      .where(eq(sourceIdentityPolicies.identityId, identityId as string));
+    expect(policies.some((row) => row.trustTier === "official_firsthand" && row.active)).toBe(true);
+    const eventRows = await ctx.db.select().from(events);
+    expect(
+      eventRows.some(
+        (row) =>
+          row.agentId === (agent.json().agent.id as string) &&
+          row.catalystKind === "material_corporate_event",
+      ),
+    ).toBe(true);
+    const deliveries = await ctx.db.select().from(notificationDeliveries);
+    expect(deliveries.some((row) => row.channel === "discord")).toBe(true);
   });
 
   it("creates Alchemy and Helius sources and verifies inbound webhooks", async () => {

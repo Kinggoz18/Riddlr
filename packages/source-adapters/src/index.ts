@@ -51,6 +51,32 @@ export {
   parseDiscordMessages,
   snowflakeFromDate,
 } from "./discord.js";
+export {
+  createEdgarAdapter,
+  EDGAR_ADAPTER_ID,
+  EDGAR_ARCHIVES_HOST,
+  EDGAR_ATOM_BASE,
+  EDGAR_ATOM_TYPES,
+  EDGAR_COMPANY_TICKERS_URL,
+  EDGAR_EFTS_URL,
+  EDGAR_FAMILY,
+  EDGAR_SUBMISSIONS_BASE,
+  edgarArchivesPath,
+  edgarAtomUrl,
+  edgarEvidenceFromAtom,
+  edgarPollIntervalSeconds,
+  edgarSubmissionsUrl,
+  edgarUserAgent,
+  isUsSecBusinessHours,
+  padCik,
+  parseContactEmail,
+  parseEdgarAtom,
+  parseEdgarItems,
+  parseEftsHits,
+  parseForm4Xml,
+  parseSecCompanyTickers,
+  secCanonicalId,
+} from "./edgar.js";
 export { type EnrichmentDocument, enrichPublicDocument } from "./enrich.js";
 export {
   clampFeedPollIntervalSeconds,
@@ -127,6 +153,13 @@ export {
   runBinanceForceOrderSocket,
   sharedBinanceForceOrderAggregator,
 } from "./observations/index.js";
+export {
+  mapOpenFigiIdentifiers,
+  OPENFIGI_MAPPING_URL,
+  type OpenFigiJob,
+  type OpenFigiMappingResult,
+  parseOpenFigiMapping,
+} from "./openfigi.js";
 export { pathDisallowedByRobots, robotsDenied } from "./robots.js";
 export {
   createSearxngAdapter,
