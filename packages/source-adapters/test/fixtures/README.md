@@ -31,3 +31,14 @@ Captured from live provider responses. Secrets are not present in these files.
 | `defillama/hacks-truncated.json` | `GET https://api.llama.fi/hacks` (first eight rows; captured `source` fields were empty) | 2026-09-14 |
 | `defillama/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
 | `defillama/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `hyperliquid/meta-and-asset-ctxs.json` | `POST https://api.hyperliquid.xyz/info` `{"type":"metaAndAssetCtxs"}` (BTC, ETH, ATOM, SOL, AVAX, DOGE, LINK, XRP, UNI rows) | 2026-09-14 |
+| `hyperliquid/meta-and-asset-ctxs-drift-mismatch.json` | Same capture with one fewer `assetCtxs` row to represent index drift | 2026-09-14 |
+| `hyperliquid/predicted-fundings.json` | `POST https://api.hyperliquid.xyz/info` `{"type":"predictedFundings"}` (BTC, ETH, SOL, DOGE, XRP, AVAX, LINK, UNI) | 2026-09-14 |
+| `hyperliquid/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
+| `hyperliquid/empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
+| `binance-futures/premium-index.json` | `GET https://testnet.binancefuture.com/fapi/v1/premiumIndex` (truncated; production `fapi.binance.com` NXDOMAIN from this host) | 2026-09-14 |
+| `binance-futures/premium-index-drift-missing-mark.json` | Captured BTCUSDT row with `markPrice` removed to represent schema drift | 2026-09-14 |
+| `binance-futures/open-interest-btcusdt.json` | `GET https://testnet.binancefuture.com/fapi/v1/openInterest?symbol=BTCUSDT` | 2026-09-14 |
+| `binance-futures/open-interest-unknown.json` | `GET https://testnet.binancefuture.com/fapi/v1/openInterest?symbol=NOTACOINUSDT` (HTTP 400 `code:-1121`) | 2026-09-14 |
+| `binance-futures/force-order-frames.json` | `wss://stream.binancefuture.com/ws/!forceOrder@arr` (two frames in one minute; production `fstream.binance.com` NXDOMAIN from this host) | 2026-09-14 |
+| `binance-futures/empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |

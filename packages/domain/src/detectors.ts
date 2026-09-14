@@ -1,9 +1,18 @@
 import {
   DEFAULT_DETECTOR_ABS_Z,
   DEFAULT_DETECTOR_WINDOW,
+  DEFAULT_FUNDING_DIVERGENCE_APR_PCT,
+  DEFAULT_LIQUIDATION_BURST_USD,
+  DEFAULT_OI_CHANGE_PCT,
   DEFAULT_PEG_DEVIATION_PCT,
   DEFAULT_TVL_DRAWDOWN_FLOOR_USD,
   DEFAULT_TVL_DRAWDOWN_PCT,
+  FUNDING_DIVERGENCE_MAX_GAP_MS,
+  MARKET_STRESS_FUNDING_MAX_GAP_MS,
+  MARKET_STRESS_FUNDING_MIN_SAMPLES,
+  MARKET_STRESS_FUNDING_WINDOW,
+  OI_CHANGE_LOOKBACK_MS,
+  OI_CHANGE_MAX_GAP_MS,
   TVL_DRAWDOWN_LOOKBACK_MS,
 } from "./limits.js";
 import type { SeriesObservation } from "./observations.js";
@@ -18,6 +27,9 @@ export type DetectorSpec = {
   maxGapMs: number;
   provider?: string;
   floorUsd?: number;
+  oiChangePct?: number;
+  fundingWindow?: number;
+  liquidationBurstUsd?: number;
 };
 
 export type SeriesPoint = {
@@ -85,6 +97,29 @@ export const PEG_DEVIATION_V1: DetectorSpec = {
   absZ: DEFAULT_PEG_DEVIATION_PCT,
   maxGapMs: 40 * 60 * 1000,
   provider: "defillama",
+};
+
+export const MARKET_STRESS_V1: DetectorSpec = {
+  id: "market_stress",
+  version: "v1",
+  metric: "funding_rate_apr",
+  claimKind: "generic:market_stress",
+  window: MARKET_STRESS_FUNDING_MIN_SAMPLES,
+  absZ: DEFAULT_DETECTOR_ABS_Z,
+  maxGapMs: MARKET_STRESS_FUNDING_MAX_GAP_MS,
+  fundingWindow: MARKET_STRESS_FUNDING_WINDOW,
+  oiChangePct: DEFAULT_OI_CHANGE_PCT,
+  liquidationBurstUsd: DEFAULT_LIQUIDATION_BURST_USD,
+};
+
+export const FUNDING_DIVERGENCE_V1: DetectorSpec = {
+  id: "funding_divergence",
+  version: "v1",
+  metric: "funding_rate_apr",
+  claimKind: "generic:market_stress",
+  window: 1,
+  absZ: DEFAULT_FUNDING_DIVERGENCE_APR_PCT,
+  maxGapMs: FUNDING_DIVERGENCE_MAX_GAP_MS,
 };
 
 function sampleMean(values: readonly number[]): number {
@@ -419,6 +454,185 @@ export function seriesPointsFromObservations(
         Number.isFinite(row.value),
     )
     .map((row) => ({ observedAt: row.observedAt, value: row.value }));
+}
+
+function contiguousTail(points: readonly SeriesPoint[], maxGapMs: number): SeriesPoint[] {
+  const ordered = sortPoints(points);
+  const contiguous: SeriesPoint[] = [];
+  for (const point of ordered) {
+    const prev = contiguous[contiguous.length - 1];
+    if (prev) {
+      const gap = point.observedAt.getTime() - prev.observedAt.getTime();
+      if (gap <= 0 || gap > maxGapMs) {
+        contiguous.length = 0;
+      }
+    }
+    contiguous.push(point);
+  }
+  return contiguous;
+}
+
+export function detectMarketStress(
+  input: {
+    fundingApr?: readonly SeriesPoint[];
+    openInterestUsd?: readonly SeriesPoint[];
+    liquidations1mUsd?: readonly SeriesPoint[];
+  },
+  spec: DetectorSpec = MARKET_STRESS_V1,
+  subjectCanonicalId = "",
+): DetectorFinding | undefined {
+  const minSamples = spec.window;
+  const fundingWindow = spec.fundingWindow ?? MARKET_STRESS_FUNDING_WINDOW;
+  const funding = contiguousTail(input.fundingApr ?? [], spec.maxGapMs);
+  if (funding.length >= minSamples) {
+    const windowPoints = funding.slice(-Math.min(fundingWindow, funding.length));
+    if (windowPoints.length >= minSamples) {
+      const z = zScore(windowPoints.map((item) => item.value));
+      const last = windowPoints[windowPoints.length - 1];
+      if (z !== undefined && last) {
+        const hit = finding({
+          spec,
+          subjectCanonicalId,
+          z,
+          series: windowPoints,
+          unit: "percent",
+          lastValue: last.value,
+          sampleCount: windowPoints.length,
+        });
+        if (hit) {
+          return hit;
+        }
+      }
+    }
+  }
+  const oi = sortPoints(input.openInterestUsd ?? []);
+  const lastOi = oi[oi.length - 1];
+  const oiChangePct = spec.oiChangePct ?? DEFAULT_OI_CHANGE_PCT;
+  if (lastOi && lastOi.value > 0) {
+    const target = lastOi.observedAt.getTime() - OI_CHANGE_LOOKBACK_MS;
+    let prior: SeriesPoint | undefined;
+    let best = Number.POSITIVE_INFINITY;
+    for (const point of oi.slice(0, -1)) {
+      const delta = Math.abs(point.observedAt.getTime() - target);
+      if (delta <= OI_CHANGE_MAX_GAP_MS && delta < best) {
+        best = delta;
+        prior = point;
+      }
+    }
+    if (prior && prior.value > 0) {
+      const changePct = ((lastOi.value - prior.value) / prior.value) * 100;
+      if (Number.isFinite(changePct) && Math.abs(changePct) >= oiChangePct) {
+        const polarity = changePct > 0 ? "up" : "down";
+        const changeText = Math.abs(changePct).toFixed(2);
+        return {
+          detectorId: spec.id,
+          version: spec.version,
+          metric: "open_interest_usd",
+          claimKind: spec.claimKind,
+          subjectCanonicalId,
+          zScore: changePct,
+          value: lastOi.value,
+          unit: "percent",
+          polarity,
+          thresholdAbsZ: oiChangePct,
+          sampleCount: 2,
+          windowStart: prior.observedAt,
+          windowEnd: lastOi.observedAt,
+          bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: open interest usd ${prior.value} → ${lastOi.value} (${changePct.toFixed(2)}% in 1h, threshold ${oiChangePct}%).`,
+          claimTitle: `${subjectLabel(subjectCanonicalId)} ${changeText}% open interest ${polarity} in 1h (${spec.version}, threshold ${oiChangePct}%)`,
+          series: [prior, lastOi],
+        };
+      }
+    }
+  }
+  const burst = spec.liquidationBurstUsd ?? DEFAULT_LIQUIDATION_BURST_USD;
+  const liquidations = sortPoints(input.liquidations1mUsd ?? []);
+  const lastLiq = liquidations[liquidations.length - 1];
+  if (lastLiq && lastLiq.value >= burst) {
+    return {
+      detectorId: spec.id,
+      version: spec.version,
+      metric: "liquidations_1m_usd",
+      claimKind: spec.claimKind,
+      subjectCanonicalId,
+      zScore: lastLiq.value,
+      value: lastLiq.value,
+      unit: "usd",
+      polarity: "up",
+      thresholdAbsZ: burst,
+      sampleCount: 1,
+      windowStart: lastLiq.observedAt,
+      windowEnd: lastLiq.observedAt,
+      bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: liquidations ${lastLiq.value} usd in 1m (threshold ${burst} usd).`,
+      claimTitle: `${subjectLabel(subjectCanonicalId)} ${lastLiq.value} usd 1m liquidations (${spec.version}, threshold ${burst} usd)`,
+      series: [lastLiq],
+    };
+  }
+  return undefined;
+}
+
+export function detectMarketStressForSubject(
+  subjectCanonicalId: string,
+  input: {
+    fundingApr?: readonly SeriesPoint[];
+    openInterestUsd?: readonly SeriesPoint[];
+    liquidations1mUsd?: readonly SeriesPoint[];
+  },
+  spec: DetectorSpec = MARKET_STRESS_V1,
+): DetectorFinding | undefined {
+  return detectMarketStress(input, spec, subjectCanonicalId);
+}
+
+export function detectFundingDivergence(
+  leftApr: readonly SeriesPoint[],
+  rightApr: readonly SeriesPoint[],
+  spec: DetectorSpec = FUNDING_DIVERGENCE_V1,
+  subjectCanonicalId = "",
+): DetectorFinding | undefined {
+  const left = sortPoints(leftApr).at(-1);
+  const right = sortPoints(rightApr).at(-1);
+  if (!left || !right) {
+    return undefined;
+  }
+  const gap = Math.abs(left.observedAt.getTime() - right.observedAt.getTime());
+  if (gap > spec.maxGapMs) {
+    return undefined;
+  }
+  const diff = left.value - right.value;
+  if (!Number.isFinite(diff) || Math.abs(diff) <= spec.absZ) {
+    return undefined;
+  }
+  const polarity = diff > 0 ? "up" : "down";
+  const start = left.observedAt <= right.observedAt ? left.observedAt : right.observedAt;
+  const end = left.observedAt >= right.observedAt ? left.observedAt : right.observedAt;
+  const diffText = Math.abs(diff).toFixed(2);
+  return {
+    detectorId: spec.id,
+    version: spec.version,
+    metric: spec.metric,
+    claimKind: spec.claimKind,
+    subjectCanonicalId,
+    zScore: diff,
+    value: diff,
+    unit: "percent",
+    polarity,
+    thresholdAbsZ: spec.absZ,
+    sampleCount: 2,
+    windowStart: start,
+    windowEnd: end,
+    bodyText: `${spec.id}.${spec.version} on ${subjectCanonicalId}: funding APR ${left.value.toFixed(2)}% vs ${right.value.toFixed(2)}% (diff ${diff.toFixed(2)} pp, threshold ${spec.absZ} pp).`,
+    claimTitle: `${subjectLabel(subjectCanonicalId)} ${diffText} pp funding APR divergence (${spec.version}, threshold ${spec.absZ} pp)`,
+    series: [left, right],
+  };
+}
+
+export function detectFundingDivergenceForSubject(
+  subjectCanonicalId: string,
+  leftApr: readonly SeriesPoint[],
+  rightApr: readonly SeriesPoint[],
+  spec: DetectorSpec = FUNDING_DIVERGENCE_V1,
+): DetectorFinding | undefined {
+  return detectFundingDivergence(leftApr, rightApr, spec, subjectCanonicalId);
 }
 
 export function detectorEvidenceFingerprint(finding: DetectorFinding): string {

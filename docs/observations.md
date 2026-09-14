@@ -10,7 +10,9 @@ The worker `observe` queue (`riddlr.observe.poll`) polls the union of enabled
 agents' watchlists, portfolio holdings, and operator-pinned series. A subject
 nobody watches is not polled. CoinGecko `/simple/price` is the shipped spot
 provider (60s, auto-created). DefiLlama is an opt-in provider (15 minutes) for
-TVL, stablecoins, and hacks; it is not auto-created. Interval
+TVL, stablecoins, and hacks; it is not auto-created. Hyperliquid and Binance
+USD-M Futures are opt-in perp providers (60s; Binance OI every 5 minutes).
+Interval
 `RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS` (default 60, max 300) applies to
 CoinGecko spot. Batch size default 100. Concurrency `RIDDLR_OBSERVE_CONCURRENCY`
 (default 2, max 4). `RIDDLR_ENV=test` does not enqueue; tests call
@@ -31,7 +33,11 @@ or a gap wider than three poll intervals emit nothing. `tvl_drawdown.v1` fires
 when DefiLlama `tvl_usd` is down more than 15% versus a point about 24h earlier
 and the larger point is at least $1,000,000. `peg_deviation.v1` fires when
 DefiLlama `stablecoin_basis` is beyond 1% on two consecutive polls and CoinGecko
-`spot_price` is also beyond 1% from peg. A finding is native-complete
+`spot_price` is also beyond 1% from peg. `market_stress.v1` fires on Hyperliquid
+or Binance `funding_rate_apr` sample z-score beyond ±3σ after 20 hourly points
+(target 168 ≈ 7 days), on a 20% 1h `open_interest_usd` move, or on
+`liquidations_1m_usd` of at least $10,000,000. `funding_divergence.v1` fires
+when annualised funding differs by more than 10 percentage points. A finding is native-complete
 evidence with `sourceFamily: observation` and a claim
 `crypto:observed_<metric>_anomaly` (peg uses `crypto:stablecoin_peg_change`).
 The same detector, subject, and polarity fingerprint to one evidence row per UTC
@@ -60,5 +66,7 @@ to poll it without a watchlist. The dashboard footer reads "Price data by CoinGe
 | `lock_held` | A second poll while the interval NX lock is held | Wait for the in-flight poll |
 
 See [integrations/coingecko.md](integrations/coingecko.md),
-[integrations/defillama.md](integrations/defillama.md), and
+[integrations/defillama.md](integrations/defillama.md),
+[integrations/hyperliquid.md](integrations/hyperliquid.md),
+[integrations/binance-futures.md](integrations/binance-futures.md), and
 [ADR 0025](adr/0025-observation-layer.md).

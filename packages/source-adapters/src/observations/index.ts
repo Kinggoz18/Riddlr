@@ -1,4 +1,27 @@
 export {
+  BINANCE_FUTURES_API_BASE,
+  BINANCE_FUTURES_FAMILY,
+  BINANCE_FUTURES_PROVIDER_ID,
+  BINANCE_FUTURES_USER_AGENT,
+  BINANCE_QUOTE_ASSETS,
+  baseFromBinanceSymbol,
+  createBinanceFuturesAdapter,
+  createBinanceFuturesProvider,
+  parseLongShortRatio,
+  parseOpenInterest,
+  parseOpenInterestHist,
+  parsePremiumIndex,
+  parseQuoteAssets,
+} from "./binance-futures.js";
+export {
+  BINANCE_FORCE_ORDER_WS_URL,
+  createForceOrderAggregator,
+  parseForceOrderFrame,
+  reconnectDelayMs,
+  runBinanceForceOrderSocket,
+  sharedBinanceForceOrderAggregator,
+} from "./binance-liquidations.js";
+export {
   COINGECKO_SIMPLE_PRICE_PATH,
   COINGECKO_SPOT_PROVIDER_ID,
   createCoinGeckoSpotProvider,
@@ -24,6 +47,17 @@ export {
   parseProtocolSlugs,
   pegBasisPercent,
 } from "./defillama.js";
+export {
+  createHyperliquidAdapter,
+  createHyperliquidProvider,
+  HYPERLIQUID_FAMILY,
+  HYPERLIQUID_INFO_URL,
+  HYPERLIQUID_PROVIDER_ID,
+  HYPERLIQUID_USER_AGENT,
+  parseMetaAndAssetCtxs,
+  parsePredictedFundings,
+  resolveHyperliquidSubject,
+} from "./hyperliquid.js";
 export {
   createScriptedObservationProvider,
   type ObservationProvider,

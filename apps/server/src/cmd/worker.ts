@@ -1,9 +1,14 @@
-import { agents, evidenceItems, evidenceOccurrences, scans } from "@riddlr/db";
+import { agents, evidenceItems, evidenceOccurrences, scans, sources } from "@riddlr/db";
 import { assertSupportedMarketDomains, type MarketDomainId } from "@riddlr/domain";
 import { snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
+import {
+  BINANCE_FUTURES_PROVIDER_ID,
+  runBinanceForceOrderSocket,
+  sharedBinanceForceOrderAggregator,
+} from "@riddlr/source-adapters";
 import { Worker } from "bullmq";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createContext } from "../context.js";
 import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
@@ -13,6 +18,26 @@ import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipel
 import { enqueueAgentScan } from "../modules/scans.js";
 
 const ctx = await createContext();
+const wsAbort = new AbortController();
+if (ctx.config.RIDDLR_ENV !== "test") {
+  const aggregator = sharedBinanceForceOrderAggregator({
+    onDrop: (reason) =>
+      ctx.metrics.observeWsDrops.inc({ provider: BINANCE_FUTURES_PROVIDER_ID, reason }),
+  });
+  void runBinanceForceOrderSocket({
+    aggregator,
+    isEnabled: async () => {
+      const [row] = await ctx.db
+        .select({ id: sources.id })
+        .from(sources)
+        .where(and(eq(sources.adapterId, BINANCE_FUTURES_PROVIDER_ID), eq(sources.enabled, true)))
+        .limit(1);
+      return Boolean(row);
+    },
+    signal: wsAbort.signal,
+    logger: ctx.logger,
+  });
+}
 const workerOptions = {
   connection: ctx.redis,
   concurrency: ctx.config.RIDDLR_WORKER_CONCURRENCY,
@@ -166,6 +191,7 @@ const scheduler = setInterval(() => {
 }, 60_000);
 
 const shutdown = async () => {
+  wsAbort.abort();
   clearInterval(scheduler);
   clearInterval(heartbeat);
   await worker.close();

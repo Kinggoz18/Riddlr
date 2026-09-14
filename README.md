@@ -77,6 +77,8 @@ See [docs/architecture.md](docs/architecture.md).
 - [SearXNG](docs/sources/searxng.md)
 - [RSS/Atom](docs/sources/feeds.md)
 - [DefiLlama](docs/sources/defillama.md)
+- [Hyperliquid](docs/sources/hyperliquid.md)
+- [Binance USD-M Futures](docs/sources/binance-futures.md)
 - [Discord](docs/sources/discord.md)
 - [X](docs/sources/x.md)
 - [CoinGecko](docs/sources/coingecko.md)

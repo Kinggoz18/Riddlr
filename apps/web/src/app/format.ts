@@ -367,6 +367,10 @@ export function adapterLabel(adapterId: string) {
       return "RSS/Atom";
     case "defillama":
       return "DefiLlama";
+    case "hyperliquid":
+      return "Hyperliquid";
+    case "binance-futures":
+      return "Binance USD-M Futures";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

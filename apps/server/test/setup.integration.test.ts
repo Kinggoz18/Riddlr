@@ -50,9 +50,11 @@ import { cryptoDomainModule } from "@riddlr/domain-crypto";
 import { createLogger, createMetrics, snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import {
+  BINANCE_FUTURES_PROVIDER_ID,
   COINGECKO_SPOT_PROVIDER_ID,
   createScriptedObservationProvider,
   DEFILLAMA_PROVIDER_ID,
+  HYPERLIQUID_PROVIDER_ID,
   ObservationProviderRegistry,
 } from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
@@ -2580,6 +2582,115 @@ describe("setup, auth, and domain persistence", () => {
     expect(
       series.some(
         (row) => row.metric === "stablecoin_basis" && row.subjectCanonicalId === "coingecko:tether",
+      ),
+    ).toBe(true);
+  });
+
+  it("creates an opt-in Hyperliquid source and polls captured perp ctxs", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/hyperliquid",
+      headers: { cookie },
+      payload: { name: "Hyperliquid" },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("hyperliquid");
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/hyperliquid",
+      headers: { cookie },
+      payload: { name: "Hyperliquid again" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/hyperliquid");
+    const meta = JSON.parse(readFileSync(join(fixtures, "meta-and-asset-ctxs.json"), "utf8"));
+    const predicted = JSON.parse(readFileSync(join(fixtures, "predicted-fundings.json"), "utf8"));
+    await ctx.redis.del(`riddlr:observe:lock:${HYPERLIQUID_PROVIDER_ID}`);
+    const polled = await pollObservationProvider(
+      ctx,
+      HYPERLIQUID_PROVIDER_ID,
+      async (_input, init) => {
+        const body = typeof init?.body === "string" ? init.body : "";
+        if (body.includes("predictedFundings")) {
+          return Response.json(predicted);
+        }
+        return Response.json(meta);
+      },
+    );
+    expect(polled.error).toBeUndefined();
+    expect(polled.observations).toBeGreaterThan(0);
+    const series = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.provider, HYPERLIQUID_PROVIDER_ID));
+    expect(
+      series.some(
+        (row) => row.metric === "mark_price" && row.subjectCanonicalId === "coingecko:bitcoin",
+      ),
+    ).toBe(true);
+    expect(
+      series.some(
+        (row) =>
+          row.metric === "funding_predicted_binance_apr" &&
+          row.subjectCanonicalId === "coingecko:bitcoin",
+      ),
+    ).toBe(true);
+  });
+
+  it("creates an opt-in Binance USD-M Futures source and polls captured premiumIndex", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/binance-futures",
+      headers: { cookie },
+      payload: { name: "Binance USD-M Futures" },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.adapterId).toBe("binance-futures");
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/binance-futures",
+      headers: { cookie },
+      payload: { name: "Binance again" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const fixtures = join(process.cwd(), "packages/source-adapters/test/fixtures/binance-futures");
+    const premium = JSON.parse(readFileSync(join(fixtures, "premium-index.json"), "utf8"));
+    const oi = JSON.parse(readFileSync(join(fixtures, "open-interest-btcusdt.json"), "utf8"));
+    await ctx.redis.del(`riddlr:observe:lock:${BINANCE_FUTURES_PROVIDER_ID}`);
+    const polled = await pollObservationProvider(
+      ctx,
+      BINANCE_FUTURES_PROVIDER_ID,
+      async (input) => {
+        const url = String(input);
+        if (url.endsWith("/fapi/v1/premiumIndex")) {
+          return Response.json(premium, { headers: { "x-mbx-used-weight-1m": "10" } });
+        }
+        if (url.includes("/futures/data/")) {
+          return new Response(null, {
+            status: 301,
+            headers: { location: "https://demo.binance.com/en/futures/BTCUSDT" },
+          });
+        }
+        if (url.includes("/fapi/v1/openInterest?symbol=BTCUSDT")) {
+          return Response.json(oi);
+        }
+        return new Response("not found", { status: 404 });
+      },
+    );
+    expect(polled.error).toBeUndefined();
+    expect(polled.observations).toBeGreaterThan(0);
+    const series = await ctx.db
+      .select()
+      .from(observationSeries)
+      .where(eq(observationSeries.provider, BINANCE_FUTURES_PROVIDER_ID));
+    expect(
+      series.some(
+        (row) => row.metric === "mark_price" && row.subjectCanonicalId === "coingecko:bitcoin",
+      ),
+    ).toBe(true);
+    expect(
+      series.some(
+        (row) => row.metric === "open_interest" && row.subjectCanonicalId === "coingecko:bitcoin",
       ),
     ).toBe(true);
   });

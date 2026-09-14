@@ -12,9 +12,11 @@ import {
   type DetectorSpec,
   type DomainModule,
   type ExtractedAsset,
+  FUNDING_DIVERGENCE_V1,
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
   isCatalystKind,
+  MARKET_STRESS_V1,
   MAX_SEARXNG_ASSET_QUERIES,
   type MarketObservation,
   type NormalizedEvidence,
@@ -166,6 +168,10 @@ export const CRYPTO_DETECTOR_SPECS: readonly DetectorSpec[] = [
   { ...VOLUME_ANOMALY_V1, claimKind: "crypto:observed_quoted_volume_anomaly" },
   { ...TVL_DRAWDOWN_V1, claimKind: "crypto:observed_tvl_anomaly" },
   { ...PEG_DEVIATION_V1, claimKind: "crypto:stablecoin_peg_change" },
+  { ...MARKET_STRESS_V1, claimKind: "crypto:market_stress", provider: "hyperliquid" },
+  { ...MARKET_STRESS_V1, claimKind: "crypto:market_stress", provider: "binance-futures" },
+  { ...FUNDING_DIVERGENCE_V1, claimKind: "crypto:market_stress", provider: "hyperliquid" },
+  { ...FUNDING_DIVERGENCE_V1, claimKind: "crypto:market_stress", provider: "binance-futures" },
 ];
 
 const CLAIM_PATTERNS: Array<{
@@ -345,7 +351,12 @@ export const cryptoDomainModule: DomainModule = {
     if (input.adapterId === "x" || input.adapterId === "discord") {
       return [watchlistSearchQuery(watchlist, "crypto")];
     }
-    if (input.adapterId === "feeds" || input.adapterId === "defillama") {
+    if (
+      input.adapterId === "feeds" ||
+      input.adapterId === "defillama" ||
+      input.adapterId === "hyperliquid" ||
+      input.adapterId === "binance-futures"
+    ) {
       return [""];
     }
     return [watchlist.map((item) => item.canonicalId).join(" ")];
@@ -553,6 +564,21 @@ export const cryptoDomainModule: DomainModule = {
       if (item.kind === "tvl_change_1d" && item.assetCanonicalId) {
         notes.push(`Protocol TVL 24h change ${item.assetCanonicalId}: ${item.value}%`);
       }
+      if (item.kind === "funding_rate_apr" && item.assetCanonicalId) {
+        notes.push(
+          `Funding APR ${item.assetCanonicalId} (${item.sourceId}): ${item.value}% at ${item.observedAt.toISOString()}`,
+        );
+      }
+      if (item.kind === "open_interest_usd" && item.assetCanonicalId) {
+        notes.push(
+          `Open interest usd ${item.assetCanonicalId} (${item.sourceId}): ${item.value} at ${item.observedAt.toISOString()}`,
+        );
+      }
+      if (item.kind === "volume_24h_usd" && item.assetCanonicalId) {
+        notes.push(
+          `Perp 24h volume ${item.assetCanonicalId} (${item.sourceId}): ${item.value} usd`,
+        );
+      }
     }
     return {
       domainId: "crypto",
@@ -638,6 +664,20 @@ export const cryptoDomainModule: DomainModule = {
         level: "moderate",
         reason: "observed_anomaly",
         reasonCodes: ["crypto:observed_anomaly"],
+      };
+    }
+    if (kinds.has("crypto:market_stress") || principal === "market_stress") {
+      if (input.watchlistOverlap || input.portfolioOverlap) {
+        return {
+          level: "moderate",
+          reason: "market_stress",
+          reasonCodes: ["crypto:market_stress"],
+        };
+      }
+      return {
+        level: "informational",
+        reason: "market_stress_unwatched",
+        reasonCodes: ["crypto:market_stress"],
       };
     }
     if (principal) {

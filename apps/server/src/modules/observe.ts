@@ -19,13 +19,18 @@ import {
   watchlists,
 } from "@riddlr/db";
 import {
+  canonicalizeFromRegistry,
+  detectFundingDivergenceForSubject,
+  detectMarketStressForSubject,
   detectorEvidenceFingerprint,
   detectPegDeviationForSubject,
   detectReturnShockForSubject,
   detectTvlDrawdownForSubject,
   detectVolumeAnomalyForSubject,
   excerptHash,
+  FUTURES_NATIVE_SUBJECT_RE,
   fingerprintClaim,
+  MAX_OBSERVATIONS_PER_POLL,
   MAX_OBSERVE_PINS,
   MAX_RETENTION_DELETE_BATCH,
   MAX_RETENTION_LOOPS,
@@ -38,16 +43,24 @@ import {
 import { CRYPTO_DETECTOR_SPECS } from "@riddlr/domain-crypto";
 import { QUEUE_NAMES } from "@riddlr/queue";
 import {
+  BINANCE_FUTURES_PROVIDER_ID,
   COINGECKO_SPOT_PROVIDER_ID,
+  createBinanceFuturesProvider,
   createCoinGeckoSpotProvider,
   createDefiLlamaProvider,
+  createHyperliquidProvider,
   DEFILLAMA_PROVIDER_ID,
+  HYPERLIQUID_PROVIDER_ID,
   ObservationProviderRegistry,
   redactRequestUrl,
 } from "@riddlr/source-adapters";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
-import { findRegistryAsset, listWatchedCanonicalIds } from "./asset-registry.js";
+import {
+  findRegistryAsset,
+  listRegistryAssets,
+  listWatchedCanonicalIds,
+} from "./asset-registry.js";
 import { clusterScanEvents } from "./pipeline.js";
 
 const OBSERVE_LAST = "riddlr:observe:last:";
@@ -58,6 +71,8 @@ export function createObservationProviders(): ObservationProviderRegistry {
   const registry = new ObservationProviderRegistry();
   registry.register(createCoinGeckoSpotProvider());
   registry.register(createDefiLlamaProvider());
+  registry.register(createHyperliquidProvider());
+  registry.register(createBinanceFuturesProvider());
   return registry;
 }
 
@@ -147,6 +162,26 @@ export async function listObserveSubjects(ctx: AppContext): Promise<string[]> {
   return takeBounded([...watched], ctx.config.RIDDLR_OBSERVE_MAX_SUBJECTS);
 }
 
+async function futuresSymbolMap(ctx: AppContext, subjects: readonly string[]) {
+  const registry = await listRegistryAssets(ctx);
+  const watched = new Set(subjects);
+  const map: Record<string, string> = {};
+  for (const asset of registry) {
+    if (!watched.has(asset.canonicalId)) {
+      continue;
+    }
+    const symbol = asset.symbol?.trim();
+    if (!symbol) {
+      continue;
+    }
+    const resolved = canonicalizeFromRegistry({ symbol }, registry);
+    if (resolved?.canonicalId === asset.canonicalId) {
+      map[symbol.toUpperCase()] = asset.canonicalId;
+    }
+  }
+  return map;
+}
+
 export async function latestSpotQuotes(
   ctx: AppContext,
   canonicalIds: readonly string[],
@@ -210,7 +245,7 @@ async function persistSeries(
   }>,
 ) {
   let inserted = 0;
-  for (const row of takeBounded(rows, ctx.config.RIDDLR_OBSERVE_MAX_SUBJECTS * 8)) {
+  for (const row of takeBounded(rows, MAX_OBSERVATIONS_PER_POLL)) {
     const saved = await ctx.db
       .insert(observationSeries)
       .values({
@@ -263,6 +298,36 @@ async function seriesWindow(
     .orderBy(desc(observationSeries.observedAt))
     .limit(MAX_SERIES_WINDOW);
   return rows.map((row) => ({ observedAt: row.observedAt, value: row.value })).reverse();
+}
+
+async function fundingDivergenceSeries(ctx: AppContext, subjectCanonicalId: string) {
+  const predictedHl = await seriesWindow(
+    ctx,
+    HYPERLIQUID_PROVIDER_ID,
+    "funding_predicted_apr",
+    subjectCanonicalId,
+  );
+  const predictedBn = await seriesWindow(
+    ctx,
+    HYPERLIQUID_PROVIDER_ID,
+    "funding_predicted_binance_apr",
+    subjectCanonicalId,
+  );
+  return {
+    left:
+      predictedHl.length > 0
+        ? predictedHl
+        : await seriesWindow(ctx, HYPERLIQUID_PROVIDER_ID, "funding_rate_apr", subjectCanonicalId),
+    right:
+      predictedBn.length > 0
+        ? predictedBn
+        : await seriesWindow(
+            ctx,
+            BINANCE_FUTURES_PROVIDER_ID,
+            "funding_rate_apr",
+            subjectCanonicalId,
+          ),
+  };
 }
 
 async function selectObserveAgent(ctx: AppContext, subjectCanonicalId: string) {
@@ -671,7 +736,37 @@ async function runDetectors(
                     await seriesWindow(ctx, COINGECKO_SPOT_PROVIDER_ID, "spot_price", subject),
                     spec,
                   )
-                : undefined;
+                : spec.id === "market_stress"
+                  ? detectMarketStressForSubject(
+                      subject,
+                      {
+                        fundingApr: points,
+                        openInterestUsd: await seriesWindow(
+                          ctx,
+                          providerId,
+                          "open_interest_usd",
+                          subject,
+                        ),
+                        liquidations1mUsd: await seriesWindow(
+                          ctx,
+                          providerId,
+                          "liquidations_1m_usd",
+                          subject,
+                        ),
+                      },
+                      spec,
+                    )
+                  : spec.id === "funding_divergence"
+                    ? await (async () => {
+                        const series = await fundingDivergenceSeries(ctx, subject);
+                        return detectFundingDivergenceForSubject(
+                          subject,
+                          series.left,
+                          series.right,
+                          spec,
+                        );
+                      })()
+                    : undefined;
       if (!hit) {
         ctx.metrics.detectorFindings.inc({ detector: spec.id, result: "none" });
         continue;
@@ -792,6 +887,16 @@ function observationProviderForPoll(ctx: AppContext, providerId: string, fetchIm
   if (fetchImpl && providerId === DEFILLAMA_PROVIDER_ID) {
     return createDefiLlamaProvider({ fetchImpl, minIntervalMs: 0 });
   }
+  if (fetchImpl && providerId === HYPERLIQUID_PROVIDER_ID) {
+    return createHyperliquidProvider({ fetchImpl, minIntervalMs: 0 });
+  }
+  if (fetchImpl && providerId === BINANCE_FUTURES_PROVIDER_ID) {
+    return createBinanceFuturesProvider({
+      fetchImpl,
+      minIntervalMs: 0,
+      drainLiquidations: () => [],
+    });
+  }
   return registry.require(providerId);
 }
 
@@ -869,13 +974,14 @@ export async function pollObservationProvider(
         status: "running",
       })
       .returning();
-    const result = await provider.observe(
-      { ...source.config, ...headers },
-      {
-        subjectCanonicalIds: batch,
-        observedAt: now,
-      },
-    );
+    const observeConfig: Record<string, unknown> = { ...source.config, ...headers };
+    if (provider.id === HYPERLIQUID_PROVIDER_ID || provider.id === BINANCE_FUTURES_PROVIDER_ID) {
+      observeConfig.symbolMap = await futuresSymbolMap(ctx, batch);
+    }
+    const result = await provider.observe(observeConfig, {
+      subjectCanonicalIds: batch,
+      observedAt: now,
+    });
     lastClass = result.errors[0]?.class;
     lastError = result.errors[0]?.message;
     if (fetchRequest) {
@@ -981,13 +1087,15 @@ export async function addObservationPin(
   input: { subjectCanonicalId: string; metric?: string; provider?: string },
 ) {
   const subject = input.subjectCanonicalId.trim();
-  const asset = await findRegistryAsset(ctx, subject);
-  if (!asset) {
+  const native = FUTURES_NATIVE_SUBJECT_RE.test(subject);
+  const asset = native ? undefined : await findRegistryAsset(ctx, subject);
+  if (!native && !asset) {
     const error = new Error("Unknown asset.");
     (error as Error & { statusCode?: number; code?: string }).statusCode = 400;
     (error as Error & { code?: string }).code = "unknown_asset";
     throw error;
   }
+  const canonicalId = native ? subject : (asset?.canonicalId as string);
   const [{ value: existing } = { value: 0 }] = await ctx.db
     .select({ value: count() })
     .from(observationPins);
@@ -1002,7 +1110,7 @@ export async function addObservationPin(
     .values({
       provider: input.provider ?? COINGECKO_SPOT_PROVIDER_ID,
       metric: input.metric ?? "spot_price",
-      subjectCanonicalId: asset.canonicalId,
+      subjectCanonicalId: canonicalId,
     })
     .onConflictDoNothing()
     .returning();
@@ -1016,7 +1124,7 @@ export async function addObservationPin(
           and(
             eq(observationPins.provider, input.provider ?? COINGECKO_SPOT_PROVIDER_ID),
             eq(observationPins.metric, input.metric ?? "spot_price"),
-            eq(observationPins.subjectCanonicalId, asset.canonicalId),
+            eq(observationPins.subjectCanonicalId, canonicalId),
           ),
         )
         .limit(1)

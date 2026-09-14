@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectFundingDivergence,
+  detectFundingDivergenceForSubject,
+  detectMarketStress,
+  detectMarketStressForSubject,
   detectorEvidenceFingerprint,
   detectPegDeviation,
   detectReturnShock,
@@ -194,5 +198,96 @@ describe("volume anomaly detector", () => {
 
   it("emits nothing below the window", () => {
     expect(detectVolumeAnomaly(prices([10, 11, 12]), VOLUME_ANOMALY_V1)).toBeUndefined();
+  });
+});
+
+describe("market-stress detector", () => {
+  const hourly = (values: number[], start = "2026-09-13T00:00:00.000Z") =>
+    prices(values, start, 60 * 60 * 1000);
+
+  it("emits when hourly funding APR z-score is at least 3 after 20 samples", () => {
+    const hit = detectMarketStressForSubject("coingecko:bitcoin", {
+      fundingApr: hourly([...Array.from({ length: 19 }, () => 10), 40]),
+    });
+    expect(hit?.detectorId).toBe("market_stress");
+    expect(hit?.version).toBe("v1");
+    expect(hit?.claimKind).toBe("generic:market_stress");
+    expect(hit?.metric).toBe("funding_rate_apr");
+    expect(hit?.polarity).toBe("up");
+    expect(hit?.zScore).toBeCloseTo(28.5 / Math.sqrt(45), 10);
+    expect(hit?.unit).toBe("sigma");
+  });
+
+  it("emits nothing when funding APR is constant", () => {
+    expect(
+      detectMarketStress({ fundingApr: hourly(Array.from({ length: 20 }, () => 10)) }),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing with fewer than 20 hourly funding points", () => {
+    expect(
+      detectMarketStress({ fundingApr: hourly(Array.from({ length: 19 }, () => 10)) }),
+    ).toBeUndefined();
+  });
+
+  it("emits when open interest usd moves at least 20% in 1h", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    const hit = detectMarketStressForSubject("coingecko:bitcoin", {
+      openInterestUsd: [
+        { observedAt: start, value: 100 },
+        { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 79 },
+      ],
+    });
+    expect(hit?.metric).toBe("open_interest_usd");
+    expect(hit?.zScore).toBe(-21);
+    expect(hit?.claimTitle).toBe("bitcoin 21.00% open interest down in 1h (v1, threshold 20%)");
+  });
+
+  it("emits nothing for a 15% open-interest move", () => {
+    const start = new Date("2026-09-13T12:00:00.000Z");
+    expect(
+      detectMarketStress({
+        openInterestUsd: [
+          { observedAt: start, value: 100 },
+          { observedAt: new Date(start.getTime() + 60 * 60 * 1000), value: 85 },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+
+  it("emits when 1m liquidations meet the 10,000,000 usd floor", () => {
+    const at = new Date("2026-09-13T12:00:00.000Z");
+    const hit = detectMarketStressForSubject("coingecko:bitcoin", {
+      liquidations1mUsd: [{ observedAt: at, value: 12_000_000 }],
+    });
+    expect(hit?.metric).toBe("liquidations_1m_usd");
+    expect(hit?.value).toBe(12_000_000);
+    expect(hit?.unit).toBe("usd");
+  });
+});
+
+describe("funding-divergence detector", () => {
+  it("emits when annualised funding differs by more than 10 percentage points", () => {
+    const at = new Date("2026-09-13T12:00:00.000Z");
+    const hit = detectFundingDivergenceForSubject(
+      "coingecko:bitcoin",
+      [{ observedAt: at, value: 20 }],
+      [{ observedAt: at, value: 5 }],
+    );
+    expect(hit?.detectorId).toBe("funding_divergence");
+    expect(hit?.zScore).toBe(15);
+    expect(hit?.claimTitle).toBe("bitcoin 15.00 pp funding APR divergence (v1, threshold 10 pp)");
+  });
+
+  it("emits nothing when the APR gap is 8 percentage points", () => {
+    const at = new Date("2026-09-13T12:00:00.000Z");
+    expect(
+      detectFundingDivergence([{ observedAt: at, value: 20 }], [{ observedAt: at, value: 12 }]),
+    ).toBeUndefined();
+  });
+
+  it("emits nothing when the other venue is missing", () => {
+    const at = new Date("2026-09-13T12:00:00.000Z");
+    expect(detectFundingDivergence([{ observedAt: at, value: 20 }], [])).toBeUndefined();
   });
 });

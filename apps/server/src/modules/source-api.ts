@@ -1,10 +1,12 @@
 import {
+  binanceFuturesSourceSchema,
   coingeckoSourceSchema,
   coinmarketcapSourceSchema,
   cryptocomSourceSchema,
   defillamaSourceSchema,
   discordSourceSchema,
   feedSourceSchema,
+  hyperliquidSourceSchema,
   pageQuerySchema,
   publisherHostPolicySchema,
   sourceIdentityPolicySchema,
@@ -26,12 +28,14 @@ import {
 import { clampPageSize, parsePageCursor, type TrustTier } from "@riddlr/domain";
 import {
   clampFeedPollIntervalSeconds,
+  createBinanceFuturesAdapter,
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
   createCryptoComAdapter,
   createDefiLlamaAdapter,
   createDiscordAdapter,
   createFeedsAdapter,
+  createHyperliquidAdapter,
   createSearxngAdapter,
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
@@ -82,6 +86,8 @@ export function registerSourceRoutes(
   const coinmarketcap = createCoinMarketCapAdapter();
   const cryptocom = createCryptoComAdapter();
   const defillama = createDefiLlamaAdapter();
+  const hyperliquid = createHyperliquidAdapter();
+  const binanceFutures = createBinanceFuturesAdapter();
 
   app.get("/api/v1/sources", { preHandler: authed }, async () => {
     const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
@@ -114,6 +120,16 @@ export function registerSourceRoutes(
           id: defillama.id,
           family: defillama.family,
           capabilities: defillama.capabilities,
+        },
+        {
+          id: hyperliquid.id,
+          family: hyperliquid.family,
+          capabilities: hyperliquid.capabilities,
+        },
+        {
+          id: binanceFutures.id,
+          family: binanceFutures.family,
+          capabilities: binanceFutures.capabilities,
         },
         {
           id: coingecko.id,
@@ -304,6 +320,39 @@ export function registerSourceRoutes(
       adapterId: "defillama",
       name: body.name,
       config: { chainSlugs, protocolSlugs },
+    });
+  });
+
+  app.post("/api/v1/sources/hyperliquid", { preHandler: authed }, async (request, reply) => {
+    const body = hyperliquidSourceSchema.parse(request.body);
+    const validated = await hyperliquid.validate({});
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "observation",
+      adapterId: "hyperliquid",
+      name: body.name,
+      config: {},
+    });
+  });
+
+  app.post("/api/v1/sources/binance-futures", { preHandler: authed }, async (request, reply) => {
+    const body = binanceFuturesSourceSchema.parse(request.body);
+    const quoteAssets = body.quoteAssets ?? [];
+    const validated = await binanceFutures.validate({ quoteAssets });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertUniqueSource(ctx, request, reply, {
+      family: "observation",
+      adapterId: "binance-futures",
+      name: body.name,
+      config: quoteAssets.length > 0 ? { quoteAssets } : {},
     });
   });
 

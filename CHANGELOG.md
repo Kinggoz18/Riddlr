@@ -4,6 +4,13 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Hyperliquid and Binance USD-M Futures opt-in observation sources: perpetual
+  funding, open interest, mark price, and Binance liquidations. Market-stress
+  and funding-divergence detectors. Sources → Add source → Configure
+  Hyperliquid / Configure Binance USD-M Futures. See
+  [docs/integrations/hyperliquid.md](docs/integrations/hyperliquid.md) and
+  [docs/integrations/binance-futures.md](docs/integrations/binance-futures.md).
+
 - DefiLlama opt-in observation source: protocol and chain TVL, stablecoin
   supply, secondary prices, and hourly hacks. TVL-drawdown and peg-deviation
   detectors. Sources → Add source → Configure DefiLlama. See

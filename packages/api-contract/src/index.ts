@@ -231,6 +231,18 @@ export const defillamaSourceSchema = z.object({
     .optional(),
 });
 
+export const hyperliquidSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Hyperliquid"),
+});
+
+export const binanceFuturesSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("Binance USD-M Futures"),
+  quoteAssets: z
+    .array(z.string().regex(/^[A-Za-z0-9]{3,8}$/))
+    .max(8)
+    .optional(),
+});
+
 export const discordSourceSchema = z.object({
   name: z.string().min(3).max(80).default("Discord"),
   botToken: z.string().min(8).max(200),

@@ -82,6 +82,16 @@ const ADAPTERS = [
     body: "Protocol TVL, stablecoin supply, and hacks. Opt-in. Personal, non-commercial; results stay in this operator database.",
   },
   {
+    id: "hyperliquid",
+    name: "Hyperliquid",
+    body: "Perp funding, open interest, and mark price. Opt-in. Free info endpoint, no API key. One poll returns the whole universe; only watchlist assets are stored.",
+  },
+  {
+    id: "binance-futures",
+    name: "Binance USD-M Futures",
+    body: "Perp funding, open interest, and liquidations. Opt-in. Public REST, no key. Funding is per 8h; compare venues on annualised APR only.",
+  },
+  {
     id: "discord",
     name: "Discord",
     body: "Recent channel messages. You can add more than one Discord source.",
@@ -351,7 +361,7 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama is a single opt-in observation source."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other. DefiLlama, Hyperliquid, and Binance USD-M Futures are single opt-in observation sources."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
@@ -578,6 +588,127 @@ function DefiLlamaForm() {
           </Field>
           <p className="ui-actions">
             <Button type="submit">Save DefiLlama source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function HyperliquidForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Hyperliquid");
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "hyperliquid");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Hyperliquid source"
+        description="Opt-in perpetual funding, open interest, and mark price. No API key. One call returns every perp; only watchlist and pinned subjects are stored."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/hyperliquid", {
+                method: "POST",
+                body: JSON.stringify({ name }),
+              });
+              toast("Hyperliquid saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Hyperliquid"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="hyperliquid-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Hyperliquid source</Button>
+          </p>
+        </form>
+      </Card>
+    </>
+  );
+}
+
+function BinanceFuturesForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("Binance USD-M Futures");
+  const [quoteAssets, setQuoteAssets] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string>();
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const adapter = body.adapters.find((item) => item.id === "binance-futures");
+      setNotes(adapter?.capabilities?.lookbackNotes);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add Binance USD-M Futures source"
+        description="Opt-in funding, open interest, and liquidations. No API key. Funding is per 8h; compare Hyperliquid on annualised APR only. HTTP 451 means this region cannot reach the venue."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        <form
+          className="stack-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/binance-futures", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  quoteAssets,
+                }),
+              });
+              toast("Binance USD-M Futures saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save Binance USD-M Futures"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="binance-futures-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Quote assets"
+            hint="Stripped from symbols such as BTCUSDT. Default USDT, USDC, BUSD."
+          >
+            <ChipInput
+              id="binance-futures-quotes"
+              values={quoteAssets}
+              onChange={setQuoteAssets}
+              placeholder="USDT"
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save Binance USD-M Futures source</Button>
           </p>
         </form>
       </Card>
@@ -972,6 +1103,12 @@ function SourceCreate() {
   if (adapter === "defillama") {
     return <DefiLlamaForm />;
   }
+  if (adapter === "hyperliquid") {
+    return <HyperliquidForm />;
+  }
+  if (adapter === "binance-futures") {
+    return <BinanceFuturesForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -1137,6 +1274,30 @@ function SourceDetail() {
           <ChipList
             values={Array.isArray(config.protocolSlugs) ? config.protocolSlugs.map(String) : []}
             empty="Watchlist mapping only"
+          />
+        </Card>
+      ) : null}
+      {row.adapterId === "hyperliquid" ? (
+        <Card>
+          <h2>Hyperliquid</h2>
+          <p className="field-note">
+            Free info endpoint, no key. Polls once per minute. Watchlist symbols map through the
+            registry; pin hyperliquid:COIN for an unmapped perp.
+          </p>
+        </Card>
+      ) : null}
+      {row.adapterId === "binance-futures" ? (
+        <Card>
+          <h2>Binance USD-M Futures</h2>
+          <p className="field-note">
+            Public REST, no key. premiumIndex every minute; open interest every 5 minutes.
+            Liquidations use the bounded !forceOrder@arr stream. Compare funding to Hyperliquid on
+            funding_rate_apr only. HTTP 451 means disable this source for this region.
+          </p>
+          <h2>Quote assets</h2>
+          <ChipList
+            values={Array.isArray(config.quoteAssets) ? config.quoteAssets.map(String) : []}
+            empty="USDT, USDC, BUSD"
           />
         </Card>
       ) : null}

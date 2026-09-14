@@ -99,6 +99,12 @@ export function createMetrics() {
     labelNames: ["detector", "result"],
     registers: [register],
   });
+  const observeWsDrops = new Counter({
+    name: "riddlr_observe_ws_drops_total",
+    help: "WebSocket frames dropped by the bounded liquidation buffer",
+    labelNames: ["provider", "reason"],
+    registers: [register],
+  });
   return {
     register,
     httpDuration,
@@ -113,6 +119,7 @@ export function createMetrics() {
     registrySeeds,
     observePolls,
     detectorFindings,
+    observeWsDrops,
   };
 }
 
