@@ -99,6 +99,7 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByText("Domains: crypto").first()).toBeVisible();
   await page.getByRole("link", { name: "Riddlr Intelligence Agent" }).click();
   await expect(page.getByRole("heading", { name: "Objectives" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Notification routing" })).toBeVisible();
   await expect(page.getByText(/default Crypto watcher/i)).toBeVisible();
   await expect(page.getByText("General crypto intelligence")).toBeVisible();
   await page.getByRole("link", { name: "Agents", exact: true }).click();
@@ -191,6 +192,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.locator(".config-strip").getByText(/Key \d+/)).toBeVisible();
   await page.locator(".page-subnav").getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: "Telegram" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Discord webhook" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Observation alerts" })).toBeVisible();
   await expect(page.getByLabel("Unverified early warnings")).toBeVisible();
   await expect(page.getByLabel("Shadow assessments")).toBeVisible();
   await expect(page.getByRole("heading", { name: "WhatsApp Cloud API" })).toBeVisible();

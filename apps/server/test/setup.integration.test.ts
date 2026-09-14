@@ -14,6 +14,7 @@ import {
 } from "@riddlr/crypto";
 import {
   agentMarketDomains,
+  agentNotificationRoutes,
   agentSources,
   agents,
   aiUsageEvents,
@@ -31,6 +32,8 @@ import {
   inboundWebhookReceipts,
   migrate,
   notificationDeliveries,
+  notificationTargets,
+  observationAlertRules,
   observationSeries,
   observations,
   passwordResetTokens,
@@ -77,6 +80,8 @@ import {
   seedAssetRegistry,
 } from "../src/modules/asset-registry.js";
 import { processInboundReceipt } from "../src/modules/inbound-webhooks.js";
+import { createDiscordWebhookTarget } from "../src/modules/notification-api.js";
+import { deliverObservationAlerts, deliverSignalNotifications } from "../src/modules/notify.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
 import { recordDueOutcomes } from "../src/modules/outcomes.js";
 import { analyzeQueuedEvent, runScan } from "../src/modules/pipeline.js";
@@ -3392,6 +3397,354 @@ describe("setup, auth, and domain persistence", () => {
     expect(
       (await ctx.db.select().from(inboundWebhookReceipts)).some(
         (row) => row.adapterId === "helius",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a Discord webhook URL that is not an incoming webhook", async () => {
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/v1/notification-targets",
+      headers: { cookie },
+      payload: { webhookUrl: "http://127.0.0.1/api/webhooks/1/not-a-discord-token" },
+    });
+    expect(rejected.statusCode).toBe(400);
+  });
+
+  it("claims a Discord webhook delivery once under bounded retry with wait=true", async () => {
+    const agentRows = await ctx.db.select().from(agents).limit(1);
+    const scanRows = await ctx.db.select().from(scans).limit(1);
+    const agentId = agentRows[0]?.id as string;
+    const scanId = scanRows[0]?.id as string;
+    const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd";
+    const webhookUrl = `https://discord.com/api/webhooks/123456789012345678/${token}`;
+    const target = await createDiscordWebhookTarget(
+      ctx,
+      { webhookUrl, primary: true },
+      {
+        lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+        fetchImpl: async (input) => {
+          if (String(input).includes("?wait=true")) {
+            return Response.json({ id: "should-not-validate" });
+          }
+          return Response.json({ type: 1, channel_id: "channel-alerts", name: "alerts" });
+        },
+      },
+    );
+    expect(target?.destination).toBe("channel-alerts");
+    const [event] = await ctx.db
+      .insert(events)
+      .values({
+        agentId,
+        scanId,
+        title: "Discord notify cluster",
+        status: "analyzed",
+        windowStart: new Date(),
+        impactLevel: "high",
+        reliabilityStatus: "corroborated",
+        catalystKind: "security_incident",
+        independentCount: 2,
+      })
+      .returning();
+    const [signal] = await ctx.db
+      .insert(signals)
+      .values({
+        eventId: event?.id as string,
+        agentId,
+        headline: "Bridge drain",
+        whyItMatters: "Funds moved",
+        proof: { evidenceIds: ["ev-d"], summary: "fixture" },
+        action: "Watch",
+        risk: "high",
+        confidence: "0.7",
+        schemaVersion: "discord-notify",
+      })
+      .returning();
+    let posts = 0;
+    const fetchImpl: typeof fetch = async (input) => {
+      const href = String(input);
+      if (href.includes("?wait=true")) {
+        posts += 1;
+        expect(href).toContain("wait=true");
+        if (posts === 1) {
+          return Response.json({ retry_after: 1 }, { status: 429 });
+        }
+        return Response.json({ id: "discord-msg-1" });
+      }
+      return Response.json({ type: 1, channel_id: "channel-alerts" });
+    };
+    await deliverSignalNotifications(ctx, signal?.id as string, fetchImpl);
+    await deliverSignalNotifications(ctx, signal?.id as string, fetchImpl);
+    expect(posts).toBe(2);
+    const rows = await ctx.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.signalId, signal?.id as string));
+    const sent = rows.filter((row) => row.channel === "discord" && row.status === "sent");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.providerMessageId).toBe("discord-msg-1");
+    expect(sent[0]?.kind).toBe("signal");
+  });
+
+  it("sends confirmation to the original Discord destination after a failed original", async () => {
+    const agentRows = await ctx.db.select().from(agents).limit(1);
+    const scanRows = await ctx.db.select().from(scans).limit(1);
+    const [target] = await ctx.db.select().from(notificationTargets).limit(1);
+    const agentId = agentRows[0]?.id as string;
+    const scanId = scanRows[0]?.id as string;
+    expect(target?.id).toBeDefined();
+    const [event] = await ctx.db
+      .insert(events)
+      .values({
+        agentId,
+        scanId,
+        title: "Failed original then confirm",
+        status: "analyzed",
+        windowStart: new Date(),
+        impactLevel: "high",
+        reliabilityStatus: "corroborated",
+        catalystKind: "security_incident",
+      })
+      .returning();
+    const [original] = await ctx.db
+      .insert(signals)
+      .values({
+        eventId: event?.id as string,
+        agentId,
+        headline: "Unconfirmed drain",
+        whyItMatters: "First origin",
+        proof: { evidenceIds: ["ev-fail"], summary: "fixture" },
+        action: "Watch",
+        risk: "high",
+        confidence: "0.5",
+        schemaVersion: "discord-fail-original",
+      })
+      .returning();
+    await ctx.db.insert(notificationDeliveries).values({
+      signalId: original?.id as string,
+      kind: "signal",
+      channel: "discord",
+      destination: target?.destination,
+      targetId: target?.id,
+      status: "failed",
+      errorClass: "provider_error",
+      idempotencyKey: `signal:${original?.id}:discord:${target?.id}`,
+    });
+    const [confirmation] = await ctx.db
+      .insert(signals)
+      .values({
+        eventId: event?.id as string,
+        agentId,
+        headline: "Drain confirmed",
+        whyItMatters: "Second origin",
+        proof: { evidenceIds: ["ev-confirm"], summary: "fixture" },
+        action: "Watch",
+        risk: "high",
+        confidence: "0.8",
+        schemaVersion: "discord-confirm",
+        notifyKind: "confirmation",
+      })
+      .returning();
+    let posts = 0;
+    await deliverSignalNotifications(ctx, confirmation?.id as string, async (input) => {
+      if (String(input).includes("?wait=true")) {
+        posts += 1;
+        return Response.json({ id: "discord-confirm-1" });
+      }
+      return Response.json({ ok: true });
+    });
+    expect(posts).toBe(1);
+    const rows = await ctx.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.signalId, confirmation?.id as string));
+    expect(
+      rows.some((row) => row.status === "sent" && row.destination === target?.destination),
+    ).toBe(true);
+  });
+
+  it("delivers once when two routing rules name the same Discord target", async () => {
+    const agentRows = await ctx.db.select().from(agents).limit(1);
+    const scanRows = await ctx.db.select().from(scans).limit(1);
+    const [target] = await ctx.db.select().from(notificationTargets).limit(1);
+    const agentId = agentRows[0]?.id as string;
+    const scanId = scanRows[0]?.id as string;
+    await ctx.db.insert(agentNotificationRoutes).values([
+      {
+        agentId,
+        minImpact: "moderate",
+        targetIds: [target?.id as string],
+      },
+      {
+        agentId,
+        minImpact: "high",
+        catalystKinds: ["security_incident"],
+        targetIds: [target?.id as string],
+      },
+    ]);
+    const [event] = await ctx.db
+      .insert(events)
+      .values({
+        agentId,
+        scanId,
+        title: "Two-rule cluster",
+        status: "analyzed",
+        windowStart: new Date(),
+        impactLevel: "high",
+        reliabilityStatus: "corroborated",
+        catalystKind: "security_incident",
+      })
+      .returning();
+    const [signal] = await ctx.db
+      .insert(signals)
+      .values({
+        eventId: event?.id as string,
+        agentId,
+        headline: "Two-rule drain",
+        whyItMatters: "Once",
+        proof: { evidenceIds: ["ev-two"], summary: "fixture" },
+        action: "Watch",
+        risk: "high",
+        confidence: "0.7",
+        schemaVersion: "discord-two-rules",
+      })
+      .returning();
+    let posts = 0;
+    await deliverSignalNotifications(ctx, signal?.id as string, async (input) => {
+      if (String(input).includes("?wait=true")) {
+        posts += 1;
+        return Response.json({ id: "discord-once" });
+      }
+      return Response.json({ ok: true });
+    });
+    expect(posts).toBe(1);
+    const rows = await ctx.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.signalId, signal?.id as string));
+    expect(rows.filter((row) => row.channel === "discord")).toHaveLength(1);
+  });
+
+  it("records Discord queue overflow instead of dropping the delivery", async () => {
+    const agentRows = await ctx.db.select().from(agents).limit(1);
+    const scanRows = await ctx.db.select().from(scans).limit(1);
+    const [target] = await ctx.db.select().from(notificationTargets).limit(1);
+    const agentId = agentRows[0]?.id as string;
+    const scanId = scanRows[0]?.id as string;
+    await ctx.db.insert(notificationDeliveries).values(
+      Array.from({ length: 32 }, (_, index) => ({
+        kind: "signal" as const,
+        channel: "discord",
+        destination: target?.destination,
+        targetId: target?.id,
+        status: "pending",
+        idempotencyKey: `discord-overflow-pending-${index}`,
+      })),
+    );
+    const [event] = await ctx.db
+      .insert(events)
+      .values({
+        agentId,
+        scanId,
+        title: "Overflow cluster",
+        status: "analyzed",
+        windowStart: new Date(),
+        impactLevel: "high",
+        catalystKind: "security_incident",
+      })
+      .returning();
+    const [signal] = await ctx.db
+      .insert(signals)
+      .values({
+        eventId: event?.id as string,
+        agentId,
+        headline: "Overflow",
+        whyItMatters: "Cap",
+        proof: { evidenceIds: ["ev-ov"], summary: "fixture" },
+        action: "Watch",
+        risk: "high",
+        confidence: "0.6",
+        schemaVersion: "discord-overflow",
+      })
+      .returning();
+    let posts = 0;
+    await deliverSignalNotifications(ctx, signal?.id as string, async (input) => {
+      if (String(input).includes("?wait=true")) {
+        posts += 1;
+        return Response.json({ id: "should-not-send" });
+      }
+      return Response.json({ ok: true });
+    });
+    expect(posts).toBe(0);
+    const rows = await ctx.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.signalId, signal?.id as string));
+    expect(rows.some((row) => row.status === "failed" && row.errorClass === "queue_overflow")).toBe(
+      true,
+    );
+    await ctx.db.delete(notificationDeliveries).where(
+      inArray(
+        notificationDeliveries.idempotencyKey,
+        Array.from({ length: 32 }, (_, index) => `discord-overflow-pending-${index}`),
+      ),
+    );
+  });
+
+  it("delivers an observation alert without inserting a signal", async () => {
+    const [target] = await ctx.db.select().from(notificationTargets).limit(1);
+    expect(target?.id).toBeDefined();
+    const [rule] = await ctx.db
+      .insert(observationAlertRules)
+      .values({
+        metric: "spot_price",
+        op: "gte",
+        threshold: 100,
+        targetIds: [target?.id as string],
+        enabled: true,
+      })
+      .returning();
+    const before = await ctx.db.select({ id: signals.id }).from(signals);
+    let posts = 0;
+    await deliverObservationAlerts(
+      ctx,
+      [
+        {
+          provider: "coingecko",
+          metric: "spot_price",
+          subjectCanonicalId: "coingecko:bitcoin",
+          observedAt: new Date("2026-09-14T16:00:00.000Z"),
+          value: 110,
+          unit: "usd",
+        },
+      ],
+      async (input) => {
+        if (String(input).includes("?wait=true")) {
+          posts += 1;
+          return Response.json({ id: "obs-msg-1" });
+        }
+        return Response.json({ ok: true });
+      },
+    );
+    expect(posts).toBe(1);
+    const after = await ctx.db.select({ id: signals.id }).from(signals);
+    expect(after.length).toBe(before.length);
+    const rows = await ctx.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.kind, "observation"));
+    expect(rows.some((row) => row.observationRuleId === rule?.id && row.signalId === null)).toBe(
+      true,
+    );
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/notifications",
+      headers: { cookie },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(
+      (listed.json().deliveries as Array<{ kind?: string }>).some(
+        (row) => row.kind === "observation",
       ),
     ).toBe(true);
   });

@@ -5,8 +5,8 @@ claim source only. Community channels attach mentions. Official-tier channels
 can be primaries for listing, governance, and incident catalysts. Discord
 never opens a quantitative event.
 
-Incoming-webhook **delivery** is a later notification slice. This page is
-ingestion only.
+Incoming-webhook **delivery** is documented in
+[discord-webhooks.md](discord-webhooks.md). This page is ingestion only.
 
 ## Setup
 

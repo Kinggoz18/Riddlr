@@ -29,8 +29,10 @@ An **unverified early warning** is a high-impact operator-trusted firsthand
 report with no independent corroboration. It is labelled Unverified early
 warning in the dashboard and notifications. Enable it under Settings →
 Notifications. Confirmation, dispute, and retraction use distinct notification
-kinds. Shadow assessments persist the same reliability path without sending
-notifications.
+kinds and follow the original Telegram, WhatsApp, or Discord destinations.
+Shadow assessments persist the same reliability path without sending
+notifications. Observation threshold alerts are labeled Observation and are
+never signals.
 
 Events keep a rolling-window identity and a lifecycle (`open`, `developing`,
 `confirmed`, `disputed`, `retracted`, `resolved`, `superseded`). Lead time is

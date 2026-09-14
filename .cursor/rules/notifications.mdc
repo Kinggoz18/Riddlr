@@ -7,6 +7,8 @@ alwaysApply: false
 # Notifications
 
 The engine publishes a validated signal. The notification subsystem decides
-whether, where, and when to send. Telegram is a shipped channel. WhatsApp
-Cloud API uses official Graph templates and the 24-hour session window.
-No unofficial WhatsApp clients.
+whether, where, and when to send. Telegram, WhatsApp Cloud API, and Discord
+incoming webhooks are shipped channels. WhatsApp uses official Graph templates
+and the 24-hour session window. No unofficial WhatsApp clients. Discord
+delivery is an operator-pasted incoming webhook, not a bot send. Observation
+threshold alerts are observations, never signals.

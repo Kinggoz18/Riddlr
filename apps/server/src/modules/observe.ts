@@ -67,6 +67,7 @@ import {
   listRegistryAssets,
   listWatchedCanonicalIds,
 } from "./asset-registry.js";
+import { deliverObservationAlerts } from "./notify.js";
 import { clusterScanEvents } from "./pipeline.js";
 
 const OBSERVE_LAST = "riddlr:observe:last:";
@@ -282,7 +283,14 @@ async function persistSeries(
     fetchRequestId?: string;
   }>,
 ) {
-  let inserted = 0;
+  const inserted: Array<{
+    provider: string;
+    metric: string;
+    subjectCanonicalId: string;
+    observedAt: Date;
+    value: number;
+    unit: string;
+  }> = [];
   for (const row of takeBounded(rows, MAX_OBSERVATIONS_PER_POLL)) {
     const saved = await ctx.db
       .insert(observationSeries)
@@ -305,9 +313,17 @@ async function persistSeries(
           observationSeries.resolution,
         ],
       })
-      .returning({ id: observationSeries.id });
+      .returning({
+        id: observationSeries.id,
+        provider: observationSeries.provider,
+        metric: observationSeries.metric,
+        subjectCanonicalId: observationSeries.subjectCanonicalId,
+        observedAt: observationSeries.observedAt,
+        value: observationSeries.value,
+        unit: observationSeries.unit,
+      });
     if (saved[0]) {
-      inserted += 1;
+      inserted.push(saved[0]);
     }
   }
   return inserted;
@@ -1083,13 +1099,15 @@ export async function pollObservationProvider(
       await ctx.redis.set(`${OBSERVE_RESULT}${provider.id}`, "rate_limited", "EX", 7 * 24 * 3600);
       return { observations: inserted, error: "rate_limited" };
     }
-    inserted += await persistSeries(
+    const saved = await persistSeries(
       ctx,
       result.observations.map((item) => ({
         ...item,
         fetchRequestId: fetchRequest?.id,
       })),
     );
+    inserted += saved.length;
+    await deliverObservationAlerts(ctx, saved, fetchImpl);
     for (const item of result.observations) {
       detectorSubjects.add(item.subjectCanonicalId);
     }

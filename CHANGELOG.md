@@ -4,6 +4,14 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Discord incoming-webhook delivery, per-agent routing, and observation
+  threshold alerts (labeled Observation, never signals). Telegram and WhatsApp
+  remain. Settings → Notifications configures webhooks and alert rules; the
+  agent page configures routing. See
+  [docs/notifications.md](docs/notifications.md),
+  [docs/integrations/discord-webhooks.md](docs/integrations/discord-webhooks.md),
+  and [docs/adr/0029-discord-webhook-delivery.md](docs/adr/0029-discord-webhook-delivery.md).
+
 - Eight typed signals persist only when their proof bar is met: exploit or
   bridge drain, stablecoin peg deviation, token unlock (always anticipated),
   listing or delisting, governance proposal, regulatory/legal/sanction, macro

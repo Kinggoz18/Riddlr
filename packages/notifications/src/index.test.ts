@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   decideNotification,
+  decideObservationNotification,
+  formatObservationAlert,
   formatSignalNotification,
   sendTelegramMessage,
   sendWhatsAppSessionText,
@@ -146,12 +148,20 @@ describe("notification policy", () => {
       risk: "moderate",
       invalidation: "if outflows reverse",
       publicUrl: "http://127.0.0.1:8080/signals/1",
+      reliability: "corroborated",
+      catalystKind: "material_corporate_event",
+      independentOrigins: 2,
+      ageLabel: "9 minutes",
     });
     expect(body).toContain("SIGNAL:");
     expect(body).toContain("WHY:");
     expect(body).toContain("PROOF:");
     expect(body).toContain("RISK:");
     expect(body).toContain("INVALIDATION:");
+    expect(body).toContain("RELIABILITY: corroborated");
+    expect(body).toContain("CATALYST: material_corporate_event");
+    expect(body).toContain("INDEPENDENT ORIGINS: 2");
+    expect(body).toContain("AGE: 9 minutes");
   });
 
   it("labels unverified early warnings distinctly", () => {
@@ -164,5 +174,37 @@ describe("notification policy", () => {
     });
     expect(body).toContain("UNVERIFIED EARLY WARNING");
     expect(body).toContain("not confirmed");
+  });
+
+  it("labels observation alerts as observations, never as signals", () => {
+    const body = formatObservationAlert({
+      metric: "funding_rate_apr",
+      op: "gte",
+      threshold: 20,
+      value: 25,
+      unit: "percent",
+      provider: "hyperliquid",
+      subjectCanonicalId: "hyperliquid:BTC",
+      observedAt: new Date("2026-09-14T15:00:00.000Z"),
+    });
+    expect(body).toContain("OBSERVATION");
+    expect(body).toContain("not a signal");
+    expect(body).not.toMatch(/\bSIGNAL:/);
+  });
+
+  it("holds observation alerts in quiet hours and cooldown without using minRisk", () => {
+    expect(
+      decideObservationNotification({
+        policy: { cooldownMs: 0, quietHours: { startHour: 0, endHour: 23 } },
+        now: new Date("2026-09-10T04:00:00Z"),
+      }).reason,
+    ).toBe("quiet_hours");
+    expect(
+      decideObservationNotification({
+        policy: { cooldownMs: 60_000 },
+        lastSentAt: new Date("2026-09-10T00:00:00Z"),
+        now: new Date("2026-09-10T00:00:30Z"),
+      }).send,
+    ).toBe(false);
   });
 });

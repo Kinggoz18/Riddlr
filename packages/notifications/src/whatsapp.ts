@@ -184,6 +184,9 @@ export function formatSignalNotification(input: {
   kind?: "signal" | "early_warning" | "confirmation" | "dispute" | "retraction";
   sourceLabel?: string;
   ageLabel?: string;
+  reliability?: string;
+  catalystKind?: string;
+  independentOrigins?: number;
 }): string {
   const prefix =
     input.kind === "early_warning"
@@ -201,9 +204,18 @@ export function formatSignalNotification(input: {
     if (input.sourceLabel) {
       lines.push(`SOURCE: ${input.sourceLabel}`);
     }
-    if (input.ageLabel) {
-      lines.push(`AGE: ${input.ageLabel}`);
-    }
+  }
+  if (input.reliability) {
+    lines.push(`RELIABILITY: ${input.reliability}`);
+  }
+  if (input.catalystKind) {
+    lines.push(`CATALYST: ${input.catalystKind}`);
+  }
+  if (typeof input.independentOrigins === "number") {
+    lines.push(`INDEPENDENT ORIGINS: ${input.independentOrigins}`);
+  }
+  if (input.ageLabel) {
+    lines.push(`AGE: ${input.ageLabel}`);
   }
   if (input.whyItMatters) {
     lines.push(`WHY: ${input.whyItMatters}`);

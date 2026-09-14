@@ -98,6 +98,11 @@ import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { loadEventTransitions } from "./modules/event-lifecycle.js";
 import { registerInboundWebhookRoutes } from "./modules/inbound-webhooks.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
+import {
+  publicNotificationTargets,
+  publicObservationAlertRules,
+  registerNotificationTargetRoutes,
+} from "./modules/notification-api.js";
 import { observationHealth, registerObservationRoutes } from "./modules/observe.js";
 import { loadScorecard } from "./modules/outcomes.js";
 import {
@@ -653,6 +658,11 @@ export async function buildApp(ctx: AppContext) {
   registerInboundWebhookRoutes(app as unknown as import("fastify").FastifyInstance, ctx);
   registerPortfolioRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerNotificationSettingsRoutes(
+    app as unknown as import("fastify").FastifyInstance,
+    ctx,
+    authed,
+  );
+  registerNotificationTargetRoutes(
     app as unknown as import("fastify").FastifyInstance,
     ctx,
     authed,
@@ -1457,6 +1467,8 @@ export async function buildApp(ctx: AppContext) {
         minRisk: "moderate",
         cooldownMinutes: 30,
       },
+      notificationTargets: await publicNotificationTargets(ctx),
+      observationAlertRules: await publicObservationAlertRules(ctx),
       encryption: {
         alg: "aes-256-gcm",
         keyVersion: settingsRows[0]?.keyVersion ?? 1,

@@ -1,4 +1,4 @@
-export type NotificationChannel = "telegram" | "whatsapp";
+export type NotificationChannel = "telegram" | "whatsapp" | "discord";
 
 export type NotificationDecision = {
   send: boolean;
@@ -28,6 +28,29 @@ export function decideNotification(input: {
   if (RISK_RANK[input.risk] < RISK_RANK[input.policy.minRisk]) {
     return { send: false, reason: "below_threshold" };
   }
+  if (input.lastSentAt && now.getTime() - input.lastSentAt.getTime() < input.policy.cooldownMs) {
+    return { send: false, reason: "cooldown" };
+  }
+  if (input.policy.quietHours) {
+    const hour = now.getUTCHours();
+    const { startHour, endHour } = input.policy.quietHours;
+    const quiet =
+      startHour <= endHour
+        ? hour >= startHour && hour < endHour
+        : hour >= startHour || hour < endHour;
+    if (quiet) {
+      return { send: false, reason: "quiet_hours" };
+    }
+  }
+  return { send: true, reason: "ok" };
+}
+
+export function decideObservationNotification(input: {
+  policy: Pick<NotificationPolicy, "cooldownMs" | "quietHours">;
+  lastSentAt?: Date;
+  now?: Date;
+}): NotificationDecision {
+  const now = input.now ?? new Date();
   if (input.lastSentAt && now.getTime() - input.lastSentAt.getTime() < input.policy.cooldownMs) {
     return { send: false, reason: "cooldown" };
   }
@@ -110,6 +133,19 @@ export async function sendTelegramMessage(input: {
   return { ok: true, message: "sent" };
 }
 
+export {
+  buildDiscordObservationPayload,
+  buildDiscordSignalPayload,
+  DISCORD_WEBHOOK_URL_RE,
+  executeDiscordWebhook,
+  notifyKindPrefix,
+  parseDiscordWebhookUrl,
+  RIDDLR_PRODUCT_VERSION,
+  redactDiscordWebhookUrl,
+  sanitizeNotificationText,
+  validateDiscordWebhook,
+} from "./discord.js";
+export { formatObservationAlert } from "./observation-message.js";
 export {
   formatSignalNotification,
   parseWhatsAppInbound,

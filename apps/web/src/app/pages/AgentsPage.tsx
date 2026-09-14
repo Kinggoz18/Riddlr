@@ -1,3 +1,4 @@
+import { CATALYST_KINDS, IMPACT_LEVELS, RELIABILITY_STATUSES } from "@riddlr/domain";
 import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
@@ -6,11 +7,13 @@ import { api } from "../api.js";
 import { ChipList } from "../ChipInput.js";
 import {
   assetLabel,
+  catalystKindLabel,
   DEFAULT_DAILY_TOKEN_BUDGET,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
   OBJECTIVE_OPTIONS,
   objectiveLabel,
+  reliabilityStatusLabel,
   scheduleLabel,
   tokenBudgetLabel,
 } from "../format.js";
@@ -61,6 +64,15 @@ export type Agent = {
       name?: string | null;
     }>;
   } | null;
+  notificationRoutes?: Array<{
+    id: string;
+    minImpact: string;
+    catalystKinds: string[];
+    assetCanonicalIds: string[];
+    reliabilityStatuses: string[];
+    includeEarlyWarnings: boolean;
+    targetIds: string[];
+  }>;
 };
 
 function toggle(list: string[], id: string, checked: boolean) {
@@ -428,6 +440,235 @@ function AgentCreate() {
   );
 }
 
+function AgentNotificationRoutes({
+  agent,
+  onChange,
+}: {
+  agent: Agent;
+  onChange: (agent: Agent) => void;
+}) {
+  const toast = useToast();
+  const [targets, setTargets] = useState<Array<{ id: string; label: string }>>([]);
+  const [minImpact, setMinImpact] = useState("high");
+  const [kinds, setKinds] = useState<string[]>([]);
+  const [assets, setAssets] = useState<string[]>([]);
+  const [reliabilities, setReliabilities] = useState<string[]>([]);
+  const [early, setEarly] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  useEffect(() => {
+    void Promise.all([
+      api<{
+        targets: Array<{ id: string; destination: string; name?: string | null }>;
+      }>("/api/v1/notification-targets"),
+      api<{ telegramConfigured: boolean; whatsappConfigured?: boolean }>("/api/v1/settings"),
+    ]).then(([listed, settings]) => {
+      const rows: Array<{ id: string; label: string }> = [];
+      if (settings.telegramConfigured) {
+        rows.push({ id: "instance:telegram", label: "Telegram" });
+      }
+      if (settings.whatsappConfigured) {
+        rows.push({ id: "instance:whatsapp", label: "WhatsApp" });
+      }
+      for (const target of listed.targets) {
+        rows.push({
+          id: target.id,
+          label: `Discord ${target.name || target.destination}`,
+        });
+      }
+      setTargets(rows);
+    });
+  }, []);
+
+  return (
+    <>
+      <p className="field-note">
+        Custom rules replace the defaults (high and critical to every target, moderate to the
+        primary). Confirmation, dispute, and retraction still follow the original destinations.
+      </p>
+      {(agent.notificationRoutes ?? []).length > 0 ? (
+        <ul className="attached-list">
+          {(agent.notificationRoutes ?? []).map((route) => (
+            <li key={route.id}>
+              <span>
+                {route.minImpact}
+                {route.catalystKinds.length > 0
+                  ? ` · ${route.catalystKinds.map((kind) => catalystKindLabel(kind)).join(", ")}`
+                  : ""}
+                {route.includeEarlyWarnings ? " · early warnings" : ""}
+              </span>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await api(`/api/v1/agents/${agent.id}/notification-routes/${route.id}`, {
+                      method: "DELETE",
+                    });
+                    onChange({
+                      ...agent,
+                      notificationRoutes: (agent.notificationRoutes ?? []).filter(
+                        (item) => item.id !== route.id,
+                      ),
+                    });
+                    toast("Route removed");
+                  } catch (err) {
+                    toast(toastFail(err, "Couldn’t remove route"));
+                  }
+                }}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="quiet-state">Using default routing</p>
+      )}
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          try {
+            const body = await api<{
+              route: {
+                id: string;
+                minImpact: string;
+                catalystKinds: string[];
+                assetCanonicalIds: string[];
+                reliabilityStatuses: string[];
+                includeEarlyWarnings: boolean;
+                targetIds: string[];
+              };
+            }>(`/api/v1/agents/${agent.id}/notification-routes`, {
+              method: "POST",
+              body: JSON.stringify({
+                minImpact,
+                catalystKinds: kinds,
+                assetCanonicalIds: assets,
+                reliabilityStatuses: reliabilities,
+                includeEarlyWarnings: early,
+                targetIds: selected,
+              }),
+            });
+            onChange({
+              ...agent,
+              notificationRoutes: [...(agent.notificationRoutes ?? []), body.route],
+            });
+            toast("Route saved");
+          } catch (err) {
+            toast(toastFail(err, "Couldn’t save route"));
+          }
+        }}
+      >
+        <Field label="Minimum impact">
+          <select value={minImpact} onChange={(e) => setMinImpact(e.target.value)}>
+            {IMPACT_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <fieldset>
+          <legend>Catalyst kinds</legend>
+          {CATALYST_KINDS.map((kind) => (
+            <label key={kind} className="check-row" htmlFor={`route-kind-${kind}`}>
+              <input
+                id={`route-kind-${kind}`}
+                type="checkbox"
+                checked={kinds.includes(kind)}
+                onChange={(e) =>
+                  setKinds((current) =>
+                    e.target.checked ? [...current, kind] : current.filter((item) => item !== kind),
+                  )
+                }
+              />
+              {catalystKindLabel(kind)}
+            </label>
+          ))}
+        </fieldset>
+        {(agent.watchlist?.items.length ?? 0) > 0 ? (
+          <fieldset>
+            <legend>Assets</legend>
+            {(agent.watchlist?.items ?? []).map((item) => (
+              <label key={item.id} className="check-row" htmlFor={`route-asset-${item.id}`}>
+                <input
+                  id={`route-asset-${item.id}`}
+                  type="checkbox"
+                  checked={assets.includes(item.canonicalId)}
+                  onChange={(e) =>
+                    setAssets((current) =>
+                      e.target.checked
+                        ? [...current, item.canonicalId]
+                        : current.filter((id) => id !== item.canonicalId),
+                    )
+                  }
+                />
+                {assetLabel(item.canonicalId)}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+        <fieldset>
+          <legend>Reliability</legend>
+          {RELIABILITY_STATUSES.map((status) => (
+            <label key={status} className="check-row" htmlFor={`route-rel-${status}`}>
+              <input
+                id={`route-rel-${status}`}
+                type="checkbox"
+                checked={reliabilities.includes(status)}
+                onChange={(e) =>
+                  setReliabilities((current) =>
+                    e.target.checked
+                      ? [...current, status]
+                      : current.filter((item) => item !== status),
+                  )
+                }
+              />
+              {reliabilityStatusLabel(status)}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset>
+          <legend>Targets</legend>
+          {targets.length === 0 ? (
+            <p className="quiet-state">Configure Telegram, WhatsApp, or a Discord webhook first.</p>
+          ) : (
+            targets.map((target) => (
+              <label key={target.id} className="check-row" htmlFor={`route-target-${target.id}`}>
+                <input
+                  id={`route-target-${target.id}`}
+                  type="checkbox"
+                  checked={selected.includes(target.id)}
+                  onChange={(e) =>
+                    setSelected((current) =>
+                      e.target.checked
+                        ? [...current, target.id]
+                        : current.filter((id) => id !== target.id),
+                    )
+                  }
+                />
+                {target.label}
+              </label>
+            ))
+          )}
+        </fieldset>
+        <label className="check-row" htmlFor="route-early">
+          <input
+            id="route-early"
+            type="checkbox"
+            checked={early}
+            onChange={(e) => setEarly(e.target.checked)}
+          />
+          Include unverified early warnings
+        </label>
+        <Button type="submit" disabled={selected.length === 0}>
+          Add routing rule
+        </Button>
+      </form>
+    </>
+  );
+}
+
 function AgentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -553,6 +794,10 @@ function AgentDetail() {
           ) : (
             <p className="quiet-state">No skills attached</p>
           )}
+        </Card>
+        <Card className="agent-board-wide">
+          <h2>Notification routing</h2>
+          <AgentNotificationRoutes agent={agent} onChange={setAgent} />
         </Card>
       </section>
       <p className="agent-toolbar">

@@ -848,13 +848,66 @@ export const llmPriceTable = pgTable(
   (table) => [uniqueIndex("llm_price_table_model_idx").on(table.provider, table.model)],
 );
 
+export const notificationTargets = pgTable("notification_targets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channel: text("channel").notNull(),
+  name: text("name"),
+  destination: text("destination").notNull(),
+  guildId: text("guild_id"),
+  username: text("username"),
+  avatarUrl: text("avatar_url"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  status: text("status").notNull().default("ok"),
+  secretId: uuid("secret_id").references(() => encryptedSecrets.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const agentNotificationRoutes = pgTable(
+  "agent_notification_routes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    minImpact: text("min_impact").notNull(),
+    catalystKinds: jsonb("catalyst_kinds").$type<string[]>().notNull().default([]),
+    assetCanonicalIds: jsonb("asset_canonical_ids").$type<string[]>().notNull().default([]),
+    reliabilityStatuses: jsonb("reliability_statuses").$type<string[]>().notNull().default([]),
+    includeEarlyWarnings: boolean("include_early_warnings").notNull().default(false),
+    targetIds: jsonb("target_ids").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("agent_notification_routes_agent_idx").on(table.agentId)],
+);
+
+export const observationAlertRules = pgTable("observation_alert_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  metric: text("metric").notNull(),
+  op: text("op").notNull(),
+  threshold: doublePrecision("threshold").notNull(),
+  windowMinutes: integer("window_minutes"),
+  subjectCanonicalId: text("subject_canonical_id"),
+  provider: text("provider"),
+  targetIds: jsonb("target_ids").$type<string[]>().notNull().default([]),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    signalId: uuid("signal_id")
-      .notNull()
-      .references(() => signals.id),
+    signalId: uuid("signal_id").references(() => signals.id),
+    kind: text("kind").notNull().default("signal"),
+    targetId: text("target_id"),
+    observationRuleId: uuid("observation_rule_id").references(() => observationAlertRules.id, {
+      onDelete: "set null",
+    }),
+    observationMetric: text("observation_metric"),
+    observationValue: doublePrecision("observation_value"),
+    observationThreshold: doublePrecision("observation_threshold"),
+    observationProvider: text("observation_provider"),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
     channel: text("channel").notNull(),
     destination: text("destination"),
     status: text("status").notNull(),
@@ -865,7 +918,10 @@ export const notificationDeliveries = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("notification_idempotency_idx").on(table.idempotencyKey)],
+  (table) => [
+    uniqueIndex("notification_idempotency_idx").on(table.idempotencyKey),
+    index("notification_deliveries_target_pending_idx").on(table.targetId, table.status),
+  ],
 );
 
 export const auditLogs = pgTable("audit_logs", {

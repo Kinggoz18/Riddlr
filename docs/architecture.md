@@ -45,7 +45,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0025](adr/0025-observation-layer.md), and
 [ADR 0026](adr/0026-catalyst-taxonomy.md),
 [ADR 0027](adr/0027-event-lifecycle-outcomes.md), and
-[ADR 0028](adr/0028-typed-signal-policies.md).
+[ADR 0028](adr/0028-typed-signal-policies.md), and
+[ADR 0029](adr/0029-discord-webhook-delivery.md).
 
 ## Trust boundaries
 
@@ -100,8 +101,10 @@ event. Scorecard is Overview-adjacent at `/scorecard`. Typed signals (exploit,
 peg, unlock, listing, governance, regulatory, macro, perp stress) persist only
 when the type's proof bar is met. Perp stress is a market observation.
 
-Notifications claim a pending delivery row before any Telegram or WhatsApp
-provider call. Public Caddy does not expose Mailpit or SearXNG.
+Notifications claim a pending delivery row before any Telegram, WhatsApp, or
+Discord incoming-webhook provider call. Discord execute uses `wait=true`.
+Observation threshold alerts share that claim path and are never signals.
+Public Caddy does not expose Mailpit or SearXNG.
 
 ## Failure
 

@@ -1,15 +1,24 @@
 import {
   AGENT_SCHEDULES,
   CATALYST_KINDS,
+  DISCORD_WEBHOOK_URL_RE,
+  IMPACT_LEVELS,
   MARKET_DOMAIN_IDS,
+  MAX_CATALYST_KINDS,
   MAX_DAILY_TOKEN_BUDGET,
   MAX_DEFILLAMA_CHAIN_SLUGS,
   MAX_DEFILLAMA_PROTOCOL_FETCHES,
   MAX_FEED_POLL_INTERVAL_SECONDS,
+  MAX_NOTIFICATION_TARGETS,
+  MAX_OBSERVATION_ALERT_WINDOW_MINUTES,
   MAX_PREDICTION_MARKETS,
   MAX_SNAPSHOT_SPACES,
   MIN_DAILY_TOKEN_BUDGET,
   MIN_FEED_POLL_INTERVAL_SECONDS,
+  MIN_OBSERVATION_ALERT_WINDOW_MINUTES,
+  OBSERVATION_ALERT_METRICS,
+  OBSERVATION_ALERT_OPS,
+  RELIABILITY_STATUSES,
   SETUP_STEPS,
   TRUST_TIERS,
 } from "@riddlr/domain";
@@ -398,6 +407,37 @@ export const agentCreateSchema = z.object({
   portfolioIds: z.array(z.string().uuid()).max(16).optional(),
   notificationPolicy: notificationPolicySchema.optional(),
   watchlistItems: z.array(watchlistItemSchema).max(50).optional(),
+});
+
+export const discordWebhookTargetSchema = z.object({
+  webhookUrl: z.string().max(400).regex(DISCORD_WEBHOOK_URL_RE),
+  username: z.string().min(1).max(80).optional(),
+  avatarUrl: z.string().max(500).optional(),
+  primary: z.boolean().optional(),
+});
+
+export const notificationRouteSchema = z.object({
+  minImpact: z.enum(IMPACT_LEVELS),
+  catalystKinds: z.array(z.enum(CATALYST_KINDS)).max(MAX_CATALYST_KINDS).default([]),
+  assetCanonicalIds: z.array(z.string().min(3).max(160)).max(50).default([]),
+  reliabilityStatuses: z.array(z.enum(RELIABILITY_STATUSES)).max(16).default([]),
+  includeEarlyWarnings: z.boolean().default(false),
+  targetIds: z.array(z.string().min(1).max(80)).min(1).max(MAX_NOTIFICATION_TARGETS),
+});
+
+export const observationAlertRuleSchema = z.object({
+  metric: z.enum(OBSERVATION_ALERT_METRICS),
+  op: z.enum(OBSERVATION_ALERT_OPS),
+  threshold: z.number().finite(),
+  windowMinutes: z
+    .number()
+    .int()
+    .min(MIN_OBSERVATION_ALERT_WINDOW_MINUTES)
+    .max(MAX_OBSERVATION_ALERT_WINDOW_MINUTES)
+    .optional(),
+  subjectCanonicalId: z.string().min(3).max(160).optional(),
+  provider: z.string().min(3).max(80).optional(),
+  targetIds: z.array(z.string().min(1).max(80)).max(MAX_NOTIFICATION_TARGETS).default([]),
 });
 
 export const portfolioCreateSchema = z.object({

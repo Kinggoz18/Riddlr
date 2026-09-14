@@ -8,6 +8,7 @@ import {
 } from "@riddlr/api-contract";
 import {
   agentMarketDomains,
+  agentNotificationRoutes,
   agentSkills,
   agentSources,
   agents,
@@ -28,6 +29,7 @@ import {
   DEFAULT_AGENT_DESCRIPTION,
   InvalidWatchlistItemError,
   MAX_ASSET_SEARCH_RESULTS,
+  MAX_NOTIFICATION_ROUTES_PER_AGENT,
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
   resolveDailyTokenBudget,
@@ -229,6 +231,14 @@ async function listAgentsPayload(ctx: AppContext) {
           .where(inArray(agentSkills.agentId, ids))
           .limit(max * MAX_SKILLS_PER_AGENT)
       : [];
+  const routeRows =
+    ids.length > 0
+      ? await ctx.db
+          .select()
+          .from(agentNotificationRoutes)
+          .where(inArray(agentNotificationRoutes.agentId, ids))
+          .limit(max * MAX_NOTIFICATION_ROUTES_PER_AGENT)
+      : [];
   const watchlistRows =
     ids.length > 0
       ? await ctx.db.select().from(watchlists).where(inArray(watchlists.agentId, ids)).limit(max)
@@ -276,6 +286,20 @@ async function listAgentsPayload(ctx: AppContext) {
         tokenBudget: agent.tokenBudget,
         objectives: agent.objectives,
         notificationPolicy: agent.notificationPolicy,
+        notificationRoutes: takeBounded(
+          routeRows
+            .filter((item) => item.agentId === agent.id)
+            .map((item) => ({
+              id: item.id,
+              minImpact: item.minImpact,
+              catalystKinds: item.catalystKinds,
+              assetCanonicalIds: item.assetCanonicalIds,
+              reliabilityStatuses: item.reliabilityStatuses,
+              includeEarlyWarnings: item.includeEarlyWarnings,
+              targetIds: item.targetIds,
+            })),
+          MAX_NOTIFICATION_ROUTES_PER_AGENT,
+        ),
         default: agent.kind === "system_default",
         sourceIds: sourceRows
           .filter((item) => item.agentId === agent.id)

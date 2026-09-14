@@ -56,6 +56,25 @@ function SettingsPage() {
     };
     telegramConfigured: boolean;
     whatsappConfigured?: boolean;
+    notificationTargets?: Array<{
+      id: string;
+      channel: string;
+      destination: string;
+      name?: string | null;
+      isPrimary: boolean;
+      status: string;
+    }>;
+    observationAlertRules?: Array<{
+      id: string;
+      metric: string;
+      op: string;
+      threshold: number;
+      windowMinutes?: number | null;
+      subjectCanonicalId?: string | null;
+      provider?: string | null;
+      targetIds: string[];
+      enabled: boolean;
+    }>;
     notificationPolicy?: {
       minRisk: string;
       cooldownMinutes: number;
@@ -109,6 +128,15 @@ function SettingsPage() {
   const [verifyToken, setVerifyToken] = useState("");
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChat, setTelegramChat] = useState("");
+  const [discordWebhook, setDiscordWebhook] = useState("");
+  const [discordUsername, setDiscordUsername] = useState("");
+  const [discordAvatar, setDiscordAvatar] = useState("");
+  const [discordPrimary, setDiscordPrimary] = useState(false);
+  const [alertMetric, setAlertMetric] = useState("spot_price");
+  const [alertOp, setAlertOp] = useState("gte");
+  const [alertThreshold, setAlertThreshold] = useState("");
+  const [alertWindow, setAlertWindow] = useState("1440");
+  const [alertSubject, setAlertSubject] = useState("");
   const [resendKey, setResendKey] = useState("");
   const [emailFrom, setEmailFrom] = useState("");
   const [confirmClearAudit, setConfirmClearAudit] = useState(false);
@@ -788,6 +816,115 @@ function SettingsPage() {
               </Card>
 
               <Card>
+                <h2>Discord webhook</h2>
+                <p className="field-note">
+                  Paste an incoming webhook URL from Channel settings → Integrations → Webhooks.
+                  Riddlr stores it encrypted and shows only the channel id afterwards. Incoming
+                  webhooks are a notification channel, not a source.
+                </p>
+                <form
+                  autoComplete="off"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/notification-targets", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          webhookUrl: discordWebhook,
+                          username: discordUsername || undefined,
+                          avatarUrl: discordAvatar || undefined,
+                          primary: discordPrimary,
+                        }),
+                      });
+                      setDiscordWebhook("");
+                      setDiscordUsername("");
+                      setDiscordAvatar("");
+                      setDiscordPrimary(false);
+                      await refresh();
+                      toast("Discord webhook saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save Discord webhook"), "danger");
+                    }
+                  }}
+                >
+                  <Field
+                    label="Webhook URL"
+                    hint="https://discord.com/api/webhooks/… Stored encrypted. Never shown again."
+                  >
+                    <input
+                      id="discord-webhook-url"
+                      name="discord-webhook-url"
+                      type="password"
+                      autoComplete="new-password"
+                      value={discordWebhook}
+                      onChange={(e) => setDiscordWebhook(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field
+                    label="Username override"
+                    hint="Optional. Display name on Discord messages."
+                  >
+                    <input
+                      id="discord-webhook-username"
+                      value={discordUsername}
+                      onChange={(e) => setDiscordUsername(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Avatar URL" hint="Optional HTTPS image URL.">
+                    <input
+                      id="discord-webhook-avatar"
+                      value={discordAvatar}
+                      onChange={(e) => setDiscordAvatar(e.target.value)}
+                    />
+                  </Field>
+                  <label className="check-row" htmlFor="discord-webhook-primary">
+                    <input
+                      id="discord-webhook-primary"
+                      type="checkbox"
+                      checked={discordPrimary}
+                      onChange={(e) => setDiscordPrimary(e.target.checked)}
+                    />
+                    Primary target
+                  </label>
+                  <Button type="submit">Save Discord webhook</Button>
+                </form>
+                {(data?.notificationTargets ?? []).length > 0 ? (
+                  <ul className="data-list">
+                    {(data?.notificationTargets ?? []).map((target) => (
+                      <li key={target.id}>
+                        <span>
+                          <strong>Channel {target.destination}</strong>
+                          <small>
+                            {target.status === "auth"
+                              ? "Webhook deleted"
+                              : target.name || "Discord"}
+                            {target.isPrimary ? " · Primary" : ""}
+                          </small>
+                        </span>
+                        <Button
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await api(`/api/v1/notification-targets/${target.id}`, {
+                                method: "DELETE",
+                              });
+                              await refresh();
+                              toast("Discord webhook removed");
+                            } catch (err) {
+                              toast(toastFail(err, "Couldn’t remove webhook"), "danger");
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </Card>
+
+              <Card>
                 <h2>WhatsApp Cloud API</h2>
                 <code>/api/v1/webhooks/whatsapp</code>
                 <form
@@ -902,6 +1039,135 @@ function SettingsPage() {
                   </Field>
                   <Button type="submit">Save WhatsApp settings</Button>
                 </form>
+              </Card>
+
+              <Card>
+                <h2>Observation alerts</h2>
+                <p className="field-note">
+                  Thresholds on observation series. Delivered as Observation, never as a signal.
+                  Quiet hours and per-destination cooldown still apply. Minimum risk does not.
+                </p>
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    try {
+                      await api("/api/v1/observation-alert-rules", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          metric: alertMetric,
+                          op: alertOp,
+                          threshold: Number(alertThreshold),
+                          windowMinutes:
+                            alertOp === "pct_drop" || alertOp === "pct_move"
+                              ? Number(alertWindow)
+                              : undefined,
+                          subjectCanonicalId: alertSubject || undefined,
+                        }),
+                      });
+                      setAlertThreshold("");
+                      setAlertSubject("");
+                      await refresh();
+                      toast("Observation alert saved");
+                    } catch (err) {
+                      toast(toastFail(err, "Couldn’t save observation alert"), "danger");
+                    }
+                  }}
+                >
+                  <Field label="Metric">
+                    <select
+                      id="observation-alert-metric"
+                      value={alertMetric}
+                      onChange={(e) => setAlertMetric(e.target.value)}
+                    >
+                      <option value="spot_price">Spot price</option>
+                      <option value="funding_rate_apr">Funding rate APR</option>
+                      <option value="tvl_usd">TVL USD</option>
+                      <option value="odds_yes">Prediction-market YES odds</option>
+                    </select>
+                  </Field>
+                  <Field label="Operator">
+                    <select
+                      id="observation-alert-op"
+                      value={alertOp}
+                      onChange={(e) => setAlertOp(e.target.value)}
+                    >
+                      <option value="gte">At or above</option>
+                      <option value="lte">At or below</option>
+                      <option value="pct_drop">Percent drop</option>
+                      <option value="pct_move">Percent move</option>
+                    </select>
+                  </Field>
+                  <Field label="Threshold">
+                    <input
+                      id="observation-alert-threshold"
+                      type="number"
+                      step="any"
+                      value={alertThreshold}
+                      onChange={(e) => setAlertThreshold(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  {alertOp === "pct_drop" || alertOp === "pct_move" ? (
+                    <Field
+                      label="Window minutes"
+                      hint="Lookback for the percent change. Default 1440 (24h) for a drop."
+                    >
+                      <input
+                        id="observation-alert-window"
+                        type="number"
+                        min={1}
+                        max={10080}
+                        value={alertWindow}
+                        onChange={(e) => setAlertWindow(e.target.value)}
+                        required
+                      />
+                    </Field>
+                  ) : null}
+                  <Field
+                    label="Subject"
+                    hint="Optional canonical id such as coingecko:bitcoin. Empty matches any subject."
+                  >
+                    <input
+                      id="observation-alert-subject"
+                      value={alertSubject}
+                      onChange={(e) => setAlertSubject(e.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit">Save observation alert</Button>
+                </form>
+                {(data?.observationAlertRules ?? []).length > 0 ? (
+                  <ul className="data-list">
+                    {(data?.observationAlertRules ?? []).map((rule) => (
+                      <li key={rule.id}>
+                        <span>
+                          <strong>
+                            {rule.metric} {rule.op} {rule.threshold}
+                          </strong>
+                          <small>
+                            {rule.subjectCanonicalId ?? "any subject"}
+                            {rule.windowMinutes ? ` · ${rule.windowMinutes}m` : ""}
+                          </small>
+                        </span>
+                        <Button
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await api(`/api/v1/observation-alert-rules/${rule.id}`, {
+                                method: "DELETE",
+                              });
+                              await refresh();
+                              toast("Observation alert removed");
+                            } catch (err) {
+                              toast(toastFail(err, "Couldn’t remove alert"), "danger");
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </Card>
             </>
           }

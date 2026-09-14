@@ -7,6 +7,7 @@ type Delivery = {
   id: string;
   channel: string;
   status: string;
+  kind?: string;
   destination?: string;
   createdAt: string;
 };
@@ -35,7 +36,7 @@ function NotificationsPage() {
     <>
       <PageHeader
         title="Notifications"
-        description="Deliveries after a signal passes risk, cooldown, and quiet-hour policy."
+        description="Deliveries after a signal or observation alert passes policy. Observation rows are never signals."
       />
       {rows.length === 0 ? (
         <EmptyState title="No deliveries" body="Configure a channel in Settings." />
@@ -47,6 +48,11 @@ function NotificationsPage() {
                 <li key={item.id}>
                   <span>
                     <strong>{item.channel}</strong>
+                    {item.kind === "observation" ? (
+                      <small>Observation</small>
+                    ) : (
+                      <small>Signal</small>
+                    )}
                     {item.destination ? <small>{item.destination}</small> : null}
                   </span>
                   <span>
