@@ -43,7 +43,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0023](adr/0023-claim-corroboration.md), and
 [ADR 0024](adr/0024-registry-driven-resolution.md), and
 [ADR 0025](adr/0025-observation-layer.md), and
-[ADR 0026](adr/0026-catalyst-taxonomy.md).
+[ADR 0026](adr/0026-catalyst-taxonomy.md), and
+[ADR 0027](adr/0027-event-lifecycle-outcomes.md).
 
 ## Trust boundaries
 
@@ -92,6 +93,9 @@ and portfolio wallets (`POST /hooks/alchemy/:sourceId` and
 snapshots are not shipped. Return-shock,
 volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence, and odds-jump detectors open material events with
 reliability `observed` when a watched or pinned subject trips the threshold.
+Events thread across scans by rolling-window identity (market domain, catalyst
+kind, subject). Lifecycle, lead time, and +1h/+24h/+7d outcomes live on the
+event. Scorecard is Overview-adjacent at `/scorecard`.
 
 Notifications claim a pending delivery row before any Telegram or WhatsApp
 provider call. Public Caddy does not expose Mailpit or SearXNG.

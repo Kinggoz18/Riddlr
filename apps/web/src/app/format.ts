@@ -140,6 +140,39 @@ export function eventStatusLabel(status: string) {
   }
 }
 
+export function lifecycleStatusLabel(status: string) {
+  switch (status) {
+    case "open":
+      return "Open";
+    case "developing":
+      return "Developing";
+    case "confirmed":
+      return "Confirmed";
+    case "disputed":
+      return "Disputed";
+    case "retracted":
+      return "Retracted";
+    case "resolved":
+      return "Resolved";
+    case "superseded":
+      return "Superseded";
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
+
+export function leadTimeLabel(hours: number | null | undefined) {
+  if (hours === null || hours === undefined || !Number.isFinite(hours)) {
+    return undefined;
+  }
+  if (hours < 1) {
+    const minutes = Math.round(hours * 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"} lead`;
+  }
+  const rounded = hours < 10 ? Math.round(hours * 10) / 10 : Math.round(hours);
+  return `${rounded} hour${rounded === 1 ? "" : "s"} lead`;
+}
+
 export function epistemicStatusLabel(status: string) {
   switch (status) {
     case "discovered":

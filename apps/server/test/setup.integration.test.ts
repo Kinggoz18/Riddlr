@@ -38,6 +38,7 @@ import {
   scans,
   sessions,
   signalClaimProofs,
+  signalOutcomes,
   signals,
   skills,
   sources,
@@ -76,6 +77,7 @@ import {
 } from "../src/modules/asset-registry.js";
 import { processInboundReceipt } from "../src/modules/inbound-webhooks.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
+import { recordDueOutcomes } from "../src/modules/outcomes.js";
 import { runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
 
@@ -826,6 +828,10 @@ describe("setup, auth, and domain persistence", () => {
         .from(events)
         .where(eq(events.clusterFingerprint, firstFingerprint));
       expect(sameCluster).toHaveLength(1);
+      expect(sameCluster[0]?.identityKey).toBeTruthy();
+      expect(["open", "developing", "confirmed", "disputed", "retracted", "resolved"]).toContain(
+        sameCluster[0]?.lifecycleState,
+      );
     }
     expect(understandingCalls).toBe(understandingBeforeRepeat);
 
@@ -2436,6 +2442,9 @@ describe("setup, auth, and domain persistence", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().event.reliabilityStatus).toBe("observed");
     expect(detail.json().event.catalystKind).toBe("observed_anomaly");
+    expect(detail.json().event.lifecycleState).toBe("open");
+    expect(detail.json().event.identityKey).toBeTruthy();
+    expect((detail.json().lifecycle as unknown[]).length).toBeGreaterThan(0);
     expect(
       (detail.json().claims as Array<{ catalystKind?: string }>).some(
         (row) => row.catalystKind === "observed_anomaly",
@@ -2451,6 +2460,48 @@ describe("setup, auth, and domain persistence", () => {
       .from(events)
       .where(eq(events.reliabilityStatus, "observed"));
     expect(stillOne).toHaveLength(1);
+    expect(stillOne[0]?.lifecycleState).toBe("open");
+    const notifiedAt = new Date("2026-09-13T00:00:00.000Z");
+    const plus24h = new Date("2026-09-14T00:00:00.000Z");
+    await ctx.db
+      .update(events)
+      .set({ firstNotifiedAt: notifiedAt, subjectCanonicalId: "coingecko:bitcoin" })
+      .where(eq(events.id, stillOne[0]?.id as string));
+    await ctx.db.insert(observationSeries).values([
+      {
+        provider: "coingecko-spot",
+        metric: "spot_price",
+        subjectCanonicalId: "coingecko:bitcoin",
+        observedAt: notifiedAt,
+        value: 100,
+        unit: "usd",
+      },
+      {
+        provider: "coingecko-spot",
+        metric: "spot_price",
+        subjectCanonicalId: "coingecko:bitcoin",
+        observedAt: plus24h,
+        value: 110,
+        unit: "usd",
+      },
+    ]);
+    await recordDueOutcomes(ctx, new Date("2026-09-14T00:10:00.000Z"));
+    const recordedOutcomes = await ctx.db
+      .select()
+      .from(signalOutcomes)
+      .where(eq(signalOutcomes.eventId, stillOne[0]?.id as string));
+    expect(
+      recordedOutcomes.some(
+        (row) => row.horizon === "24h" && row.metric === "spot_price" && row.deltaPct === 10,
+      ),
+    ).toBe(true);
+    const scorecard = await app.inject({
+      method: "GET",
+      url: "/api/v1/scorecard",
+      headers: { cookie },
+    });
+    expect(scorecard.statusCode).toBe(200);
+    expect(Array.isArray(scorecard.json().scorecard)).toBe(true);
 
     await ctx.db
       .delete(observationSeries)

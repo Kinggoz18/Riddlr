@@ -13,6 +13,7 @@ import {
   type DetectorSpec,
   type DomainModule,
   type ExtractedAsset,
+  eventJoinWindowForKind,
   FUNDING_DIVERGENCE_V1,
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
@@ -825,6 +826,9 @@ export const cryptoDomainModule: DomainModule = {
   },
   principalClaimTitle(claim) {
     return claim.title || claimTitle(claim);
+  },
+  eventJoinWindow(kind) {
+    return eventJoinWindowForKind(kind);
   },
   defaultAgentProfile() {
     return {

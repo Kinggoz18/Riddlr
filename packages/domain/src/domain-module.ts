@@ -1,6 +1,7 @@
 import type { CatalystKind } from "./catalysts.js";
 import type { ClaimCandidate, NormalizedClaim } from "./claims.js";
 import type { NormalizedEvidence } from "./evidence.js";
+import type { EventJoinWindow } from "./lifecycle.js";
 import type { AssetClass, MarketDomainId } from "./market-domains.js";
 import type { ImpactAssessment } from "./reliability.js";
 
@@ -99,6 +100,7 @@ export type DomainModule = {
   }): DomainContext;
   assessImpact(input: ImpactInput): ImpactAssessment;
   principalClaimTitle(claim: NormalizedClaim): string;
+  eventJoinWindow(kind: CatalystKind): EventJoinWindow;
   defaultAgentProfile(): {
     name: string;
     description: string;

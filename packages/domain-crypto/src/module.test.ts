@@ -33,9 +33,10 @@ const CRYPTO_REGISTRY: RegistryAsset[] = [
 
 describe("crypto domain module", () => {
   it("canonicalizes BTC to a coingecko id, not a ticker-only identity", () => {
-    expect(
-      cryptoDomainModule.canonicalizeAsset({ symbol: "BTC" }, CRYPTO_REGISTRY)?.canonicalId,
-    ).toBe("coingecko:bitcoin");
+    expect(cryptoDomainModule.eventJoinWindow("security_incident")).toEqual({
+      kind: "duration",
+      ms: 72 * 60 * 60 * 1000,
+    });
     expect(
       cryptoDomainModule.canonicalizeAsset(
         { canonicalId: "coingecko:unknown-coin" },

@@ -9,6 +9,8 @@ import {
   epistemicStatusLabel,
   eventStatusLabel,
   independenceCopy,
+  leadTimeLabel,
+  lifecycleStatusLabel,
   reliabilityStatusLabel,
 } from "../format.js";
 
@@ -26,6 +28,8 @@ type EventRow = {
   reliabilityStatus?: string | null;
   impactLevel?: string | null;
   contentCompleteness?: string | null;
+  lifecycleState?: string | null;
+  leadTimeHours?: number | null;
   assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
 };
 
@@ -67,12 +71,18 @@ function EventsPage() {
               <Card key={row.id} className="record-row">
                 <NavLink to={`/events/${row.id}`}>{row.title}</NavLink>
                 <StatusBadge label={eventStatusLabel(row.status)} />
+                {row.lifecycleState ? (
+                  <StatusBadge label={lifecycleStatusLabel(row.lifecycleState)} />
+                ) : null}
                 <p className="record-meta">
                   <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
                   {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
                   {row.catalystKind ? <span>{catalystKindLabel(row.catalystKind)}</span> : null}
                   {row.reliabilityStatus ? (
                     <span>{reliabilityStatusLabel(row.reliabilityStatus)}</span>
+                  ) : null}
+                  {leadTimeLabel(row.leadTimeHours) ? (
+                    <span>{leadTimeLabel(row.leadTimeHours)}</span>
                   ) : null}
                   {row.impactLevel ? <span>Impact {row.impactLevel}</span> : null}
                   {row.contentCompleteness ? (

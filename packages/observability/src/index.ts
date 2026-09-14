@@ -105,6 +105,18 @@ export function createMetrics() {
     labelNames: ["provider", "reason"],
     registers: [register],
   });
+  const lifecycleTransitions = new Counter({
+    name: "riddlr_event_lifecycle_transitions_total",
+    help: "Event lifecycle transitions",
+    labelNames: ["to"],
+    registers: [register],
+  });
+  const signalOutcomes = new Counter({
+    name: "riddlr_signal_outcomes_total",
+    help: "Recorded observation outcomes at fixed horizons",
+    labelNames: ["horizon", "metric"],
+    registers: [register],
+  });
   return {
     register,
     httpDuration,
@@ -120,6 +132,8 @@ export function createMetrics() {
     observePolls,
     detectorFindings,
     observeWsDrops,
+    lifecycleTransitions,
+    signalOutcomes,
   };
 }
 

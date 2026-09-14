@@ -277,35 +277,43 @@ describe("near-duplicate clustering", () => {
       marketDomainId: "crypto",
       claimFingerprints: ["crypto:market_move|coingecko:bitcoin"],
       assetCanonicalIds: ["coingecko:bitcoin"],
-      windowDay: "2026-09-13",
     });
     const second = eventClusterFingerprint({
       marketDomainId: "crypto",
       claimFingerprints: ["crypto:market_move|coingecko:bitcoin"],
       assetCanonicalIds: ["coingecko:bitcoin", "coingecko:bitcoin"],
-      windowDay: "2026-09-13",
     });
     expect(first).toBe(second);
+    expect(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        claimFingerprints: ["crypto:market_move|coingecko:bitcoin"],
+        assetCanonicalIds: ["coingecko:bitcoin"],
+      }),
+    ).toBe(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        claimFingerprints: ["crypto:market_move|coingecko:bitcoin"],
+        assetCanonicalIds: ["coingecko:bitcoin"],
+      }),
+    );
     expect(
       eventClusterFingerprint({
         marketDomainId: "crypto",
         claimFingerprints: [],
         contentHashes: [],
         assetCanonicalIds: ["coingecko:bitcoin"],
-        windowDay: "2026-09-13",
       }),
     ).toBe(
       eventClusterFingerprint({
         marketDomainId: "crypto",
         assetCanonicalIds: ["coingecko:bitcoin"],
-        windowDay: "2026-09-13",
       }),
     );
     expect(first).not.toBe(
       eventClusterFingerprint({
         marketDomainId: "crypto",
         claimFingerprints: ["crypto:insolvency|coingecko:bitcoin"],
-        windowDay: "2026-09-13",
       }),
     );
     expect(
@@ -313,14 +321,25 @@ describe("near-duplicate clustering", () => {
         marketDomainId: "crypto",
         contentHashes: ["hash-a"],
         assetCanonicalIds: ["coingecko:bitcoin"],
-        windowDay: "2026-09-13",
       }),
     ).not.toBe(
       eventClusterFingerprint({
         marketDomainId: "crypto",
         contentHashes: ["hash-b"],
         assetCanonicalIds: ["coingecko:bitcoin"],
-        windowDay: "2026-09-13",
+      }),
+    );
+    expect(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        contentHashes: ["hash-a"],
+        overflowBucket: "2026-09-13",
+      }),
+    ).not.toBe(
+      eventClusterFingerprint({
+        marketDomainId: "crypto",
+        contentHashes: ["hash-a"],
+        overflowBucket: "2026-09-14",
       }),
     );
   });

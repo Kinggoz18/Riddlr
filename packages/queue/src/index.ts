@@ -7,6 +7,7 @@ export const QUEUE_NAMES = {
   analyzeEvent: "riddlr.analyze.event",
   notifyDeliver: "riddlr.notify.deliver",
   observePoll: "riddlr.observe.poll",
+  recordOutcomes: "riddlr.outcomes.record",
   healthPing: "riddlr.health.ping",
 } as const;
 

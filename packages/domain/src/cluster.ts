@@ -144,13 +144,13 @@ export function eventClusterFingerprint(input: {
   claimFingerprints?: string[];
   contentHashes?: string[];
   assetCanonicalIds?: string[];
-  windowDay?: string;
+  overflowBucket?: string;
 }): string {
   const claims = [...new Set(input.claimFingerprints ?? [])].filter(Boolean).sort();
   const hashes = [...new Set(input.contentHashes ?? [])].filter(Boolean).sort();
   const assets = [...new Set(input.assetCanonicalIds ?? [])].sort();
   const identity = claims.join(",") || hashes.join(",") || assets.join(",") || "unlabeled";
-  const basis = [input.marketDomainId ?? "", identity, input.windowDay ?? ""].join("|");
+  const basis = [input.marketDomainId ?? "", identity, input.overflowBucket ?? ""].join("|");
   return createHash("sha256").update(basis).digest("hex");
 }
 

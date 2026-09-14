@@ -11,6 +11,7 @@ import { NotificationsPage } from "./pages/NotificationsPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
 import { PortfoliosPage } from "./pages/PortfoliosPage.js";
 import { ScansPage } from "./pages/ScansPage.js";
+import { ScorecardPage } from "./pages/ScorecardPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { SetupPage } from "./pages/SetupPage.js";
 import { SignalDetailPage } from "./pages/SignalDetailPage.js";
@@ -70,6 +71,7 @@ export function Gate() {
         <Route path="/signals/:id" element={<SignalDetailPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
+        <Route path="/scorecard" element={<ScorecardPage />} />
         <Route path="/agents/*" element={<AgentsPage />} />
         <Route path="/skills/*" element={<SkillsPage />} />
         <Route path="/sources/*" element={<SourcesPage />} />

@@ -417,6 +417,17 @@ export const events = pgTable("events", {
   impactLevel: text("impact_level"),
   contentCompleteness: text("content_completeness"),
   principalClaimId: uuid("principal_claim_id"),
+  lifecycleState: text("lifecycle_state").notNull().default("open"),
+  identityKey: text("identity_key"),
+  catalystKind: text("catalyst_kind"),
+  subjectCanonicalId: text("subject_canonical_id"),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  firstObservedAt: timestamp("first_observed_at", { withTimezone: true }),
+  firstPrimaryAt: timestamp("first_primary_at", { withTimezone: true }),
+  firstNotifiedAt: timestamp("first_notified_at", { withTimezone: true }),
+  lastEvidenceAt: timestamp("last_evidence_at", { withTimezone: true }),
+  supersededByEventId: uuid("superseded_by_event_id"),
+  lifecycleChangedAt: timestamp("lifecycle_changed_at", { withTimezone: true }),
 });
 
 export const eventEvidence = pgTable(
@@ -726,6 +737,44 @@ export const signals = pgTable(
       table.eventId,
       table.agentId,
       table.schemaVersion,
+    ),
+  ],
+);
+
+export const eventLifecycleTransitions = pgTable("event_lifecycle_transitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  fromState: text("from_state"),
+  toState: text("to_state").notNull(),
+  reason: text("reason"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const signalOutcomes = pgTable(
+  "signal_outcomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    signalId: uuid("signal_id").references(() => signals.id, { onDelete: "set null" }),
+    horizon: text("horizon").notNull(),
+    metric: text("metric").notNull(),
+    baselineValue: doublePrecision("baseline_value").notNull(),
+    baselineAt: timestamp("baseline_at", { withTimezone: true }).notNull(),
+    observedValue: doublePrecision("observed_value").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    deltaAbs: doublePrecision("delta_abs").notNull(),
+    deltaPct: doublePrecision("delta_pct"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("signal_outcomes_event_horizon_metric_idx").on(
+      table.eventId,
+      table.horizon,
+      table.metric,
     ),
   ],
 );

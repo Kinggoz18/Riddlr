@@ -6,9 +6,12 @@ import { ExternalLink } from "../Brand.js";
 import {
   candidateKindLabel,
   catalystKindLabel,
+  dateTime,
   epistemicStatusLabel,
   eventStatusLabel,
   independenceCopy,
+  leadTimeLabel,
+  lifecycleStatusLabel,
   reliabilityStatusLabel,
 } from "../format.js";
 
@@ -28,6 +31,12 @@ function EventDetailPage() {
       reliabilityStatus?: string | null;
       impactLevel?: string | null;
       contentCompleteness?: string | null;
+      lifecycleState?: string | null;
+      firstObservedAt?: string | null;
+      firstPrimaryAt?: string | null;
+      firstNotifiedAt?: string | null;
+      leadTimeHours?: number | null;
+      scheduledAt?: string | null;
     };
     evidence: Array<{
       id: string;
@@ -65,6 +74,22 @@ function EventDetailPage() {
       originKey?: string | null;
     }>;
     documents?: Array<{ evidenceId: string; cleanedText?: string; status: string }>;
+    lifecycle?: Array<{
+      id: string;
+      fromState?: string | null;
+      toState: string;
+      reason?: string | null;
+      at: string;
+    }>;
+    outcomes?: Array<{
+      horizon: string;
+      metric: string;
+      baselineValue: number;
+      observedValue: number;
+      deltaAbs: number;
+      deltaPct?: number | null;
+      observedAt: string;
+    }>;
     skillTrace?: {
       selected?: Array<{ slug: string; displayName: string; reason: string }>;
       skipped?: Array<{ slug: string; displayName: string; reason: string; notice?: string }>;
@@ -106,6 +131,12 @@ function EventDetailPage() {
         {data.event.reliabilityStatus ? (
           <span>{reliabilityStatusLabel(data.event.reliabilityStatus)}</span>
         ) : null}
+        {data.event.lifecycleState ? (
+          <span>{lifecycleStatusLabel(data.event.lifecycleState)}</span>
+        ) : null}
+        {leadTimeLabel(data.event.leadTimeHours) ? (
+          <span>{leadTimeLabel(data.event.leadTimeHours)}</span>
+        ) : null}
         {data.event.impactLevel ? <span>Impact {data.event.impactLevel}</span> : null}
         {data.event.contentCompleteness ? (
           <span>{data.event.contentCompleteness.replaceAll("_", " ")}</span>
@@ -119,6 +150,62 @@ function EventDetailPage() {
       ) : null}
       {data.event.discoveryReason ? (
         <p className="field-note">{data.event.discoveryReason}</p>
+      ) : null}
+      {data.lifecycle && data.lifecycle.length > 0 ? (
+        <Card>
+          <h2>Lifecycle</h2>
+          <ul className="data-list">
+            {[...data.lifecycle].reverse().map((item) => (
+              <li key={item.id}>
+                <span>
+                  {item.fromState ? `${lifecycleStatusLabel(item.fromState)} → ` : ""}
+                  {lifecycleStatusLabel(item.toState)}
+                </span>
+                <small>
+                  {dateTime.format(new Date(item.at))}
+                  {item.reason ? ` · ${item.reason.replaceAll("_", " ")}` : ""}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {data.event.firstObservedAt || data.event.firstPrimaryAt || data.event.firstNotifiedAt ? (
+        <p className="field-note">
+          First observed{" "}
+          {data.event.firstObservedAt
+            ? dateTime.format(new Date(data.event.firstObservedAt))
+            : "unknown"}
+          {data.event.firstPrimaryAt
+            ? ` · first official ${dateTime.format(new Date(data.event.firstPrimaryAt))}`
+            : ""}
+          {data.event.firstNotifiedAt
+            ? ` · first notified ${dateTime.format(new Date(data.event.firstNotifiedAt))}`
+            : ""}
+          {data.event.scheduledAt
+            ? ` · scheduled ${dateTime.format(new Date(data.event.scheduledAt))}`
+            : ""}
+        </p>
+      ) : null}
+      {data.outcomes && data.outcomes.length > 0 ? (
+        <Card>
+          <h2>Outcomes</h2>
+          <ul className="data-list">
+            {data.outcomes.map((item) => (
+              <li key={`${item.horizon}-${item.metric}`}>
+                <span>
+                  {item.horizon} {item.metric.replaceAll("_", " ")}
+                </span>
+                <small>
+                  {item.deltaPct === null || item.deltaPct === undefined
+                    ? `${item.deltaAbs} absolute`
+                    : `${item.deltaPct.toFixed(2)}%`}{" "}
+                  · {dateTime.format(new Date(item.observedAt))}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
       {data.assessment ? (
         <p className="field-note">

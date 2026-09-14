@@ -11,6 +11,7 @@ const NAV_CLUSTERS: Array<Array<{ to: string; label: string; end?: boolean }>> =
     { to: "/", label: "Overview", end: true },
     { to: "/signals", label: "Signals" },
     { to: "/events", label: "Events" },
+    { to: "/scorecard", label: "Scorecard" },
   ],
   [
     { to: "/agents", label: "Agents" },

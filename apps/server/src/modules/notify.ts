@@ -22,6 +22,7 @@ import {
 } from "@riddlr/notifications";
 import { and, desc, eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { markFirstNotifiedAt } from "./event-lifecycle.js";
 
 function riskLevel(value: string): "low" | "moderate" | "high" | "critical" {
   if (value === "low" || value === "moderate" || value === "high" || value === "critical") {
@@ -246,7 +247,7 @@ async function finishDelivery(
   ctx: AppContext,
   id: string,
   status: "sent" | "failed",
-  extra?: { providerMessageId?: string; errorClass?: string },
+  extra?: { providerMessageId?: string; errorClass?: string; eventId?: string },
 ) {
   await ctx.db
     .update(notificationDeliveries)
@@ -257,6 +258,9 @@ async function finishDelivery(
       updatedAt: new Date(),
     })
     .where(eq(notificationDeliveries.id, id));
+  if (status === "sent" && extra?.eventId) {
+    await markFirstNotifiedAt(ctx, extra.eventId, new Date());
+  }
 }
 
 async function deliverTelegram(
@@ -314,6 +318,7 @@ async function deliverTelegram(
   const result = await sendTelegramMessage({ token, chatId, text: body, fetchImpl });
   await finishDelivery(ctx, claimed.id, result.ok ? "sent" : "failed", {
     errorClass: result.ok ? undefined : "provider_error",
+    eventId: signal.eventId,
   });
 }
 
@@ -415,5 +420,6 @@ async function deliverWhatsApp(
   await finishDelivery(ctx, claimed.id, result.ok ? "sent" : "failed", {
     providerMessageId: result.providerMessageId,
     errorClass: result.ok ? undefined : "provider_error",
+    eventId: signal.eventId,
   });
 }

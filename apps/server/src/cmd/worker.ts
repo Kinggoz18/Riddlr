@@ -15,6 +15,7 @@ import { processInboundReceipt } from "../modules/inbound-webhooks.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
 import { enqueueObserveIfDue, pollObservationProvider } from "../modules/observe.js";
+import { recordDueOutcomes, resolveExpiredEvents } from "../modules/outcomes.js";
 import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
 import { enqueueAgentScan } from "../modules/scans.js";
 
@@ -158,6 +159,15 @@ const observeWorker = new Worker(
   { ...workerOptions, concurrency: ctx.config.RIDDLR_OBSERVE_CONCURRENCY },
 );
 
+const outcomesWorker = new Worker(
+  QUEUE_NAMES.recordOutcomes,
+  async () => {
+    await resolveExpiredEvents(ctx);
+    await recordDueOutcomes(ctx);
+  },
+  { ...workerOptions, concurrency: 1 },
+);
+
 void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
 const heartbeat = setInterval(() => {
   void ctx.redis.set("riddlr:worker:heartbeat", new Date().toISOString(), "EX", 60);
@@ -199,6 +209,15 @@ const scheduler = setInterval(() => {
   void enqueueObserveIfDue(ctx).catch((error) => {
     ctx.logger.warn({ err: error }, "observe enqueue tick failed");
   });
+  void ctx.outcomesQueue
+    ?.add(
+      "outcomes",
+      { idempotencyKey: "outcomes:tick" },
+      { jobId: `outcomes:${Math.floor(Date.now() / 60_000)}`, attempts: 1 },
+    )
+    .catch((error) => {
+      ctx.logger.warn({ err: error }, "outcomes enqueue tick failed");
+    });
 }, 60_000);
 
 const shutdown = async () => {
@@ -212,6 +231,7 @@ const shutdown = async () => {
   await understandWorker.close();
   await clusterWorker.close();
   await observeWorker.close();
+  await outcomesWorker.close();
   await ctx.scanQueue.close();
   await ctx.ingestQueue?.close();
   await ctx.enrichQueue?.close();
@@ -220,6 +240,7 @@ const shutdown = async () => {
   await ctx.analyzeQueue?.close();
   await ctx.notifyQueue?.close();
   await ctx.observeQueue?.close();
+  await ctx.outcomesQueue?.close();
   await ctx.redis.quit();
   process.exit(0);
 };

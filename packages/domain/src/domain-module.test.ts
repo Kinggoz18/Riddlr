@@ -106,6 +106,12 @@ function createSyntheticModule(): DomainModule {
     principalClaimTitle(claim) {
       return claim.title || claim.predicate;
     },
+    eventJoinWindow(kind) {
+      if (kind === "earnings_or_guidance") {
+        return { kind: "duration" as const, ms: 72 * 60 * 60 * 1000 };
+      }
+      return { kind: "duration" as const, ms: 24 * 60 * 60 * 1000 };
+    },
     defaultAgentProfile() {
       return {
         name: "Synthetic test agent",
@@ -143,6 +149,10 @@ describe("domain module contract", () => {
     expect(assets[0]?.canonicalId).toBe("test:testco");
     expect(claims[0]?.kind).toBe("equities:earnings");
     expect(module.mapClaimKindToCatalyst("equities:earnings")).toBe("earnings_or_guidance");
+    expect(module.eventJoinWindow("earnings_or_guidance")).toEqual({
+      kind: "duration",
+      ms: 72 * 60 * 60 * 1000,
+    });
     expect(
       module.assessImpact({
         claims,

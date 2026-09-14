@@ -61,6 +61,7 @@ import {
   scans,
   sessions,
   signalClaimProofs,
+  signalOutcomes,
   signals,
   sourceIdentities,
   sourceIdentityPolicies,
@@ -74,6 +75,7 @@ import {
   clampPageSize,
   type EvidenceRole,
   independenceGraph,
+  leadTimeHours,
   MARKET_DOMAIN_REGISTRY,
   MAX_CLAIMS_PER_DOCUMENT,
   ONBOARDING_STEP_COUNT,
@@ -93,9 +95,11 @@ import type { AppContext } from "./context.js";
 import { registerAgentRoutes } from "./modules/agent-api.js";
 import { catalystKindForClaim, catalystKindForEvent } from "./modules/catalyst-api.js";
 import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
+import { loadEventTransitions } from "./modules/event-lifecycle.js";
 import { registerInboundWebhookRoutes } from "./modules/inbound-webhooks.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
 import { observationHealth, registerObservationRoutes } from "./modules/observe.js";
+import { loadScorecard } from "./modules/outcomes.js";
 import {
   registerNotificationSettingsRoutes,
   registerPortfolioRoutes,
@@ -1141,6 +1145,7 @@ export async function buildApp(ctx: AppContext) {
       events: rows.map((row) => ({
         ...row,
         catalystKind: catalystKindForEvent(ctx, row.marketDomainId, kindsByEvent.get(row.id) ?? []),
+        leadTimeHours: leadTimeHours(row.firstObservedAt, row.firstPrimaryAt),
         assets: assetLinks
           .filter((link) => link.eventId === row.id)
           .map((link) => assetRows.find((asset) => asset.id === link.assetId))
@@ -1314,6 +1319,12 @@ export async function buildApp(ctx: AppContext) {
             .where(inArray(evidenceDocuments.evidenceId, evidenceIds))
             .limit(20)
         : [];
+    const lifecycle = await loadEventTransitions(ctx, id);
+    const outcomeRows = await ctx.db
+      .select()
+      .from(signalOutcomes)
+      .where(eq(signalOutcomes.eventId, id))
+      .limit(12);
     return {
       event: {
         ...event,
@@ -1322,6 +1333,7 @@ export async function buildApp(ctx: AppContext) {
           event.marketDomainId,
           claimRows.map((item) => item.kind),
         ),
+        leadTimeHours: leadTimeHours(event.firstObservedAt, event.firstPrimaryAt),
       },
       evidence,
       roles: links,
@@ -1340,7 +1352,13 @@ export async function buildApp(ctx: AppContext) {
       })),
       trustSnapshot,
       documents,
+      lifecycle,
+      outcomes: outcomeRows,
     };
+  });
+  app.get("/api/v1/scorecard", { preHandler: authed }, async () => {
+    const rows = await loadScorecard(ctx);
+    return { scorecard: rows };
   });
   app.get("/api/v1/scans", { preHandler: authed }, async (request) => {
     const query = pageQuerySchema.parse(request.query);

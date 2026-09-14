@@ -13,7 +13,7 @@ fixtures, RSS/Atom feed fixtures, DefiLlama fixtures, Hyperliquid fixtures, Bina
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock, volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence and odds-jump detectors, catalyst
-taxonomy mapping, quantitative claim contracts, and coming-soon rejection. Architecture tests keep generic packages from importing
+taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -28,7 +28,8 @@ polling, X bearer encryption and named-principal recent search, RSS/Atom feed cr
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,
-understanding as the primary claim extractor, and catalyst kinds on event APIs.
+understanding as the primary claim extractor, and catalyst kinds on event APIs,
+event lifecycle join/reopen/merge, outcome recording, and the scorecard API.
 
 `pnpm compose:smoke` waits until Compose answers `/api/v1/setup/status` with
 four steps, five market domains, and local first-run access.

@@ -52,7 +52,7 @@ setup codes expire after 15 minutes. See [Install](docs/install.md).
 - Read-only portfolios of public addresses and declared holdings
 - The default **Riddlr Intelligence Agent**, the first-run Crypto watcher
 - Additional Crypto agents, markdown skills, and canonical-ID watchlists
-- Overview, Signals, Events, Agents, Sources, Watchlists, Notifications, Portfolios, Scan History, AI Usage, and System Health
+- Overview, Signals, Events, Scorecard, Agents, Sources, Watchlists, Notifications, Portfolios, Scan History, AI Usage, and System Health
 - Side navigation with light or dark appearance (dark is the default)
 
 ## Architecture in one paragraph

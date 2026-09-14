@@ -22,6 +22,7 @@ export type AppContext = {
   analyzeQueue?: Queue;
   notifyQueue?: Queue;
   observeQueue?: Queue;
+  outcomesQueue?: Queue;
   observationProviders?: ObservationProviderRegistry;
   logger: ReturnType<typeof createLogger>;
   metrics: ReturnType<typeof createMetrics>;
@@ -44,6 +45,7 @@ export async function createContext(): Promise<AppContext> {
   const analyzeQueue = new Queue(QUEUE_NAMES.analyzeEvent, queueOptions);
   const notifyQueue = new Queue(QUEUE_NAMES.notifyDeliver, queueOptions);
   const observeQueue = new Queue(QUEUE_NAMES.observePoll, queueOptions);
+  const outcomesQueue = new Queue(QUEUE_NAMES.recordOutcomes, queueOptions);
   const logger = createLogger({
     level: config.RIDDLR_LOG_LEVEL,
     pretty: config.RIDDLR_LOG_FORMAT === "pretty",
@@ -67,6 +69,7 @@ export async function createContext(): Promise<AppContext> {
     analyzeQueue,
     notifyQueue,
     observeQueue,
+    outcomesQueue,
     observationProviders: createObservationProviders(),
     logger,
     metrics: createMetrics(),

@@ -224,6 +224,10 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await signIn(page);
   await page.getByRole("link", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
+  await page.getByRole("link", { name: "Scorecard" }).click();
+  await expect(page.getByRole("heading", { name: "Scorecard" })).toBeVisible();
+  await expect(page.getByText(/Signals emitted/i)).toBeVisible();
+  await page.getByRole("link", { name: "Events" }).click();
   await expect(page.getByText(/Clusters of related evidence/i)).toBeVisible();
   const eventsResponse = await page.request.get("/api/v1/events?limit=50");
   expect(eventsResponse.ok()).toBeTruthy();
@@ -235,6 +239,7 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
     await page.getByRole("link", { name: observed.title }).click();
     await expect(page.getByRole("heading", { name: observed.title })).toBeVisible();
     await expect(page.getByText("Observed", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Open", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Observed anomaly").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Sourced observations" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Claims" })).toBeVisible();

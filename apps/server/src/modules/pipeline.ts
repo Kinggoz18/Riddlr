@@ -53,6 +53,7 @@ import {
   clusterEvidence,
   decideSignalGate,
   discoverCandidate,
+  earliestTimestamp,
   estimatePromptTokens,
   eventClusterFingerprint,
   factsToApplicability,
@@ -76,6 +77,7 @@ import {
   observationsFromDetectorPayload,
   observationsFromMarketPayload,
   overlappingOutbound,
+  principalCatalystKindForClaims,
   type RawEvidence,
   type ReliabilityStatus,
   resolveDailyTokenBudget,
@@ -121,6 +123,14 @@ import {
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { listRegistryAssets, snapshotSpacesForAgent } from "./asset-registry.js";
+import {
+  applyLifecycleState,
+  findJoinableEvent,
+  identityKeyForCluster,
+  leadTimesFromEvidence,
+  recordLifecycleTransition,
+  scheduledAtFromClaims,
+} from "./event-lifecycle.js";
 import {
   enrichAndUnderstandScan,
   ensureOfficialSnapshotSpace,
@@ -808,6 +818,7 @@ export async function clusterScanEvents(
             predicate: claims.predicate,
             subjectCanonicalId: claims.subjectCanonicalId,
             marketDomainId: claims.marketDomainId,
+            effectiveStart: claims.effectiveStart,
           })
           .from(claimEvidence)
           .innerJoin(claims, eq(claimEvidence.claimId, claims.id))
@@ -913,7 +924,7 @@ export async function clusterScanEvents(
       claimFingerprints: clustered.remainder.flatMap((item) => item.claimFingerprints),
       contentHashes: clustered.remainder.map((item) => item.row.contentHash),
       assetCanonicalIds: clustered.remainder.flatMap((item) => item.assetCanonicalIds),
-      windowDay,
+      overflowBucket: windowDay,
     });
     const [existingOverflow] = overflowFingerprint
       ? await ctx.db
@@ -938,6 +949,7 @@ export async function clusterScanEvents(
             marketDomainId: module.id,
             reliabilityStatus: "mention",
             clusterFingerprint: overflowFingerprint,
+            lifecycleState: "resolved",
           })
           .returning()
       )[0];
@@ -975,6 +987,7 @@ export async function clusterScanEvents(
       windowStart: scan.windowStart,
       independentCount: 0,
       derivedCount: 0,
+      lifecycleState: "resolved",
     });
   }
 
@@ -1104,7 +1117,6 @@ export async function clusterScanEvents(
       claimFingerprints: observationOnly ? [] : cluster.flatMap((item) => item.claimFingerprints),
       contentHashes: observationOnly ? [] : cluster.map((item) => item.row.contentHash),
       assetCanonicalIds: cluster.flatMap((item) => item.assetCanonicalIds),
-      windowDay,
     });
     const context = module.assembleContext({
       evidence: clusterNorm,
@@ -1244,14 +1256,89 @@ export async function clusterScanEvents(
       principalClaimTitle: principal?.title,
       reliabilityStatus: reliability.status,
     });
-    const existingEvents = fingerprint
-      ? await ctx.db
-          .select()
-          .from(events)
-          .where(eq(events.clusterFingerprint, fingerprint))
-          .limit(1)
-      : [];
-    let event = existingEvents[0];
+    const catalystKind = principalCatalystKindForClaims(
+      clusterClaims.map((item) => item.kind),
+      (kind) => module.mapClaimKindToCatalyst(kind),
+    );
+    const subjectCanonicalId =
+      clusterClaims.find((item) => item.subjectCanonicalId)?.subjectCanonicalId ??
+      extracted[0]?.canonicalId;
+    const scheduledAt = scheduledAtFromClaims(clusterClaims);
+    const clusterAt = cluster
+      .map((item) => item.publishedAt ?? item.row.fetchedAt)
+      .reduce((earliest, value) => (value < earliest ? value : earliest), newest);
+    const joined = await findJoinableEvent(ctx, {
+      agentId: scan.agentId,
+      marketDomainId: module.id,
+      catalystKind,
+      subjectCanonicalId,
+      claimFingerprints: cluster.flatMap((item) => item.claimFingerprints ?? []),
+      contentHashes: cluster.map((item) => item.row.contentHash),
+      clusterAt,
+      clusterText: cluster.map((item) => item.text).join("\n"),
+      scheduledAt,
+      joinWindow: catalystKind ? module.eventJoinWindow(catalystKind) : undefined,
+      registry,
+    });
+    let event = joined?.event;
+    const reopen = joined?.decision === "reopen";
+    const identityKey = identityKeyForCluster({
+      agentId: scan.agentId,
+      marketDomainId: module.id,
+      catalystKind,
+      subjectCanonicalId,
+      claimFingerprints: cluster.flatMap((item) => item.claimFingerprints ?? []),
+      contentHashes: cluster.map((item) => item.row.contentHash),
+      clusterAt,
+      clusterText: cluster.map((item) => item.text).join("\n"),
+      scheduledAt,
+      joinWindow: catalystKind ? module.eventJoinWindow(catalystKind) : undefined,
+      registry,
+    });
+    const clusterLead = leadTimesFromEvidence(
+      cluster.map((item) => ({
+        publishedAt: item.publishedAt ?? item.row.publishedAt,
+        fetchedAt: item.row.fetchedAt,
+        trustTier: trustMaps.forEvidence(item.row.sourceIdentityId, item.hostname),
+      })),
+    );
+    const firstObservedAt =
+      earliestTimestamp([event?.firstObservedAt, clusterLead.firstObservedAt]) ?? scan.windowStart;
+    const firstPrimaryAt = earliestTimestamp([event?.firstPrimaryAt, clusterLead.firstPrimaryAt]);
+    const lastEvidenceAt = clusterLead.lastEvidenceAt ?? event?.lastEvidenceAt ?? newest;
+    const previousIndependent = event?.independentCount ?? 0;
+    let newIndependentOrigin = false;
+    if (event) {
+      const priorEvidence = await ctx.db
+        .select({
+          originKey: evidenceItems.originKey,
+          canonicalUrl: evidenceItems.canonicalUrl,
+        })
+        .from(eventEvidence)
+        .innerJoin(evidenceItems, eq(eventEvidence.evidenceId, evidenceItems.id))
+        .where(eq(eventEvidence.eventId, event.id))
+        .limit(32);
+      const priorOrigins = new Set(
+        priorEvidence.map((row) => row.originKey || row.canonicalUrl || ""),
+      );
+      newIndependentOrigin = cluster.some((item) => {
+        const key = item.originKey || item.row.canonicalUrl || "";
+        return key.length > 0 && !priorOrigins.has(key);
+      });
+    }
+    const independentCount = event
+      ? previousIndependent + (newIndependentOrigin ? 1 : 0)
+      : facts.independentOriginCount;
+    const lifecycleFields = {
+      identityKey,
+      catalystKind: event?.catalystKind ?? catalystKind ?? null,
+      subjectCanonicalId: event?.subjectCanonicalId ?? subjectCanonicalId ?? null,
+      scheduledAt: scheduledAt ?? event?.scheduledAt ?? null,
+      firstObservedAt,
+      firstPrimaryAt: firstPrimaryAt ?? null,
+      lastEvidenceAt,
+      clusterFingerprint: fingerprint,
+    };
     const previousReliability = event?.reliabilityStatus as ReliabilityStatus | undefined;
     if (event) {
       await ctx.db
@@ -1260,7 +1347,7 @@ export async function clusterScanEvents(
           scanId: scan.id,
           title,
           status,
-          independentCount: facts.independentOriginCount,
+          independentCount,
           derivedCount: counts.derivedReprintCount,
           materialityReason: material.reason,
           epistemicStatus: discovery.epistemicStatus,
@@ -1271,9 +1358,10 @@ export async function clusterScanEvents(
           impactLevel: impact.level,
           contentCompleteness: facts.contentCompleteness,
           principalClaimId: principal?.claimId,
+          ...lifecycleFields,
         })
         .where(eq(events.id, event.id));
-      event = { ...event, status, scanId: scan.id, title };
+      event = { ...event, status, scanId: scan.id, title, independentCount, ...lifecycleFields };
     } else {
       const inserted = await ctx.db
         .insert(events)
@@ -1282,10 +1370,9 @@ export async function clusterScanEvents(
           scanId: scan.id,
           title,
           status,
-          windowStart: scan.windowStart,
-          independentCount: facts.independentOriginCount,
+          windowStart: firstObservedAt,
+          independentCount,
           derivedCount: counts.derivedReprintCount,
-          clusterFingerprint: fingerprint,
           materialityReason: material.reason,
           epistemicStatus: discovery.epistemicStatus,
           candidateKind: discovery.kind,
@@ -1295,6 +1382,8 @@ export async function clusterScanEvents(
           impactLevel: impact.level,
           contentCompleteness: facts.contentCompleteness,
           principalClaimId: principal?.claimId,
+          lifecycleState: "open",
+          ...lifecycleFields,
         })
         .returning();
       event = inserted[0];
@@ -1302,6 +1391,16 @@ export async function clusterScanEvents(
     if (!event) {
       continue;
     }
+    if (!joined) {
+      await recordLifecycleTransition(ctx, event.id, "open", "opened");
+    }
+    await applyLifecycleState(ctx, event, {
+      retractingCount,
+      contradictingCount: Math.max(facts.contradictingCount, contradictingFromClaims),
+      reliabilityStatus: reliability.status,
+      newIndependentOrigin,
+      reopen,
+    });
     for (let index = 0; index < clusterRows.length; index += 1) {
       const evidence = clusterRows[index];
       const role = roles[index] ?? "primary";

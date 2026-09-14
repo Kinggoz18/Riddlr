@@ -4,6 +4,12 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Event identity is a rolling window of market domain, catalyst kind, and
+  subject instead of a UTC day. Lifecycle (`open`, `developing`, `confirmed`,
+  `disputed`, `retracted`, `resolved`, `superseded`), lead time, and +1h/+24h/+7d
+  price/funding/TVL outcomes are on the event. Scorecard is at Scorecard.
+  See [docs/adr/0027-event-lifecycle-outcomes.md](docs/adr/0027-event-lifecycle-outcomes.md).
+
 - X named-principal recent search: authors required (max 30),
   `-is:retweet -is:reply lang:en`, optional ANDed keywords, monthly read budget
   (default 5,000), `entities.urls[].expanded_url`. Discord ingest joins embeds,

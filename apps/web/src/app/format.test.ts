@@ -14,6 +14,8 @@ import {
   eventStatusLabel,
   formatClockHour,
   formatSpotQuote,
+  leadTimeLabel,
+  lifecycleStatusLabel,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
   objectiveLabel,
@@ -67,6 +69,10 @@ describe("agent labels", () => {
 
   it("labels discovery statuses without treating them as trades", () => {
     expect(eventStatusLabel("candidate")).toBe("Candidate");
+    expect(lifecycleStatusLabel("open")).toBe("Open");
+    expect(lifecycleStatusLabel("developing")).toBe("Developing");
+    expect(leadTimeLabel(4)).toBe("4 hours lead");
+    expect(leadTimeLabel(1)).toBe("1 hour lead");
     expect(epistemicStatusLabel("discovered")).toBe("Discovered");
     expect(epistemicStatusLabel("observed")).toBe("Observed");
     expect(epistemicStatusLabel("confirmed")).toBe("Confirmed");
