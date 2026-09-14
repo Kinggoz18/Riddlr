@@ -13,7 +13,10 @@ Tether, USD Coin, and Solana before the first CoinGecko seed. After a seed,
 any of the top N assets can be added.
 
 Overview and agent boards show the first eight named assets, then a View more
-link, and the latest CoinGecko spot quote when `observation_series` has a row. **Watchlists** lists every agent watchlist; open a list to see the full
+link, and the latest CoinGecko spot quote when `observation_series` has a row.
+Overview morning cards list each watched asset with a spot chart when series
+rows exist. Open an asset to see funding, open interest, TVL, events, and
+evidence. **Watchlists** lists every agent watchlist; open a list to see the full
 set. Edit assets on the agent.
 
 Scan search queries use watchlist symbols and names when the list is not empty.

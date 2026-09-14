@@ -221,6 +221,8 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   }
   await page.getByRole("link", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Morning" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Spot price/ }).first()).toBeVisible();
   await expectNoSeriousAxe(page);
 });
 
@@ -256,6 +258,15 @@ test("watchlists, notifications, 404, and tablet layout @a11y", async ({ page })
   await page.getByRole("link", { name: /Default watchlist/i }).click();
   await expect(page.getByRole("heading", { name: "Assets" })).toBeVisible();
   await expect(page.locator(".asset-list strong").filter({ hasText: /^Bitcoin$/ })).toBeVisible();
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByRole("heading", { name: "Morning" })).toBeVisible();
+  await page
+    .getByRole("article")
+    .filter({ hasText: "Bitcoin" })
+    .getByRole("link", { name: "Bitcoin" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Bitcoin" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Spot price/ }).first()).toBeVisible();
   await page.getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: /Notifications/i })).toBeVisible();
   await page.goto("/signals/does-not-exist");

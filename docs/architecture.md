@@ -16,7 +16,10 @@ ObservationProvider → observation_series → detectors → observation evidenc
 
 ## Process split
 
-- `apps/web` — Vite React dashboard with a side navigation and light/dark appearance
+- `apps/web` — Vite React dashboard with a side navigation and light/dark appearance.
+  Overview is the morning view. Asset pages chart observation series with event
+  markers. See [dashboard.md](dashboard.md) and
+  [ADR 0030](adr/0030-dashboard-charting.md).
 - `apps/server` `cmd/api` — Fastify HTTP
 - `apps/server` `cmd/worker` — BullMQ processors
 - `apps/server` `cmd/onboard` — host first-run (same four steps as the browser)
@@ -46,7 +49,8 @@ See [ADR 0013](adr/0013-bounded-memory.md),
 [ADR 0026](adr/0026-catalyst-taxonomy.md),
 [ADR 0027](adr/0027-event-lifecycle-outcomes.md), and
 [ADR 0028](adr/0028-typed-signal-policies.md), and
-[ADR 0029](adr/0029-discord-webhook-delivery.md).
+[ADR 0029](adr/0029-discord-webhook-delivery.md), and
+[ADR 0030](adr/0030-dashboard-charting.md).
 
 ## Trust boundaries
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { api } from "./api.js";
 import { AgentsPage } from "./pages/AgentsPage.js";
+import { AssetPage } from "./pages/AssetPage.js";
 import { EventDetailPage } from "./pages/EventDetailPage.js";
 import { EventsPage } from "./pages/EventsPage.js";
 import { HealthPage } from "./pages/HealthPage.js";
@@ -76,6 +77,7 @@ export function Gate() {
         <Route path="/skills/*" element={<SkillsPage />} />
         <Route path="/sources/*" element={<SourcesPage />} />
         <Route path="/watchlists/*" element={<WatchlistsPage />} />
+        <Route path="/assets/:canonicalId" element={<AssetPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/portfolios/*" element={<PortfoliosPage />} />
         <Route path="/scans" element={<ScansPage />} />

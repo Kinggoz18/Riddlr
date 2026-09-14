@@ -352,6 +352,7 @@ describe("scorecard", () => {
     expect(rows[0]?.laterConfirmed).toBe(1);
     expect(rows[0]?.laterRetracted).toBe(1);
     expect(rows[0]?.precision).toBe(0.5);
+    expect(rows[0]?.retractionRate).toBe(0.5);
     expect(rows[0]?.medianLeadTimeHours).toBe(3);
     expect(rows[0]?.medianMove24hPct).toBe(8);
   });

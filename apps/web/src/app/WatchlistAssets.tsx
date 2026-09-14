@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { assetClassLabel, assetDisplayName, assetTicker, formatSpotQuote } from "./format.js";
+import { assetPagePath } from "./morning.js";
 import { previewWatchlist, type WatchlistAsset } from "./watchlist-view.js";
 
 export function WatchlistAssets(props: {
@@ -7,6 +8,7 @@ export function WatchlistAssets(props: {
   limit?: number;
   moreHref?: string;
   empty?: string;
+  toAsset?: boolean;
 }) {
   if (props.items.length === 0) {
     return <p className="quiet-state">{props.empty ?? "No assets on this watchlist"}</p>;
@@ -22,8 +24,8 @@ export function WatchlistAssets(props: {
           const ticker = assetTicker(item.canonicalId, item);
           const name = assetDisplayName(item.canonicalId, item);
           const klass = assetClassLabel(item.assetClass);
-          return (
-            <li key={item.canonicalId}>
+          const body = (
+            <>
               <span className="asset-ticker" aria-hidden="true">
                 {ticker}
               </span>
@@ -37,6 +39,17 @@ export function WatchlistAssets(props: {
                       : ticker}
                 </small>
               </span>
+            </>
+          );
+          return (
+            <li key={item.canonicalId}>
+              {props.toAsset ? (
+                <NavLink className="asset-row" to={assetPagePath(item.canonicalId)}>
+                  {body}
+                </NavLink>
+              ) : (
+                body
+              )}
             </li>
           );
         })}

@@ -38,7 +38,9 @@ Events keep a rolling-window identity and a lifecycle (`open`, `developing`,
 `confirmed`, `disputed`, `retracted`, `resolved`, `superseded`). Lead time is
 the gap from first observation to first official-firsthand primary. Outcomes at
 +1h, +24h, and +7d after first notification record price, funding, and TVL
-deltas. Scorecard is at Scorecard in the dashboard.
+deltas. Scorecard is at Scorecard in the dashboard. Precision is later confirmed
+over signals emitted. Retraction rate is later retracted over signals emitted.
+Rows group by catalyst kind and by the identity that reported first.
 
 See [docs/catalysts.md](catalysts.md) and
 [ADR 0028](adr/0028-typed-signal-policies.md).

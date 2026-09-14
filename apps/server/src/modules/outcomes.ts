@@ -7,6 +7,7 @@ import {
   observationSeries,
   signalOutcomes,
   signals,
+  sourceIdentities,
 } from "@riddlr/db";
 import {
   aggregateScorecard,
@@ -288,5 +289,30 @@ export async function loadScorecard(ctx: AppContext) {
       },
     ];
   });
-  return aggregateScorecard(facts);
+  const identityNameIds = [
+    ...new Set([...firstIdentity.values()].filter((item): item is string => Boolean(item))),
+  ];
+  const identityNameRows =
+    identityNameIds.length > 0
+      ? await ctx.db
+          .select({
+            id: sourceIdentities.id,
+            displayName: sourceIdentities.displayName,
+            hostname: sourceIdentities.hostname,
+            platform: sourceIdentities.platform,
+          })
+          .from(sourceIdentities)
+          .where(inArray(sourceIdentities.id, takeBounded(identityNameIds, MAX_SCORECARD_ROWS)))
+          .limit(MAX_SCORECARD_ROWS)
+      : [];
+  const nameById = new Map(identityNameRows.map((row) => [row.id, row]));
+  return aggregateScorecard(facts).map((row) => {
+    const identity = row.sourceIdentityId ? nameById.get(row.sourceIdentityId) : undefined;
+    return {
+      ...row,
+      identityDisplayName: identity
+        ? (identity.displayName ?? identity.hostname ?? identity.platform ?? null)
+        : null,
+    };
+  });
 }

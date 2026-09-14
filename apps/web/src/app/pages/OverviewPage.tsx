@@ -2,9 +2,45 @@ import { Card, EmptyState, PageHeader, Skeleton, StatusBadge } from "@riddlr/ui"
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "../api.js";
-import { dateTime, eventStatusLabel } from "../format.js";
+import {
+  assetDisplayName,
+  catalystKindLabel,
+  dateTime,
+  eventStatusLabel,
+  formatSignedPct,
+  formatSpotQuote,
+  lifecycleStatusLabel,
+  reliabilityStatusLabel,
+} from "../format.js";
+import { assetPagePath, readMorningSince, stampMorningVisit } from "../morning.js";
+import { SeriesChart } from "../SeriesChart.js";
 import { WatchlistAssets } from "../WatchlistAssets.js";
 import { WATCHLIST_PREVIEW_LIMIT, type WatchlistSummary } from "../watchlist-view.js";
+
+type MorningAsset = {
+  canonicalId: string;
+  symbol?: string | null;
+  name?: string | null;
+  lastPrice?: { value: number; unit: string; observedAt: string; provider: string } | null;
+  change24hPct?: number;
+  funding?: { value: number; unit: string } | null;
+  openInterest?: { value: number; unit: string } | null;
+  spark?: Array<{ observedAt: string; value: number }>;
+  openEvents: Array<{
+    id: string;
+    title: string;
+    reliabilityStatus: string;
+    impactLevel?: string | null;
+    lifecycleState: string;
+  }>;
+  newSignals: Array<{ id: string; headline: string; risk: string; eventId: string }>;
+  upcomingCatalysts: Array<{
+    id: string;
+    title: string;
+    catalystKind?: string | null;
+    scheduledAt?: string | null;
+  }>;
+};
 
 function OverviewPage() {
   const [data, setData] = useState<{
@@ -21,6 +57,7 @@ function OverviewPage() {
   }>();
   const [error, setError] = useState<string>();
   const [watchlists, setWatchlists] = useState<WatchlistSummary[]>();
+  const [morning, setMorning] = useState<{ assets: MorningAsset[]; since: string }>();
   useEffect(() => {
     void api<NonNullable<typeof data>>("/api/v1/overview")
       .then(setData)
@@ -30,6 +67,16 @@ function OverviewPage() {
     void api<{ watchlists: WatchlistSummary[] }>("/api/v1/watchlists")
       .then((body) => setWatchlists(body.watchlists))
       .catch(() => setWatchlists([]));
+  }, []);
+  useEffect(() => {
+    const since = readMorningSince(window.localStorage);
+    const path = since ? `/api/v1/morning?since=${encodeURIComponent(since)}` : "/api/v1/morning";
+    void api<{ assets: MorningAsset[]; since: string }>(path)
+      .then((body) => {
+        setMorning(body);
+        stampMorningVisit(window.localStorage);
+      })
+      .catch(() => setMorning({ assets: [], since: new Date().toISOString() }));
   }, []);
   if (error) {
     return <EmptyState title="Unable to load overview" body={error} />;
@@ -51,7 +98,7 @@ function OverviewPage() {
     <>
       <PageHeader
         title="Overview"
-        description="Current Crypto desk: latest validated signal, recent evidence clusters, and source health."
+        description="What changed on watched assets since you last looked, how sure we are, and why. Proof stays one click away."
       />
       {remainingSteps.length ? (
         <details className="desk-checklist" open={deskNeedsAttention}>
@@ -86,6 +133,111 @@ function OverviewPage() {
           in <NavLink to="/settings">Settings</NavLink>.
         </p>
       ) : null}
+      <section className="morning-view" aria-labelledby="morning-heading">
+        <div className="panel-heading">
+          <h2 id="morning-heading">Morning</h2>
+          <NavLink to="/watchlists">Watchlists</NavLink>
+        </div>
+        {morning === undefined ? (
+          <p className="quiet-state">Loading morning…</p>
+        ) : morning.assets.length === 0 ? (
+          <p className="quiet-state">No watched assets. Add names on an agent watchlist.</p>
+        ) : (
+          <ul className="morning-grid">
+            {morning.assets.map((asset) => {
+              const name = assetDisplayName(asset.canonicalId, asset);
+              const change = formatSignedPct(asset.change24hPct);
+              return (
+                <li key={asset.canonicalId}>
+                  <article className="morning-card">
+                    <div className="panel-heading">
+                      <h3>
+                        <NavLink to={assetPagePath(asset.canonicalId)}>{name}</NavLink>
+                      </h3>
+                      <span className="morning-quote">
+                        {asset.lastPrice
+                          ? formatSpotQuote(asset.lastPrice.value, asset.lastPrice.unit)
+                          : "No spot yet"}
+                        {change ? ` · ${change}` : ""}
+                      </span>
+                    </div>
+                    <p className="field-note">
+                      {asset.funding
+                        ? `Funding ${formatSpotQuote(asset.funding.value, asset.funding.unit)}`
+                        : "No funding yet"}
+                      {" · "}
+                      {asset.openInterest
+                        ? `OI ${formatSpotQuote(asset.openInterest.value, asset.openInterest.unit)}`
+                        : "No open interest yet"}
+                    </p>
+                    <SeriesChart
+                      label="Spot price"
+                      points={asset.spark ?? []}
+                      compact
+                      empty="No spot observations yet"
+                    />
+                    {asset.openEvents.length > 0 ? (
+                      <ul className="data-list">
+                        {asset.openEvents.map((event) => (
+                          <li key={event.id}>
+                            <span>
+                              <NavLink to={`/events/${event.id}`}>{event.title}</NavLink>
+                              <small>
+                                {reliabilityStatusLabel(event.reliabilityStatus)}
+                                {event.impactLevel ? ` · Impact ${event.impactLevel}` : ""}
+                                {` · ${lifecycleStatusLabel(event.lifecycleState)}`}
+                              </small>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="quiet-state">No open events</p>
+                    )}
+                    {asset.newSignals.length > 0 ? (
+                      <ul className="data-list">
+                        {asset.newSignals.map((signal) => (
+                          <li key={signal.id}>
+                            <span>
+                              <NavLink to={`/signals/${signal.id}`}>{signal.headline}</NavLink>
+                              <small>
+                                New since last visit · {signal.risk}
+                                {" · "}
+                                <NavLink to={`/events/${signal.eventId}`}>Event</NavLink>
+                              </small>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="quiet-state">No new signals since last visit</p>
+                    )}
+                    {asset.upcomingCatalysts.length > 0 ? (
+                      <ul className="data-list">
+                        {asset.upcomingCatalysts.map((item) => (
+                          <li key={item.id}>
+                            <span>
+                              <NavLink to={`/events/${item.id}`}>{item.title}</NavLink>
+                              <small>
+                                {item.catalystKind
+                                  ? catalystKindLabel(item.catalystKind)
+                                  : "Scheduled"}
+                                {item.scheduledAt
+                                  ? ` · ${dateTime.format(new Date(item.scheduledAt))}`
+                                  : ""}
+                              </small>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
       <section className="overview-desk">
         <article className="intelligence-panel">
           <div className="panel-heading">
@@ -218,6 +370,7 @@ function OverviewPage() {
                 limit={WATCHLIST_PREVIEW_LIMIT}
                 moreHref={`/watchlists/${featuredWatchlist.id}`}
                 empty="No assets on this watcher"
+                toAsset
               />
             </>
           ) : watchlists ? (

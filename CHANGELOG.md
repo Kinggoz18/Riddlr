@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Morning view (Overview), asset pages with observation charts, event lifecycle
+  timelines, and a signal scorecard with precision and retraction rate. See
+  [docs/dashboard.md](docs/dashboard.md) and
+  [docs/adr/0030-dashboard-charting.md](docs/adr/0030-dashboard-charting.md).
+
 - Discord incoming-webhook delivery, per-agent routing, and observation
   threshold alerts (labeled Observation, never signals). Telegram and WhatsApp
   remain. Settings → Notifications configures webhooks and alert rules; the

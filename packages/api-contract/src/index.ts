@@ -1,6 +1,7 @@
 import {
   AGENT_SCHEDULES,
   CATALYST_KINDS,
+  DASHBOARD_CHART_METRICS,
   DISCORD_WEBHOOK_URL_RE,
   IMPACT_LEVELS,
   MARKET_DOMAIN_IDS,
@@ -12,6 +13,7 @@ import {
   MAX_NOTIFICATION_TARGETS,
   MAX_OBSERVATION_ALERT_WINDOW_MINUTES,
   MAX_PREDICTION_MARKETS,
+  MAX_SERIES_WINDOW,
   MAX_SNAPSHOT_SPACES,
   MIN_DAILY_TOKEN_BUDGET,
   MIN_FEED_POLL_INTERVAL_SECONDS,
@@ -138,6 +140,20 @@ export const observationPinSchema = z.object({
     .enum(["spot_price", "quoted_volume", "quoted_market_cap", "price_change_24h"])
     .optional(),
   provider: z.string().min(3).max(80).optional(),
+});
+
+export const morningQuerySchema = z.object({
+  since: z.string().max(64).optional(),
+});
+
+export const assetDeskQuerySchema = z.object({
+  canonicalId: z.string().min(3).max(160),
+});
+
+export const observationSeriesQuerySchema = z.object({
+  subject: z.string().min(3).max(160),
+  metric: z.enum(DASHBOARD_CHART_METRICS).default("spot_price"),
+  limit: z.coerce.number().int().min(1).max(MAX_SERIES_WINDOW).optional(),
 });
 
 export const notificationPolicySchema = z.object({

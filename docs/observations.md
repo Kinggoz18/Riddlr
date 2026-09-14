@@ -62,7 +62,9 @@ signal.
 ## Operator surfaces
 
 Health shows last poll, subject count, series count, and freshness gap. Watchlist
-tiles show the latest `spot_price` when a row exists. Pin a registry asset on Health
+tiles show the latest `spot_price` when a row exists. Overview morning cards chart
+the last 24 hours of spot when points exist and leave gaps empty. Asset pages
+chart spot, funding APR, open interest, and TVL. Pin a registry asset on Health
 to poll it without a watchlist. The dashboard footer reads "Price data by CoinGecko".
 
 ## Failure classes

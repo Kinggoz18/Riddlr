@@ -1,6 +1,6 @@
 import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { ExternalLink } from "../Brand.js";
 import {
@@ -14,6 +14,7 @@ import {
   lifecycleStatusLabel,
   reliabilityStatusLabel,
 } from "../format.js";
+import { assetPagePath } from "../morning.js";
 
 function EventDetailPage() {
   const { id } = useParams();
@@ -154,7 +155,7 @@ function EventDetailPage() {
       {data.lifecycle && data.lifecycle.length > 0 ? (
         <Card>
           <h2>Lifecycle</h2>
-          <ul className="data-list">
+          <ol className="lifecycle-timeline">
             {[...data.lifecycle].reverse().map((item) => (
               <li key={item.id}>
                 <span>
@@ -165,6 +166,19 @@ function EventDetailPage() {
                   {dateTime.format(new Date(item.at))}
                   {item.reason ? ` · ${item.reason.replaceAll("_", " ")}` : ""}
                 </small>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      ) : null}
+      {data.independence && data.independence.nodes.length > 0 ? (
+        <Card>
+          <h2>Independence</h2>
+          <ul className="independence-graph">
+            {data.independence.nodes.map((node) => (
+              <li key={node.evidenceId}>
+                <span>{node.hostname}</span>
+                <small>{node.role}</small>
               </li>
             ))}
           </ul>
@@ -291,7 +305,14 @@ function EventDetailPage() {
         <Card>
           <h2>Assets</h2>
           <p>
-            {data.assets.map((item) => item.name || item.symbol || item.canonicalId).join(", ")}
+            {data.assets.map((item, index) => (
+              <span key={item.canonicalId}>
+                {index > 0 ? ", " : ""}
+                <NavLink to={assetPagePath(item.canonicalId)}>
+                  {item.name || item.symbol || item.canonicalId}
+                </NavLink>
+              </span>
+            ))}
           </p>
         </Card>
       ) : null}

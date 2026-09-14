@@ -29,10 +29,24 @@ export function formatSpotQuote(value?: number | null, unit?: string | null) {
   if (!unit || unit === "usd") {
     return compactMoney.format(value);
   }
-  if (unit === "percent") {
+  if (unit === "percent" || unit === "apr") {
     return `${value.toFixed(2)}%`;
   }
   return `${value} ${unit}`;
+}
+
+export function formatSignedPct(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const abs = Math.abs(value).toFixed(2);
+  if (value > 0) {
+    return `+${abs}%`;
+  }
+  if (value < 0) {
+    return `-${abs}%`;
+  }
+  return "0.00%";
 }
 
 export type AssetOption = {

@@ -7,10 +7,12 @@ type ScorecardRow = {
   agentId: string;
   catalystKind: string;
   sourceIdentityId: string | null;
+  identityDisplayName?: string | null;
   signalsEmitted: number;
   laterConfirmed: number;
   laterRetracted: number;
   precision?: number;
+  retractionRate?: number;
   medianLeadTimeHours?: number;
   medianMove24hPct?: number;
 };
@@ -33,7 +35,7 @@ function ScorecardPage() {
     <>
       <PageHeader
         title="Scorecard"
-        description="Signals emitted, later confirmed or retracted, median lead time, and median +24h spot move. Outcomes are measurements, not trading advice."
+        description="Precision is later confirmed divided by signals emitted. Retraction rate is later retracted divided by signals emitted. Rows group by catalyst kind and by the identity that reported first. Outcomes are measurements, not trading advice."
       />
       {rows.length === 0 ? (
         <EmptyState
@@ -47,7 +49,11 @@ function ScorecardPage() {
               <li key={`${row.agentId}-${row.catalystKind}-${row.sourceIdentityId ?? "none"}`}>
                 <span>
                   {catalystKindLabel(row.catalystKind)}
-                  {row.sourceIdentityId ? ` · ${row.sourceIdentityId.slice(0, 8)}` : ""}
+                  {row.identityDisplayName
+                    ? ` · ${row.identityDisplayName}`
+                    : row.sourceIdentityId
+                      ? ` · ${row.sourceIdentityId.slice(0, 8)}`
+                      : ""}
                 </span>
                 <small>
                   {row.signalsEmitted} emitted · {row.laterConfirmed} confirmed ·{" "}
@@ -55,6 +61,9 @@ function ScorecardPage() {
                   {row.precision === undefined
                     ? ""
                     : ` · precision ${(row.precision * 100).toFixed(0)}%`}
+                  {row.retractionRate === undefined
+                    ? ""
+                    : ` · retraction ${(row.retractionRate * 100).toFixed(0)}%`}
                   {row.medianLeadTimeHours === undefined
                     ? ""
                     : ` · median lead ${row.medianLeadTimeHours}h`}

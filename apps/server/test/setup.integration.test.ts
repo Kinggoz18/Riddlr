@@ -2654,6 +2654,65 @@ describe("setup, auth, and domain persistence", () => {
     });
     expect(scorecard.statusCode).toBe(200);
     expect(Array.isArray(scorecard.json().scorecard)).toBe(true);
+    const scorecardRows = scorecard.json().scorecard as Array<{
+      retractionRate?: number;
+      identityDisplayName?: string | null;
+    }>;
+    expect(
+      scorecardRows.every(
+        (row) => row.retractionRate === undefined || typeof row.retractionRate === "number",
+      ),
+    ).toBe(true);
+
+    const unauthMorning = await app.inject({ method: "GET", url: "/api/v1/morning" });
+    expect(unauthMorning.statusCode).toBe(401);
+    const morning = await app.inject({
+      method: "GET",
+      url: "/api/v1/morning?since=not-a-date",
+      headers: { cookie },
+    });
+    expect(morning.statusCode).toBe(200);
+    const morningBody = morning.json() as {
+      assets: Array<{ canonicalId: string; spark?: unknown[]; change24hPct?: number }>;
+      since: string;
+    };
+    expect(Array.isArray(morningBody.assets)).toBe(true);
+    expect(morningBody.assets.some((item) => item.canonicalId === "coingecko:bitcoin")).toBe(true);
+    const futureMorning = await app.inject({
+      method: "GET",
+      url: "/api/v1/morning?since=2099-01-01T00:00:00.000Z",
+      headers: { cookie },
+    });
+    expect(futureMorning.statusCode).toBe(200);
+    expect(typeof futureMorning.json().since).toBe("string");
+    const missingDesk = await app.inject({
+      method: "GET",
+      url: "/api/v1/asset-desk?canonicalId=coingecko:this-asset-is-not-registered",
+      headers: { cookie },
+    });
+    expect(missingDesk.statusCode).toBe(404);
+    const desk = await app.inject({
+      method: "GET",
+      url: "/api/v1/asset-desk?canonicalId=coingecko:bitcoin",
+      headers: { cookie },
+    });
+    expect(desk.statusCode).toBe(200);
+    expect(desk.json().asset.canonicalId).toBe("coingecko:bitcoin");
+    expect(Array.isArray(desk.json().series.spot_price)).toBe(true);
+    const series = await app.inject({
+      method: "GET",
+      url: "/api/v1/observation-series?subject=coingecko:bitcoin&metric=spot_price",
+      headers: { cookie },
+    });
+    expect(series.statusCode).toBe(200);
+    expect(Array.isArray(series.json().points)).toBe(true);
+    const emptySeries = await app.inject({
+      method: "GET",
+      url: "/api/v1/observation-series?subject=coingecko:this-asset-is-not-registered&metric=spot_price",
+      headers: { cookie },
+    });
+    expect(emptySeries.statusCode).toBe(200);
+    expect(emptySeries.json().points).toEqual([]);
 
     await ctx.db
       .delete(observationSeries)

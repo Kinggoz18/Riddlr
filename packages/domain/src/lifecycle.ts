@@ -437,6 +437,7 @@ export type ScorecardRow = {
   laterConfirmed: number;
   laterRetracted: number;
   precision: number | undefined;
+  retractionRate: number | undefined;
   medianLeadTimeHours: number | undefined;
   medianMove24hPct: number | undefined;
 };
@@ -462,6 +463,7 @@ export function aggregateScorecard(facts: readonly ScorecardFacts[]): ScorecardR
       laterConfirmed,
       laterRetracted,
       precision: scorecardPrecision(emitted, laterConfirmed),
+      retractionRate: scorecardPrecision(emitted, laterRetracted),
       medianLeadTimeHours: medianNumber(
         rows.flatMap((row) => (row.leadTimeHours === undefined ? [] : [row.leadTimeHours])),
       ),

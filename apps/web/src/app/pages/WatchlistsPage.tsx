@@ -103,7 +103,7 @@ function WatchlistDetail() {
             {items.length} of {MAX_WATCHLIST_ITEMS}
           </span>
         </div>
-        <WatchlistAssets items={items} empty="Empty watchlist" />
+        <WatchlistAssets items={items} empty="Empty watchlist" toAsset />
       </Card>
     </>
   );

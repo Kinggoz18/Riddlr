@@ -94,6 +94,7 @@ import { ZodError } from "zod";
 import type { AppContext } from "./context.js";
 import { registerAgentRoutes } from "./modules/agent-api.js";
 import { catalystKindForClaim, catalystKindForEvent } from "./modules/catalyst-api.js";
+import { registerDashboardRoutes } from "./modules/dashboard-api.js";
 import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { loadEventTransitions } from "./modules/event-lifecycle.js";
 import { registerInboundWebhookRoutes } from "./modules/inbound-webhooks.js";
@@ -654,6 +655,7 @@ export async function buildApp(ctx: AppContext) {
 
   registerAgentRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerObservationRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
+  registerDashboardRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerSourceRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);
   registerInboundWebhookRoutes(app as unknown as import("fastify").FastifyInstance, ctx);
   registerPortfolioRoutes(app as unknown as import("fastify").FastifyInstance, ctx, authed);

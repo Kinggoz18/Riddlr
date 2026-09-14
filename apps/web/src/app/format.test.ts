@@ -13,6 +13,7 @@ import {
   epistemicStatusLabel,
   eventStatusLabel,
   formatClockHour,
+  formatSignedPct,
   formatSpotQuote,
   leadTimeLabel,
   lifecycleStatusLabel,
@@ -105,5 +106,8 @@ describe("asset display fallback", () => {
     expect(formatSpotQuote(undefined)).toBeUndefined();
     expect(formatSpotQuote(Number.NaN)).toBeUndefined();
     expect(formatSpotQuote(77333, "usd")).toBe(compactMoney.format(77333));
+    expect(formatSignedPct(2.5)).toBe("+2.50%");
+    expect(formatSignedPct(-1.25)).toBe("-1.25%");
+    expect(formatSignedPct(undefined)).toBeUndefined();
   });
 });

@@ -13,7 +13,7 @@ fixtures, RSS/Atom feed fixtures, DefiLlama fixtures, Hyperliquid fixtures, Bina
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock, volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence and odds-jump detectors, catalyst
-taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, and coming-soon rejection. Architecture tests keep generic packages from importing
+taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, morning since window and 24h change, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -30,7 +30,8 @@ claim-before-send, session idle/cap, recovery rotate, key rotation with a previo
 master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,
 understanding as the primary claim extractor, and catalyst kinds on event APIs,
 event lifecycle join/reopen/merge, outcome recording, the scorecard API, typed signal persistence,
-Discord incoming-webhook claim-before-send, confirmation after a failed original, and observation alerts that do not insert signals.
+Discord incoming-webhook claim-before-send, confirmation after a failed original, and observation alerts that do not insert signals,
+the morning view payload, asset desk series, and observation-series windows.
 
 `pnpm compose:smoke` waits until Compose answers `/api/v1/setup/status` with
 four steps, five market domains, and local first-run access.
@@ -57,7 +58,8 @@ fixture with a shared outbound Reuters URL is not treated as independent
 corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
-search against a running Compose stack, the Health Observations card, opening
+search against a running Compose stack, Overview morning charts, opening an
+asset page from a morning card, the Health Observations card, opening
 an observed quantitative event on Events, the catalyst kind label on that
 event, and the RSS/Atom source form.
 First-run credentials default to `ops@example.com`. On an already-set-up
