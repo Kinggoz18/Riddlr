@@ -31,6 +31,17 @@ export {
 } from "./discord.js";
 export { type EnrichmentDocument, enrichPublicDocument } from "./enrich.js";
 export {
+  clampFeedPollIntervalSeconds,
+  createFeedsAdapter,
+  defaultTrustForFeedUrl,
+  FEEDS_ADAPTER_ID,
+  FEEDS_FAMILY,
+  FEEDS_USER_AGENT,
+  parseFeedXml,
+  SUGGESTED_FEEDS,
+  type SuggestedFeed,
+} from "./feeds.js";
+export {
   COINGECKO_SIMPLE_PRICE_PATH,
   COINGECKO_SPOT_PROVIDER_ID,
   createCoinGeckoSpotProvider,

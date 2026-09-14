@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCK8sQmJBp8GCxrOtXWBpyEA"/>
+ <id>yt:channel:K8sQmJBp8GCxrOtXWBpyEA</id>
+ <yt:channelId>K8sQmJBp8GCxrOtXWBpyEA</yt:channelId>
+ <title>Google</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCK8sQmJBp8GCxrOtXWBpyEA"/>
+ <author>
+  <name>Google</name>
+  <uri>https://www.youtube.com/channel/UCK8sQmJBp8GCxrOtXWBpyEA</uri>
+ </author>
+ <published>2005-09-18T22:37:10+00:00</published>
+ <entry>
+  <id>yt:video:rPq7ITrWFvY</id>
+  <yt:videoId>rPq7ITrWFvY</yt:videoId>
+  <yt:channelId>UCK8sQmJBp8GCxrOtXWBpyEA</yt:channelId>
+  <title>The latest updates to Google Translate</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=rPq7ITrWFvY"/>
+  <author>
+   <name>Google</name>
+   <uri>https://www.youtube.com/channel/UCK8sQmJBp8GCxrOtXWBpyEA</uri>
+  </author>
+  <published>2026-09-04T16:30:43+00:00</published>
+  <updated>2026-09-14T02:11:32+00:00</updated>
+  <media:group>
+   <media:title>The latest updates to Google Translate</media:title>
+   <media:content url="https://www.youtube.com/v/rPq7ITrWFvY?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i3.ytimg.com/vi/rPq7ITrWFvY/hqdefault.jpg" width="480" height="360"/>
+   <media:description>We’re introducing two updates to the Google Translate app that make understanding conversations in different languages much simpler across 70+ languages on Android and iOS.
+
+🎧 Hear translations through any headphones: Plug in or connect any pair of headphones to hear real-time translations. The app matches the speaker’s tone and rhythm so it sounds more natural and is easy to follow in busy settings like tours, airports, or group dinners.
+
+📱 Listen like a phone call: If you don't have headphones handy, simply hold your phone up to your ear to hear the translation quietly without playing it out loud.
+
+To get started, open the Google Translate app and tap “Live translate”.
+
+Download the Google Translate app:
+Android: https://play.google.com/store/apps/details?id=com.google.android.apps.translate&amp;pcampaignid=web_share
+iOS: https://apps.apple.com/us/app/google-translate/id414706506
+
+Subscribe to our Channel: https://www.youtube.com/google
+Find us on X: https://twitter.com/google
+Watch us on TikTok: https://tiktok.com/@google
+Follow us on Instagram: https://www.instagram.com/google
+Join us on Facebook: https://www.facebook.com/Google</media:description>
+   <media:community>
+    <media:starRating count="2767" average="5.00" min="1" max="5"/>
+    <media:statistics views="143577"/>
+   </media:community>
+  </media:group>
+ </entry>
+</feed>

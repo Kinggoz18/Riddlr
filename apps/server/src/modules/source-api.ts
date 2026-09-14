@@ -3,6 +3,7 @@ import {
   coinmarketcapSourceSchema,
   cryptocomSourceSchema,
   discordSourceSchema,
+  feedSourceSchema,
   pageQuerySchema,
   publisherHostPolicySchema,
   sourceIdentityPolicySchema,
@@ -21,19 +22,24 @@ import {
   sourceIdentityPolicies,
   sources,
 } from "@riddlr/db";
-import { clampPageSize, parsePageCursor } from "@riddlr/domain";
+import { clampPageSize, parsePageCursor, type TrustTier } from "@riddlr/domain";
 import {
+  clampFeedPollIntervalSeconds,
   createCoinGeckoAdapter,
   createCoinMarketCapAdapter,
   createCryptoComAdapter,
   createDiscordAdapter,
+  createFeedsAdapter,
   createSearxngAdapter,
   createXAdapter,
   DISCORD_BOT_PERMISSIONS,
+  defaultTrustForFeedUrl,
+  SUGGESTED_FEEDS,
 } from "@riddlr/source-adapters";
 import { and, count, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import { upsertSourceIdentity } from "./intelligence.js";
 import {
   attachSourceToAgents,
   isMarketDataAdapter,
@@ -68,6 +74,7 @@ export function registerSourceRoutes(
   const discord = createDiscordAdapter();
   const searxng = createSearxngAdapter();
   const x = createXAdapter();
+  const feeds = createFeedsAdapter();
   const coingecko = createCoinGeckoAdapter();
   const coinmarketcap = createCoinMarketCapAdapter();
   const cryptocom = createCryptoComAdapter();
@@ -92,6 +99,12 @@ export function registerSourceRoutes(
           id: x.id,
           family: x.family,
           capabilities: x.capabilities,
+        },
+        {
+          id: feeds.id,
+          family: feeds.family,
+          capabilities: feeds.capabilities,
+          suggestedFeeds: SUGGESTED_FEEDS,
         },
         {
           id: coingecko.id,
@@ -248,6 +261,25 @@ export function registerSourceRoutes(
     });
   });
 
+  app.post("/api/v1/sources/feeds", { preHandler: authed }, async (request, reply) => {
+    const body = feedSourceSchema.parse(request.body);
+    const feedUrl = new URL(body.feedUrl).href;
+    const trustTier: TrustTier = body.trustTier ?? defaultTrustForFeedUrl(feedUrl);
+    const pollIntervalSeconds = clampFeedPollIntervalSeconds(body.pollIntervalSeconds);
+    const validated = await feeds.validate({ feedUrl, trustTier, pollIntervalSeconds });
+    if (!validated.ok) {
+      return reply
+        .code(400)
+        .send({ error: { code: "invalid_source", message: validated.message } });
+    }
+    return insertFeedSource(ctx, request, reply, {
+      name: body.name,
+      feedUrl,
+      trustTier,
+      pollIntervalSeconds,
+    });
+  });
+
   app.get("/api/v1/sources/:id", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const [row] = await ctx.db.select().from(sources).where(eq(sources.id, id)).limit(1);
@@ -319,7 +351,9 @@ export function registerSourceRoutes(
         ? discord
         : row.adapterId === "x"
           ? x
-          : (marketAdapter(row.adapterId) ?? searxng);
+          : row.adapterId === "feeds"
+            ? feeds
+            : (marketAdapter(row.adapterId) ?? searxng);
     const health = await adapter.healthCheck(await sourceRuntimeConfig(ctx, row));
     await ctx.db
       .update(sources)
@@ -629,6 +663,103 @@ async function insertMarketSource(
   if (source) {
     await setActiveMarketSource(ctx, source.id);
     await attachSourceToAgents(ctx, source.id);
+  }
+  const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
+  await ctx.db.insert(auditLogs).values({
+    actorUserId: auth?.user.id,
+    action: "source.create",
+    resource: source?.id,
+  });
+  return { source: source ? publicSource(source) : undefined };
+}
+
+function allowedUsesForTier(tier: TrustTier): string[] {
+  if (tier === "blocked") {
+    return ["discovery"];
+  }
+  if (tier === "official_firsthand") {
+    return ["discovery", "analysis", "early_warning", "confirmation"];
+  }
+  return ["discovery", "analysis"];
+}
+
+async function insertFeedSource(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  input: {
+    name: string;
+    feedUrl: string;
+    trustTier: TrustTier;
+    pollIntervalSeconds: number;
+  },
+) {
+  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+    return reply.code(400).send({
+      error: {
+        code: "source_limit",
+        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+      },
+    });
+  }
+  const duplicate = existing.find(
+    (row) =>
+      row.adapterId === "feeds" &&
+      typeof row.config.feedUrl === "string" &&
+      row.config.feedUrl === input.feedUrl,
+  );
+  if (duplicate) {
+    return reply.code(409).send({
+      error: {
+        code: "source_exists",
+        message: "That feed URL is already configured.",
+      },
+    });
+  }
+  const [source] = await ctx.db
+    .insert(sources)
+    .values({
+      family: "feed",
+      adapterId: "feeds",
+      enabled: true,
+      name: input.name,
+      config: {
+        feedUrl: input.feedUrl,
+        trustTier: input.trustTier,
+        pollIntervalSeconds: input.pollIntervalSeconds,
+      },
+    })
+    .returning();
+  if (source) {
+    await attachSourceToAgents(ctx, source.id);
+    const hostname = new URL(input.feedUrl).hostname.toLowerCase();
+    const identityId = await upsertSourceIdentity(ctx, {
+      platform: "feed",
+      externalId: hostname,
+      displayName: input.name,
+      hostname,
+    });
+    if (identityId) {
+      const existingPolicies = await ctx.db
+        .select()
+        .from(sourceIdentityPolicies)
+        .where(eq(sourceIdentityPolicies.identityId, identityId))
+        .limit(50);
+      const revision = existingPolicies.reduce((max, row) => Math.max(max, row.revision), 0) + 1;
+      await ctx.db
+        .update(sourceIdentityPolicies)
+        .set({ active: false })
+        .where(eq(sourceIdentityPolicies.identityId, identityId));
+      await ctx.db.insert(sourceIdentityPolicies).values({
+        identityId,
+        revision,
+        trustTier: input.trustTier,
+        allowedUses: allowedUsesForTier(input.trustTier),
+        notes: `Feed ${input.feedUrl}`,
+        active: true,
+      });
+    }
   }
   const auth = (request as FastifyRequest & { auth?: { user: { id: string } } }).auth;
   await ctx.db.insert(auditLogs).values({

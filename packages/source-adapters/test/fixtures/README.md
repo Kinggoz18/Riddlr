@@ -12,3 +12,9 @@ Captured from live provider responses. Secrets are not present in these files.
 | `coingecko/simple-price-empty.json` | Empty JSON object (`{}`), the documented empty map body | 2026-09-13 |
 | `coingecko/simple-price-drift-missing-usd.json` | Captured simple/price body with bitcoin `usd` removed to represent schema drift | 2026-09-13 |
 | `coingecko/simple-price-invalid.json` | `GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=` (HTTP 422) | 2026-09-13 |
+| `feeds/rss-federalreserve-press-all.xml` | `GET https://www.federalreserve.gov/feeds/press_all.xml` (first three `<item>` elements) | 2026-09-14 |
+| `feeds/rss-federalreserve-empty-channel.xml` | Same capture with all `<item>` elements removed to represent an empty channel | 2026-09-14 |
+| `feeds/rss-federalreserve-drift-missing-title.xml` | First captured item with `<title>` removed to represent schema drift | 2026-09-14 |
+| `feeds/atom-github-bitcoin-releases.xml` | `GET https://github.com/bitcoin/bitcoin/releases.atom` (first two `<entry>` elements) | 2026-09-14 |
+| `feeds/atom-youtube-google.xml` | `GET https://www.youtube.com/feeds/videos.xml?channel_id=UCK8sQmJBp8GCxrOtXWBpyEA` (first `<entry>`) | 2026-09-14 |
+| `feeds/html-200-federalreserve-home.html` | `GET https://www.federalreserve.gov/` HTML 200 (first 25 lines) used as a non-XML body | 2026-09-14 |

@@ -363,6 +363,8 @@ export function adapterLabel(adapterId: string) {
       return "Discord";
     case "x":
       return "X";
+    case "feeds":
+      return "RSS/Atom";
     case "coingecko":
       return "CoinGecko";
     case "coinmarketcap":

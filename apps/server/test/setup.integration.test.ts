@@ -37,6 +37,7 @@ import {
   signalClaimProofs,
   signals,
   skills,
+  sources,
   users,
   watchlistItems,
   watchlists,
@@ -1706,6 +1707,94 @@ describe("setup, auth, and domain persistence", () => {
     await runScan(ctx, scan?.id as string, { fetchImpl });
     const evidence = await ctx.db.select().from(evidenceItems);
     expect(evidence.some((row) => row.canonicalUrl?.includes("x.com/alice/status/555"))).toBe(true);
+  });
+
+  it("stores an RSS/Atom feed, applies official trust, and persists captured items", async () => {
+    const feedUrl = "https://www.federalreserve.gov/feeds/press_all.xml";
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/feeds",
+      headers: { cookie },
+      payload: { name: "Federal Reserve press", feedUrl },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().source?.config?.trustTier).toBe("official_firsthand");
+    expect(created.json().source?.config?.feedUrl).toBe(feedUrl);
+    const loopback = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/feeds",
+      headers: { cookie },
+      payload: { name: "Loopback feed", feedUrl: "http://127.0.0.1/feed.xml" },
+    });
+    expect(loopback.statusCode).toBe(400);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/v1/sources/feeds",
+      headers: { cookie },
+      payload: { name: "Federal Reserve press again", feedUrl },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/sources",
+      headers: { cookie },
+    });
+    const feedAdapter = listed.json().adapters.find((item: { id: string }) => item.id === "feeds");
+    expect(feedAdapter.capabilities.lookbackNotes).toMatch(/If-None-Match/);
+    expect(feedAdapter.suggestedFeeds[0].url).toBe(feedUrl);
+
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-03-01T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:feeds-1",
+      })
+      .returning();
+    const rss = readFileSync(
+      join(
+        process.cwd(),
+        "packages/source-adapters/test/fixtures/feeds/rss-federalreserve-press-all.xml",
+      ),
+      "utf8",
+    );
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.coingecko.com")) {
+        return coinGeckoMarketsResponse();
+      }
+      if (url.includes("/search")) {
+        return Response.json({ results: [] });
+      }
+      if (url.includes("federalreserve.gov/feeds/press_all.xml")) {
+        return new Response(rss, {
+          status: 200,
+          headers: {
+            "content-type": "application/rss+xml",
+            etag: '"feed-etag"',
+            "last-modified": "Fri, 11 Sep 2026 14:00:13 GMT",
+          },
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await runScan(ctx, scan?.id as string, { fetchImpl });
+    const evidence = await ctx.db.select().from(evidenceItems);
+    expect(
+      evidence.some((row) =>
+        row.canonicalUrl?.includes(
+          "federalreserve.gov/newsevents/pressreleases/bcreg20260911a.htm",
+        ),
+      ),
+    ).toBe(true);
+    expect(evidence.some((row) => row.sourceFamily === "feed")).toBe(true);
+    const [feedRow] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.id, created.json().source?.id as string));
+    expect(feedRow?.config.lastEtag).toBe('"feed-etag"');
   });
 
   it("rejects seed phrases on portfolios and records WhatsApp inbound windows", async () => {

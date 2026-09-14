@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0">
+    <channel>
+        <title>FRB: Press Release - All Releases</title>
+        <link><![CDATA[https://www.federalreserve.gov/feeds/feeds.htm]]></link>
+        <description><![CDATA[All recent press releases from the Federal Reserve Board]]></description>
+        <language>en</language>
+        <item>
+            <title>Agencies seek comment on proposed third-party risk management guidance and issue statement on community bank engagement with core service providers</title>
+            <link><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/bcreg20260911a.htm]]></link>
+            <guid><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/bcreg20260911a.htm]]></guid>
+            <description><![CDATA[Agencies seek comment on proposed third-party risk management guidance and issue statement on community bank engagement with core service providers]]></description>
+            <category>Banking and Consumer Regulatory Policy</category>
+            <pubDate><![CDATA[Fri, 11 Sep 2026 14:00:00 GMT]]></pubDate>    
+        </item>
+<item>
+            <title>Agencies reduce regulatory burden for community banks, increase eligibility for 18-month exam cycle</title>
+            <link><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/bcreg20260910a.htm]]></link>
+            <guid><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/bcreg20260910a.htm]]></guid>
+            <description><![CDATA[Agencies reduce regulatory burden for community banks, increase eligibility for 18-month exam cycle]]></description>
+            <category>Banking and Consumer Regulatory Policy</category>
+            <pubDate><![CDATA[Thu, 10 Sep 2026 20:00:00 GMT]]></pubDate>    
+        </item>
+<item>
+            <title>Federal Reserve Board announces termination of enforcement actions with United Texas Bank, Quontic Bank Acquisition Corp., and Quontic Bank Holdings Corp.</title>
+            <link><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/enforcement20260904a.htm]]></link>
+            <guid><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/enforcement20260904a.htm]]></guid>
+            <description><![CDATA[Federal Reserve Board announces termination of enforcement actions with United Texas Bank, Quontic Bank Acquisition Corp., and Quontic Bank Holdings Corp.]]></description>
+            <category>Enforcement Actions</category>
+            <pubDate><![CDATA[Fri, 4 Sep 2026 15:00:00 GMT]]></pubDate>    
+        </item>
+    </channel>
+</rss>

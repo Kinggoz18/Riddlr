@@ -43,6 +43,14 @@ export const MAX_RETENTION_LOOPS = 40;
 export const OBSERVE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 export const MAX_OBSERVE_BODY_BYTES = 1_000_000;
 export const MAX_CATALYST_KINDS = 32;
+export const MAX_FEED_BODY_BYTES = 2_000_000;
+export const MAX_FEED_ITEMS = 50;
+export const MAX_FEED_ITEM_CHARS = 4_000;
+export const MAX_FEED_REDIRECTS = 3;
+export const DEFAULT_FEED_POLL_INTERVAL_SECONDS = 300;
+export const MIN_FEED_POLL_INTERVAL_SECONDS = 60;
+export const MAX_FEED_POLL_INTERVAL_SECONDS = 3_600;
+export const MAX_FEED_BACKOFF_SECONDS = 3_600;
 
 export function clampPageSize(value: unknown, fallback = DEFAULT_PAGE_SIZE): number {
   const parsed = Number(value);

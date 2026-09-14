@@ -120,6 +120,7 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByRole("heading", { name: "Publisher hosts" })).toBeVisible();
   await page.getByRole("link", { name: "Add source" }).click();
   await expect(page.getByRole("heading", { name: "Discord" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "RSS/Atom" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "CoinGecko" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "CoinMarketCap" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Crypto.com Exchange" })).toBeVisible();
@@ -127,6 +128,10 @@ test("dashboard surfaces, settings, health, and responsive layout @a11y", async 
   await expect(page.getByRole("heading", { name: "Add Discord source" })).toBeVisible();
   await expect(page.getByText(/MESSAGE_CONTENT/)).toBeVisible();
   await expect(page.getByText(/not guild message-search archive/i)).toBeVisible();
+  await page.getByRole("link", { name: "Add source" }).click();
+  await page.getByRole("link", { name: "Configure RSS/Atom" }).click();
+  await expect(page.getByRole("heading", { name: "Add RSS/Atom source" })).toBeVisible();
+  await expect(page.getByText(/If-None-Match/)).toBeVisible();
   await page.getByRole("link", { name: "Add source" }).click();
   await page.getByRole("link", { name: "Configure X" }).click();
   await expect(page.getByRole("heading", { name: "Add X source" })).toBeVisible();

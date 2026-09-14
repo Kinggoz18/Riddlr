@@ -1,6 +1,7 @@
 import { DEFAULT_DAILY_TOKEN_BUDGET as domainDefault } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import {
+  adapterLabel,
   assetLabel,
   auditActionLabel,
   auditResourceLabel,
@@ -74,6 +75,7 @@ describe("agent labels", () => {
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
     expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
+    expect(adapterLabel("feeds")).toBe("RSS/Atom");
   });
 });
 

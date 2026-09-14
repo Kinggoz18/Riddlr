@@ -3,8 +3,11 @@ import {
   CATALYST_KINDS,
   MARKET_DOMAIN_IDS,
   MAX_DAILY_TOKEN_BUDGET,
+  MAX_FEED_POLL_INTERVAL_SECONDS,
   MIN_DAILY_TOKEN_BUDGET,
+  MIN_FEED_POLL_INTERVAL_SECONDS,
   SETUP_STEPS,
+  TRUST_TIERS,
 } from "@riddlr/domain";
 import { z } from "zod";
 
@@ -192,6 +195,29 @@ export const coinmarketcapSourceSchema = z.object({
 export const cryptocomSourceSchema = z.object({
   name: z.string().min(3).max(80).default("Crypto.com Exchange"),
   assetIds: z.array(z.string().min(2).max(80)).max(16).optional(),
+});
+
+export const feedSourceSchema = z.object({
+  name: z.string().min(3).max(80).default("RSS/Atom feed"),
+  feedUrl: z
+    .string()
+    .min(12)
+    .max(2048)
+    .refine((value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "Feed URL must be http or https."),
+  trustTier: z.enum(TRUST_TIERS).optional(),
+  pollIntervalSeconds: z
+    .number()
+    .int()
+    .min(MIN_FEED_POLL_INTERVAL_SECONDS)
+    .max(MAX_FEED_POLL_INTERVAL_SECONDS)
+    .optional(),
 });
 
 export const discordSourceSchema = z.object({

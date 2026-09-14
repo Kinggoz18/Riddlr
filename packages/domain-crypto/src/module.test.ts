@@ -322,6 +322,7 @@ describe("crypto domain module", () => {
       "cryptocurrency bitcoin ethereum stablecoin news",
     );
     expect(cryptoDomainModule.sourceQuery({ adapterId: "x", watchlist: [] })).toBe("crypto");
+    expect(cryptoDomainModule.sourceQuery({ adapterId: "feeds", watchlist: [] })).toBe("");
   });
 
   it("rejects observed-anomaly kinds on the document claim path", () => {

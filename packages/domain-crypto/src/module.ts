@@ -307,6 +307,9 @@ export const cryptoDomainModule: DomainModule = {
     if (input.adapterId === "x" || input.adapterId === "discord") {
       return watchlistSearchQuery(watchlist, "crypto");
     }
+    if (input.adapterId === "feeds") {
+      return "";
+    }
     return watchlist.map((item) => item.canonicalId).join(" ");
   },
   canonicalizeAsset(input, registry: readonly RegistryAsset[] = []) {

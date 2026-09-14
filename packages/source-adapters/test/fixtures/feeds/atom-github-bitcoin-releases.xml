@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/bitcoin/bitcoin/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/bitcoin/bitcoin/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/bitcoin/bitcoin/releases.atom"/>
+  <title>Release notes from bitcoin</title>
+  <updated>2026-07-08T10:57:16Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/1181927/v29.4</id>
+    <updated>2026-07-10T14:25:37Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bitcoin/bitcoin/releases/tag/v29.4"/>
+    <title>Bitcoin Core 29.4</title>
+    <content type="html">&lt;p&gt;Bitcoin Core version 29.4 is now available from:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://bitcoincore.org/bin/bitcoin-core-29.4/&quot; rel=&quot;nofollow&quot;&gt;https://bitcoincore.org/bin/bitcoin-core-29.4/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;For the release notes please see the git repository:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/bitcoin/bitcoin/blob/master/doc/release-notes/release-notes-29.4.md&quot;&gt;https://github.com/bitcoin/bitcoin/blob/master/doc/release-notes/release-notes-29.4.md&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Do not use the links provided by GitHub, rather use the above download links, they are guaranteed to be generated deterministically and signed.&lt;/p&gt;</content>
+    <author>
+      <name>fanquake</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/863730?s=60&amp;v=4"/>
+  </entry>
+<entry>
+    <id>tag:github.com,2008:Repository/1181927/v31.1</id>
+    <updated>2026-07-08T09:14:15Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/bitcoin/bitcoin/releases/tag/v31.1"/>
+    <title>Bitcoin Core 31.1</title>
+    <content type="html">&lt;p&gt;Bitcoin Core version 31.1 is now available from:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://bitcoincore.org/bin/bitcoin-core-31.1/&quot; rel=&quot;nofollow&quot;&gt;https://bitcoincore.org/bin/bitcoin-core-31.1/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;For the release notes please see the git repository:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/bitcoin/bitcoin/blob/master/doc/release-notes/release-notes-31.1.md&quot;&gt;https://github.com/bitcoin/bitcoin/blob/master/doc/release-notes/release-notes-31.1.md&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Do not use the links provided by GitHub. Use the above download links instead, as they are guaranteed to be generated deterministically and signed.&lt;/p&gt;</content>
+    <author>
+      <name>fanquake</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/863730?s=60&amp;v=4"/>
+  </entry>
+</feed>

@@ -9,7 +9,7 @@ pnpm licenses:check
 
 Unit tests cover domain registry, fingerprints, clustering, encryption, schema validation,
 materiality, schedules, prompt wrapping, provider adapters, Discord REST
-fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
+fixtures, RSS/Atom feed fixtures, X recent-search fixtures, WhatsApp session-window rules, portfolios,
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock and volume detectors, catalyst
@@ -24,7 +24,7 @@ coming-soon scan rejection, custom agents, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
 backfill, observation poll to series, detectors, and observed events without an
 article, token-budget skip, Discord token encryption and official REST
-polling, X bearer encryption and recent search, session rotation after 2FA,
+polling, X bearer encryption and recent search, RSS/Atom feed create and poll, session rotation after 2FA,
 recovery codes, password reset hashing, Resend settings, secret non-disclosure, notification
 claim-before-send, session idle/cap, recovery rotate, key rotation with a previous
 master key, WhatsApp HMAC webhooks, paginated audit/lists, audit clear,
@@ -47,7 +47,7 @@ pnpm compose:smoke
 TOTP enrollment can be skipped during first-run and enabled later in Settings.
 Do not call `/setup/totp/start` after setup is complete.
 
-Integration tests mock SearXNG, Discord, X, WhatsApp, and LLM HTTP in-process. They do not
+Integration tests mock SearXNG, Discord, X, RSS/Atom, WhatsApp, and LLM HTTP in-process. They do not
 call live provider networks. The intelligence-flow fixture returns HTML for
 eligible search URLs, treats snippets as incomplete, and asserts a
 repeat scan reuses evidence fingerprints and the same event row. A syndication
@@ -56,8 +56,8 @@ corroboration. Signal proof rows must match `claim_evidence`.
 
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
 search against a running Compose stack, the Health Observations card, opening
-an observed quantitative event on Events, and the catalyst kind label on that
-event.
+an observed quantitative event on Events, the catalyst kind label on that
+event, and the RSS/Atom source form.
 First-run credentials default to `ops@example.com`. On an already-set-up
 instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
 `RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips

@@ -95,6 +95,7 @@ import {
   createCoinMarketCapAdapter,
   createCryptoComAdapter,
   createDiscordAdapter,
+  createFeedsAdapter,
   createSearxngAdapter,
   createXAdapter,
   redactRequestUrl,
@@ -193,6 +194,7 @@ export async function runScan(
     adapters.register(createSearxngAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createDiscordAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createXAdapter(deps.fetchImpl ?? fetch));
+    adapters.register(createFeedsAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinGeckoAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCoinMarketCapAdapter(deps.fetchImpl ?? fetch));
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
@@ -312,12 +314,19 @@ export async function runScan(
       } else {
         sourceSuccesses += 1;
       }
+      const persistConfig =
+        result.adapterMetadata &&
+        typeof result.adapterMetadata.persistConfig === "object" &&
+        result.adapterMetadata.persistConfig !== null
+          ? (result.adapterMetadata.persistConfig as Record<string, unknown>)
+          : undefined;
       await ctx.db
         .update(sources)
         .set({
           lastHealthOk: result.evidence.length > 0 || result.errors.length === 0,
           lastHealthMessage: result.errors[0]?.message ?? "ok",
           lastHealthAt: new Date(),
+          ...(persistConfig ? { config: { ...source.config, ...persistConfig } } : {}),
         })
         .where(eq(sources.id, source.id));
       collected.push(

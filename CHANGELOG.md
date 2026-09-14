@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- RSS/Atom evidence adapter: operator-pasted feed URLs poll as snippets with
+  SSRF, no DTD, ETag backoff, and trust set on the feed hostname. Sources →
+  Add source → Configure RSS/Atom. See
+  [docs/integrations/feeds.md](docs/integrations/feeds.md).
+
 - Cross-domain catalyst taxonomy: full documents use regex as a first pass and
   cached LLM understanding as the primary claim extractor. Quantitative claims
   require value and unit. Signal `eventType` is a taxonomy kind. Events and

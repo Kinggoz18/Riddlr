@@ -42,6 +42,7 @@ type Adapter = {
   capabilities?: { lookbackNotes?: string };
   botPermissions?: number;
   comingSoon?: boolean;
+  suggestedFeeds?: Array<{ name: string; url: string; trustTier: string }>;
 };
 
 const DISCORD_SNOWFLAKE = /^\d{17,20}$/;
@@ -70,6 +71,11 @@ function discordBotInviteUrl(clientId: string, permissions: number) {
 }
 
 const ADAPTERS = [
+  {
+    id: "feeds",
+    name: "RSS/Atom",
+    body: "Exchange announcements, protocol blogs, central-bank feeds, Substack, and YouTube channel feeds. You can add more than one.",
+  },
   {
     id: "discord",
     name: "Discord",
@@ -130,7 +136,7 @@ function SourcesList() {
     <>
       <PageHeader
         title="Sources"
-        description="Connectors that produce untrusted evidence. Only one market-data source is enabled at a time."
+        description="Connectors that produce untrusted evidence. RSS/Atom and Discord can be added more than once. Only one market-data source is enabled at a time."
         actions={<SourcesSubnav />}
       />
       {rows.length === 0 ? (
@@ -338,13 +344,13 @@ function SourcePicker() {
     <>
       <PageHeader
         title="Add source"
-        description="Discord can be added more than once. Market-data sources replace each other: only one is active."
+        description="Discord, X, and RSS/Atom can be added more than once. Market-data sources replace each other: only one is active."
         actions={<SourcesSubnav />}
       />
       <section className="adapter-grid">
         {ADAPTERS.map((adapter) => {
           const existing = rows.find((row) => row.adapterId === adapter.id);
-          const unique = adapter.id !== "discord" && adapter.id !== "x";
+          const unique = adapter.id !== "discord" && adapter.id !== "x" && adapter.id !== "feeds";
           return (
             <Card key={adapter.id}>
               <h2>{adapter.name}</h2>
@@ -362,6 +368,131 @@ function SourcePicker() {
           );
         })}
       </section>
+    </>
+  );
+}
+
+function FeedForm() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [name, setName] = useState("RSS/Atom feed");
+  const [feedUrl, setFeedUrl] = useState("");
+  const [trustTier, setTrustTier] = useState("community");
+  const [pollIntervalSeconds, setPollIntervalSeconds] = useState("300");
+  const [notes, setNotes] = useState<string>();
+  const [suggested, setSuggested] = useState<
+    Array<{ name: string; url: string; trustTier: string }>
+  >([]);
+  useEffect(() => {
+    void api<{ adapters: Adapter[] }>("/api/v1/sources").then((body) => {
+      const feeds = body.adapters.find((item) => item.id === "feeds");
+      setNotes(feeds?.capabilities?.lookbackNotes);
+      setSuggested(feeds?.suggestedFeeds ?? []);
+    });
+  }, []);
+  return (
+    <>
+      <PageHeader
+        title="Add RSS/Atom source"
+        description="Operator-supplied http(s) URLs. Official feeds can be marked official firsthand at add time."
+        actions={<SourcesSubnav />}
+      />
+      <Card>
+        {notes ? <p className="field-note">{notes}</p> : null}
+        {suggested.length > 0 ? (
+          <p className="field-note">
+            Suggested official feeds:{" "}
+            {suggested.map((item) => (
+              <button
+                key={item.url}
+                type="button"
+                className="ui-button ui-button-ghost"
+                onClick={() => {
+                  setFeedUrl(item.url);
+                  setName(item.name);
+                  setTrustTier(item.trustTier);
+                }}
+              >
+                {item.name}
+              </button>
+            ))}
+          </p>
+        ) : null}
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/v1/sources/feeds", {
+                method: "POST",
+                body: JSON.stringify({
+                  name,
+                  feedUrl,
+                  trustTier,
+                  pollIntervalSeconds: Number(pollIntervalSeconds),
+                }),
+              });
+              toast("Feed saved");
+              navigate("/sources");
+            } catch (err: unknown) {
+              toast(toastFail(err, "Couldn’t save feed"), "danger");
+            }
+          }}
+        >
+          <Field label="Source name">
+            <input
+              id="feed-source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="Feed URL"
+            hint="RSS 2.0 or Atom 1.0. Substack /feed and YouTube feeds/videos.xml?channel_id= are accepted."
+          >
+            <input
+              id="feed-url"
+              type="url"
+              value={feedUrl}
+              onChange={(e) => setFeedUrl(e.target.value)}
+              required
+              placeholder="https://www.federalreserve.gov/feeds/press_all.xml"
+            />
+          </Field>
+          <Field
+            label="Trust"
+            hint="Official firsthand can confirm listing, regulatory, macro, and incident events. Community is the default."
+          >
+            <select
+              id="feed-trust"
+              value={trustTier}
+              onChange={(e) => setTrustTier(e.target.value)}
+            >
+              <option value="community">community</option>
+              <option value="known_analyst">known analyst</option>
+              <option value="official_firsthand">official firsthand</option>
+              <option value="unknown">unknown</option>
+              <option value="blocked">blocked</option>
+            </select>
+          </Field>
+          <Field
+            label="Poll interval seconds"
+            hint="60–3600. Default 300. Unchanged ETags back off up to one hour."
+          >
+            <input
+              id="feed-poll-interval"
+              type="number"
+              min={60}
+              max={3600}
+              value={pollIntervalSeconds}
+              onChange={(e) => setPollIntervalSeconds(e.target.value)}
+            />
+          </Field>
+          <p className="ui-actions">
+            <Button type="submit">Save RSS/Atom source</Button>
+          </p>
+        </form>
+      </Card>
     </>
   );
 }
@@ -747,6 +878,9 @@ function MarketForm(props: {
 
 function SourceCreate() {
   const { adapter } = useParams();
+  if (adapter === "feeds") {
+    return <FeedForm />;
+  }
   if (adapter === "discord") {
     return <DiscordForm />;
   }
@@ -869,6 +1003,27 @@ function SourceDetail() {
           <ChipList values={mentions} format={handleLabel} empty="None" />
           <h2>Keywords</h2>
           <ChipList values={keywords} empty="None" />
+        </Card>
+      ) : null}
+      {row.adapterId === "feeds" ? (
+        <Card>
+          <h2>Feed</h2>
+          <p className="field-note">
+            {typeof config.feedUrl === "string" ? config.feedUrl : "No URL"}
+          </p>
+          <p className="record-meta">
+            <span>
+              Trust{" "}
+              {(typeof config.trustTier === "string" ? config.trustTier : "community").replaceAll(
+                "_",
+                " ",
+              )}
+            </span>
+            <span>
+              Poll{" "}
+              {typeof config.pollIntervalSeconds === "number" ? config.pollIntervalSeconds : 300}s
+            </span>
+          </p>
         </Card>
       ) : null}
       {["coingecko", "coinmarketcap", "cryptocom"].includes(row.adapterId) ? (
