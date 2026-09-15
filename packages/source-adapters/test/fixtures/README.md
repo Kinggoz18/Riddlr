@@ -108,3 +108,9 @@ Captured from live provider responses. Secrets are not present in these files.
 | `openfigi/mapping-empty-array.json` | Empty JSON array (`[]`) | 2026-09-14 |
 | `openfigi/mapping-empty-object.json` | Empty JSON object (`{}`) | 2026-09-14 |
 | `openfigi/mapping-drift-missing-figi.json` | Captured AAPL match with `figi` removed to represent schema drift | 2026-09-14 |
+| `cryptocom/get-tickers-btc-usd.json` | `GET https://api.crypto.com/exchange/v1/public/get-tickers?instrument_name=BTC_USD` | 2026-09-15 |
+| `cryptocom/get-tickers-empty.json` | Same envelope with `result.data` emptied to represent an empty ticker list | 2026-09-15 |
+| `cryptocom/get-tickers-empty-object.json` | Empty JSON object (`{}`) | 2026-09-15 |
+| `cryptocom/get-tickers-drift-missing-last.json` | Captured BTC_USD row with last price `a` removed to represent schema drift | 2026-09-15 |
+
+CoinMarketCap quotes are not in this directory. Live capture needs a Pro key. Unit tests parse in-memory v3 envelopes.

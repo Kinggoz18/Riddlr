@@ -13,7 +13,7 @@ fixtures, RSS/Atom feed fixtures, DefiLlama fixtures, Hyperliquid fixtures, Bina
 skill routing, signal gating, claim corroboration, HTML extraction, enrichment
 eligibility, registry-driven asset resolution, CoinGecko registry fixtures,
 CoinGecko simple/price observations, return-shock, volume, TVL-drawdown, peg-deviation, market-stress, funding-divergence and odds-jump detectors, catalyst
-taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, morning since window and 24h change, EDGAR Atom/Form 4/EFTS fixtures, OpenFIGI mapping fixtures, operator integration pages for shipped APIs, and coming-soon rejection. Architecture tests keep generic packages from importing
+taxonomy mapping, quantitative claim contracts, event lifecycle and outcomes, typed signal policies, Discord incoming-webhook delivery, notification routing, observation threshold alerts, morning since window and 24h change, EDGAR Atom/Form 4/EFTS fixtures, OpenFIGI mapping fixtures, operator integration pages for shipped APIs, Crypto.com ticker fixtures, the detector replay harness, and coming-soon rejection. Architecture tests keep generic packages from importing
 `@riddlr/domain-crypto` or `@riddlr/domain-equities`. The domain-module contract is exercised with a
 test-only implementation, not a fake product domain.
 
@@ -62,7 +62,9 @@ Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
 search against a running Compose stack, Overview morning charts, opening an
 asset page from a morning card, the Health Observations card, opening
 an observed quantitative event on Events, the catalyst kind label on that
-event, and the RSS/Atom source form.
+event, the RSS/Atom source form, and Discord incoming-webhook configuration
+with a recorded delivery. Discord delivery requires
+`RIDDLR_E2E_DISCORD_WEBHOOK` set to a type-1 incoming webhook URL.
 First-run credentials default to `ops@example.com`. On an already-set-up
 instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
 `RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips
@@ -70,4 +72,16 @@ when setup is already complete.
 
 ```bash
 pnpm exec playwright test
+pnpm exec playwright test tests/e2e/morning.spec.ts tests/e2e/discord-delivery.spec.ts
 ```
+
+The replay harness (`apps/server/test/replay/`) runs under `pnpm test:unit`. It
+replays detectors, clustering, lead time, scorecard precision, UTC daily
+downsample, and a 1,000-subject load against recorded observation fixtures.
+
+```bash
+pnpm bench:observe
+```
+
+`pnpm bench:observe` prints RSS and peak RSS. Append those numbers to
+`docs/benchmarks.md`. It does not call live provider networks.

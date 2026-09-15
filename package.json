@@ -31,6 +31,7 @@
     "compose:reset": "docker compose down -v --remove-orphans && bash scripts/riddlr-up.sh",
     "licenses:check": "node scripts/check-licenses.mjs",
     "compose:smoke": "node scripts/compose-smoke.mjs",
+    "bench:observe": "tsx scripts/benchmark-observe.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm licenses:check"
   },
   "dependencies": {

@@ -51,4 +51,14 @@ describe("operator integration docs", () => {
     expect(existsSync(join(root, "docs/sources/edgar.md"))).toBe(true);
     expect(existsSync(join(root, "docs/sources/coinmarketcap.md"))).toBe(true);
   });
+
+  it("keeps dated Crypto.com ticker fixtures and records the CoinMarketCap capture gap", () => {
+    const fixtures = join(root, "packages/source-adapters/test/fixtures");
+    expect(existsSync(join(fixtures, "cryptocom/get-tickers-btc-usd.json"))).toBe(true);
+    const readme = readFileSync(join(fixtures, "README.md"), "utf8");
+    expect(readme).toMatch(/cryptocom\/get-tickers-btc-usd\.json/);
+    expect(readme).toMatch(/CoinMarketCap quotes are not in this directory/);
+    const cmc = readFileSync(join(root, "docs/integrations/coinmarketcap.md"), "utf8");
+    expect(cmc).toMatch(/Live capture needs a Pro key/);
+  });
 });

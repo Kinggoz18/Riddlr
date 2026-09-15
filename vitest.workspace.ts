@@ -7,6 +7,7 @@ export default defineWorkspace([
       include: [
         "packages/**/*.test.ts",
         "apps/server/test/unit/**/*.test.ts",
+        "apps/server/test/replay/**/*.test.ts",
         "apps/web/src/**/*.test.ts",
         "scripts/**/*.test.ts",
       ],

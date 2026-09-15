@@ -1,0 +1,8 @@
+{
+  "id": -1,
+  "method": "public/get-tickers",
+  "code": 0,
+  "result": {
+    "data": []
+  }
+}

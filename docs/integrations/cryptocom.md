@@ -49,5 +49,11 @@ A failed instrument does not drop other instruments on the same scan.
 
 ## Fixtures
 
-No recorded HTTP capture is in the tree. The unit test parses an in-memory
-`public/get-tickers` envelope for `BTC_USD`.
+| File | URL | Captured |
+| --- | --- | --- |
+| `cryptocom/get-tickers-btc-usd.json` | `GET https://api.crypto.com/exchange/v1/public/get-tickers?instrument_name=BTC_USD` | 2026-09-15 |
+| `cryptocom/get-tickers-empty.json` | Same envelope with `result.data` emptied | 2026-09-15 |
+| `cryptocom/get-tickers-empty-object.json` | Empty JSON object (`{}`) | 2026-09-15 |
+| `cryptocom/get-tickers-drift-missing-last.json` | Captured row with last price `a` removed | 2026-09-15 |
+
+HTTP 429 is classified at the fetch seam (`classifyHttpStatus(429)` → `rate_limited`) without a captured 429 body.

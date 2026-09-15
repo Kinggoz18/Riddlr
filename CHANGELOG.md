@@ -4,6 +4,13 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Replay harness under `apps/server/test/replay/` feeds recorded observation
+  fixtures and spec-shaped series through detectors, clustering, lead time, and
+  the scorecard. `pnpm bench:observe` records RSS and peak RSS for 1,000
+  subjects × 5 providers. Playwright covers morning charts and Discord webhook
+  delivery (`RIDDLR_E2E_DISCORD_WEBHOOK`). Crypto.com tickers have dated HTTP
+  fixtures. CoinMarketCap still needs a Pro key for a live capture.
+
 - Equities is a supported market domain on SEC EDGAR (Form 4, 8-K items, EFTS)
   with OpenFIGI identifier mapping. Canonical ids are `sec:` plus a 10-digit
   CIK. The default agent stays Crypto. Onboarding stays four steps. Forex,

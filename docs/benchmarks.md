@@ -117,3 +117,30 @@ Not measured on this run: source fan-out time, queue wait, evidence
 throughput, scan duration, AI provider latency.
 
 No numeric latency or throughput targets are published.
+
+## 15 Sep 2026 — in-process observe load (1,000 subjects × 5 providers)
+
+Conditions:
+
+- host: Apple M2, 8 CPUs, 16 GiB RAM, Darwin 25.5.0 arm64
+- Node v22.23.2
+- not Compose; no SearXNG scan; no LLM provider round-trip; no live provider HTTP
+- measurement: `pnpm bench:observe` (`snapshotProcessMemory()` after parsing five
+  recorded observation fixtures and running return-shock, volume, TVL-drawdown,
+  open-interest, and odds-jump detectors over 1,000 subjects with a 21-point
+  one-minute window). Raw series downsample to one UTC daily point per subject
+  for two UTC days (2,000 daily points). SQL retention delete batches stay
+  Compose-only.
+- `RIDDLR_OBSERVE_MAX_SUBJECTS` default 1,000; detector window 20; five
+  providers: CoinGecko `/simple/price`, Hyperliquid `metaAndAssetCtxs`,
+  DefiLlama protocol TVL, Polymarket midpoint, Binance USD-M `premiumIndex`
+
+Parsed fixture values on this run: CoinGecko bitcoin spot 77_333; Hyperliquid
+BTC mark 78_540.9; DefiLlama Aave TVL 18_218_792_583; Polymarket mid 0.905;
+Binance BTC mark 78_732.5. Each detector fired on all 1,000 subjects.
+
+| sample | RSS | peak RSS |
+| --- | --- | --- |
+| after 1,000 × 5 detectors | 102_236_160 bytes (97.5 MiB) | 102_236_160 bytes |
+
+No numeric latency or throughput targets are published.
