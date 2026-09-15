@@ -80,6 +80,10 @@ export const pageQuerySchema = z.object({
   before: z.string().optional(),
 });
 
+export const eventsListQuerySchema = pageQuerySchema.extend({
+  reliability: z.enum(RELIABILITY_STATUSES).optional(),
+});
+
 export const llmSetupSchema = z.object({
   provider: z.enum(["openai_compatible", "anthropic_compatible"]),
   baseUrl: z.string().url(),

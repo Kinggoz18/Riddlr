@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { CatalystKind } from "./catalysts.js";
-import { isCatalystKind, isSubjectFreeCatalyst } from "./catalysts.js";
+import type { CatalystKind } from "./catalyst-kinds.js";
+import { isCatalystKind, isSubjectFreeCatalyst } from "./catalyst-kinds.js";
 import { CLUSTER_SIMILARITY_THRESHOLD, CLUSTER_WINDOW_MS, isNearDuplicate } from "./cluster.js";
 import type { RegistryAsset } from "./domain-module.js";
 import {

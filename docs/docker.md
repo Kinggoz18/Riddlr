@@ -26,6 +26,8 @@ postgres 17, valkey 8, searxng, mailpit v1.27.
 
 `RIDDLR_LOCAL_COMPOSE=true` allows generated volume secrets. Production without that
 flag requires `RIDDLR_COOKIE_SECRET` and `RIDDLR_ENCRYPTION_MASTER_KEY`.
+The API then trusts Caddy's `X-Forwarded-For` so dashboard rate limits are not
+shared by every browser as a single Docker-network IP.
 
 Postgres and Valkey are not published on localhost in the default file.
 

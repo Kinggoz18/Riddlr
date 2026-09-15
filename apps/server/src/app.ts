@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   completeSetupSchema,
   emailSetupSchema,
+  eventsListQuerySchema,
   keyRotateSchema,
   llmSetupSchema,
   loginSchema,
@@ -104,7 +105,11 @@ import {
   publicObservationAlertRules,
   registerNotificationTargetRoutes,
 } from "./modules/notification-api.js";
-import { observationHealth, registerObservationRoutes } from "./modules/observe.js";
+import {
+  observationHealth,
+  registerObservationRoutes,
+  seedE2eObservedShock,
+} from "./modules/observe.js";
 import { loadScorecard } from "./modules/outcomes.js";
 import {
   registerNotificationSettingsRoutes,
@@ -194,7 +199,11 @@ function requireUser(
 
 export async function buildApp(ctx: AppContext) {
   ensureSetupGate(ctx);
-  const app = Fastify({ loggerInstance: ctx.logger, bodyLimit: 1_000_000 });
+  const app = Fastify({
+    loggerInstance: ctx.logger,
+    bodyLimit: 1_000_000,
+    trustProxy: ctx.config.RIDDLR_LOCAL_COMPOSE === "true",
+  });
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
     const raw = Buffer.isBuffer(body) ? body : Buffer.from(body);
     (request as FastifyRequest & { rawBody?: Buffer }).rawBody = raw;
@@ -216,10 +225,21 @@ export async function buildApp(ctx: AppContext) {
   await app.register(cors, { origin: ctx.config.RIDDLR_PUBLIC_URL, credentials: true });
   await app.register(cookie);
   await app.register(rateLimit, {
-    max: 200,
+    max: 600,
     timeWindow: "1 minute",
     redis: ctx.redis,
     nameSpace: "riddlr-rl-",
+    allowList: (request) => {
+      const path = request.url.split("?")[0];
+      return path === "/healthz" || path === "/api/v1/setup/status";
+    },
+    keyGenerator: (request) => {
+      const token = request.cookies[COOKIE];
+      if (token) {
+        return `sess:${hashToken(token).slice(0, 32)}`;
+      }
+      return request.ip;
+    },
   });
   const authLimit = { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } };
   const totpLimit = { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } };
@@ -534,6 +554,11 @@ export async function buildApp(ctx: AppContext) {
       firstScanQueued = true;
     } catch (error) {
       ctx.logger.warn({ err: error, agentId: agent.id }, "first scan enqueue failed");
+    }
+    try {
+      await seedE2eObservedShock(ctx);
+    } catch (error) {
+      ctx.logger.warn({ err: error }, "e2e observation seed failed");
     }
     return { ok: true, next: "complete", firstScanQueued };
   });
@@ -1113,17 +1138,22 @@ export async function buildApp(ctx: AppContext) {
     };
   });
   app.get("/api/v1/events", { preHandler: authed }, async (request) => {
-    const query = pageQuerySchema.parse(request.query);
+    const query = eventsListQuerySchema.parse(request.query);
     const limit = clampPageSize(query.limit, ctx.config.RIDDLR_PAGE_SIZE);
     const before = parsePageCursor(query.before);
-    const rows = before
-      ? await ctx.db
-          .select()
-          .from(events)
-          .where(lt(events.windowStart, before))
-          .orderBy(desc(events.windowStart))
-          .limit(limit)
-      : await ctx.db.select().from(events).orderBy(desc(events.windowStart)).limit(limit);
+    const filters = [
+      before ? lt(events.windowStart, before) : undefined,
+      query.reliability ? eq(events.reliabilityStatus, query.reliability) : undefined,
+    ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const rows =
+      filters.length > 0
+        ? await ctx.db
+            .select()
+            .from(events)
+            .where(and(...filters))
+            .orderBy(desc(events.windowStart))
+            .limit(limit)
+        : await ctx.db.select().from(events).orderBy(desc(events.windowStart)).limit(limit);
     const ids = rows.map((row) => row.id);
     const assetLinks =
       ids.length > 0

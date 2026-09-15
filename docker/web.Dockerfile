@@ -16,6 +16,7 @@ COPY packages/source-adapters/package.json packages/source-adapters/package.json
 COPY packages/llm/package.json packages/llm/package.json
 COPY packages/notifications/package.json packages/notifications/package.json
 COPY packages/domain-crypto/package.json packages/domain-crypto/package.json
+COPY packages/domain-equities/package.json packages/domain-equities/package.json
 COPY packages/testkit/package.json packages/testkit/package.json
 COPY apps/server/package.json apps/server/package.json
 RUN pnpm install --frozen-lockfile

@@ -41,6 +41,7 @@ import {
   DEFAULT_X_MONTHLY_READ_BUDGET,
   type IdentityClaimObservation,
   MAX_IDENTITY_TRACK_ROWS,
+  MAX_INSTANCE_SOURCES,
   MAX_LABELED_ADDRESSES,
   parsePageCursor,
   type TrustTier,
@@ -71,7 +72,7 @@ import {
   parseSnapshotSpaces,
   SUGGESTED_FEEDS,
 } from "@riddlr/source-adapters";
-import { and, count, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import { monitoredAddresses, syncAddressActivityWebhooks } from "./inbound-webhooks.js";
@@ -162,7 +163,11 @@ export function registerSourceRoutes(
   }
 
   app.get("/api/v1/sources", { preHandler: authed }, async () => {
-    const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+    const rows = await ctx.db
+      .select()
+      .from(sources)
+      .orderBy(asc(sources.adapterId), asc(sources.id))
+      .limit(MAX_INSTANCE_SOURCES);
     return {
       sources: rows.map(publicSource),
       adapters: [
@@ -493,19 +498,9 @@ export function registerSourceRoutes(
         .code(400)
         .send({ error: { code: "invalid_source", message: validated.message } });
     }
-    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-      return reply.code(400).send({
-        error: {
-          code: "source_limit",
-          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-        },
-      });
-    }
-    if (existing.some((row) => row.adapterId === "snapshot")) {
-      return reply.code(409).send({
-        error: { code: "source_exists", message: "Snapshot is already configured." },
-      });
+    const gate = await gateExistingAdapter(ctx, "snapshot", "Snapshot is already configured.");
+    if (!gate.ok) {
+      return sendSourceGate(reply, gate);
     }
     const [source] = await ctx.db
       .insert(sources)
@@ -550,19 +545,9 @@ export function registerSourceRoutes(
 
   app.post("/api/v1/sources/alchemy", { preHandler: authed }, async (request, reply) => {
     const body = alchemySourceSchema.parse(request.body);
-    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-      return reply.code(400).send({
-        error: {
-          code: "source_limit",
-          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-        },
-      });
-    }
-    if (existing.some((row) => row.adapterId === "alchemy")) {
-      return reply.code(409).send({
-        error: { code: "source_exists", message: "Alchemy is already configured." },
-      });
+    const gate = await gateExistingAdapter(ctx, "alchemy", "Alchemy is already configured.");
+    if (!gate.ok) {
+      return sendSourceGate(reply, gate);
     }
     const notify = encryptSecret({
       masterKey: ctx.masterKey,
@@ -693,19 +678,9 @@ export function registerSourceRoutes(
 
   app.post("/api/v1/sources/helius", { preHandler: authed }, async (request, reply) => {
     const body = heliusSourceSchema.parse(request.body);
-    const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-    if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-      return reply.code(400).send({
-        error: {
-          code: "source_limit",
-          message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-        },
-      });
-    }
-    if (existing.some((row) => row.adapterId === "helius")) {
-      return reply.code(409).send({
-        error: { code: "source_exists", message: "Helius is already configured." },
-      });
+    const gate = await gateExistingAdapter(ctx, "helius", "Helius is already configured.");
+    if (!gate.ok) {
+      return sendSourceGate(reply, gate);
     }
     const apiKey = encryptSecret({
       masterKey: ctx.masterKey,
@@ -1172,6 +1147,46 @@ export function registerSourceRoutes(
   });
 }
 
+type SourceCreateGate =
+  | { ok: true }
+  | { ok: false; status: 400 | 409; code: string; message: string };
+
+async function gateSourceCapacity(ctx: AppContext): Promise<SourceCreateGate> {
+  const [row] = await ctx.db.select({ value: count() }).from(sources);
+  if (Number(row?.value ?? 0) >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
+    return {
+      ok: false,
+      status: 400,
+      code: "source_limit",
+      message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
+    };
+  }
+  return { ok: true };
+}
+
+async function gateExistingAdapter(
+  ctx: AppContext,
+  adapterId: string,
+  message: string,
+): Promise<SourceCreateGate> {
+  const [existing] = await ctx.db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.adapterId, adapterId))
+    .limit(1);
+  if (existing) {
+    return { ok: false, status: 409, code: "source_exists", message };
+  }
+  return gateSourceCapacity(ctx);
+}
+
+function sendSourceGate(reply: FastifyReply, gate: SourceCreateGate) {
+  if (gate.ok) {
+    return undefined;
+  }
+  return reply.code(gate.status).send({ error: { code: gate.code, message: gate.message } });
+}
+
 async function insertSecretSource(
   ctx: AppContext,
   request: FastifyRequest,
@@ -1185,25 +1200,15 @@ async function insertSecretSource(
     config: Record<string, unknown>;
   },
 ) {
-  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-    return reply.code(400).send({
-      error: {
-        code: "source_limit",
-        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-      },
-    });
-  }
-  if (
-    isMarketDataAdapter(input.adapterId) &&
-    existing.some((row) => row.adapterId === input.adapterId)
-  ) {
-    return reply.code(409).send({
-      error: {
-        code: "source_exists",
-        message: `${input.name} is already configured. Enable it to make it the active market source.`,
-      },
-    });
+  const gate = isMarketDataAdapter(input.adapterId)
+    ? await gateExistingAdapter(
+        ctx,
+        input.adapterId,
+        `${input.name} is already configured. Enable it to make it the active market source.`,
+      )
+    : await gateSourceCapacity(ctx);
+  if (!gate.ok) {
+    return sendSourceGate(reply, gate);
   }
   const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
   const keyVersion = settingsRows[0]?.keyVersion ?? 1;
@@ -1261,22 +1266,13 @@ async function insertMarketSource(
     config: Record<string, unknown>;
   },
 ) {
-  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-    return reply.code(400).send({
-      error: {
-        code: "source_limit",
-        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-      },
-    });
-  }
-  if (existing.some((row) => row.adapterId === input.adapterId)) {
-    return reply.code(409).send({
-      error: {
-        code: "source_exists",
-        message: `${input.name} is already configured. Enable it to make it the active market source.`,
-      },
-    });
+  const gate = await gateExistingAdapter(
+    ctx,
+    input.adapterId,
+    `${input.name} is already configured. Enable it to make it the active market source.`,
+  );
+  if (!gate.ok) {
+    return sendSourceGate(reply, gate);
   }
   const [source] = await ctx.db
     .insert(sources)
@@ -1312,22 +1308,13 @@ async function insertUniqueSource(
     config: Record<string, unknown>;
   },
 ) {
-  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-    return reply.code(400).send({
-      error: {
-        code: "source_limit",
-        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-      },
-    });
-  }
-  if (existing.some((row) => row.adapterId === input.adapterId)) {
-    return reply.code(409).send({
-      error: {
-        code: "source_exists",
-        message: `${input.name} is already configured.`,
-      },
-    });
+  const gate = await gateExistingAdapter(
+    ctx,
+    input.adapterId,
+    `${input.name} is already configured.`,
+  );
+  if (!gate.ok) {
+    return sendSourceGate(reply, gate);
   }
   const [source] = await ctx.db
     .insert(sources)
@@ -1372,20 +1359,13 @@ async function insertFeedSource(
     pollIntervalSeconds: number;
   },
 ) {
-  const existing = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
-  if (existing.length >= ctx.config.RIDDLR_SCAN_SOURCE_LIMIT) {
-    return reply.code(400).send({
-      error: {
-        code: "source_limit",
-        message: `At most ${ctx.config.RIDDLR_SCAN_SOURCE_LIMIT} sources can be enabled.`,
-      },
-    });
-  }
-  const duplicate = existing.find(
-    (row) =>
-      row.adapterId === "feeds" &&
-      typeof row.config.feedUrl === "string" &&
-      row.config.feedUrl === input.feedUrl,
+  const feedRows = await ctx.db
+    .select()
+    .from(sources)
+    .where(eq(sources.adapterId, "feeds"))
+    .limit(MAX_INSTANCE_SOURCES);
+  const duplicate = feedRows.find(
+    (row) => typeof row.config.feedUrl === "string" && row.config.feedUrl === input.feedUrl,
   );
   if (duplicate) {
     return reply.code(409).send({
@@ -1394,6 +1374,10 @@ async function insertFeedSource(
         message: "That feed URL is already configured.",
       },
     });
+  }
+  const gate = await gateSourceCapacity(ctx);
+  if (!gate.ok) {
+    return sendSourceGate(reply, gate);
   }
   const [source] = await ctx.db
     .insert(sources)

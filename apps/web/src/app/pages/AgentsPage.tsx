@@ -1,4 +1,4 @@
-import { CATALYST_KINDS, IMPACT_LEVELS, RELIABILITY_STATUSES } from "@riddlr/domain";
+import { CATALYST_KINDS, IMPACT_LEVELS, RELIABILITY_STATUSES } from "@riddlr/domain/web";
 import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
@@ -95,13 +95,19 @@ function AgentSubnav() {
 
 function AgentsList() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [maxAgents, setMaxAgents] = useState(16);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const toast = useToast();
 
   useEffect(() => {
-    void api<{ agents: Agent[] }>("/api/v1/agents")
-      .then((body) => setAgents(body.agents))
+    void api<{ agents: Agent[]; maxAgents?: number }>("/api/v1/agents")
+      .then((body) => {
+        setAgents(body.agents);
+        if (typeof body.maxAgents === "number") {
+          setMaxAgents(body.maxAgents);
+        }
+      })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"))
       .finally(() => setLoading(false));
   }, []);
@@ -119,6 +125,14 @@ function AgentsList() {
         description="Watchers with a schedule, token budget, markdown skills, and a watchlist. Skills are policy text. They cannot grant tools or filesystem access."
         actions={<AgentSubnav />}
       />
+      <p className="record-meta">
+        {agents.length} of {maxAgents} agents
+      </p>
+      {agents.length >= maxAgents ? (
+        <p className="field-note">
+          At most {maxAgents} agents can exist. Delete one before creating another.
+        </p>
+      ) : null}
       {agents.length === 0 ? (
         <EmptyState
           title="No agents"
@@ -179,6 +193,8 @@ function AgentForm(props: {
 }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const [formError, setFormError] = useState<string>();
+  const [saving, setSaving] = useState(false);
   const [name, setName] = useState(props.agent?.name ?? "");
   const [description, setDescription] = useState(props.agent?.description ?? "");
   const [schedule, setSchedule] = useState(props.agent?.schedule ?? "1h");
@@ -227,6 +243,8 @@ function AgentForm(props: {
         <form
           onSubmit={async (event) => {
             event.preventDefault();
+            setFormError(undefined);
+            setSaving(true);
             try {
               const payload = {
                 name,
@@ -256,7 +274,11 @@ function AgentForm(props: {
                 navigate("/agents");
               }
             } catch (err: unknown) {
-              toast(toastFail(err, "Couldn’t save agent"), "danger");
+              const message = toastFail(err, "Couldn’t save agent");
+              setFormError(message);
+              toast(message, "danger");
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -454,8 +476,15 @@ function AgentForm(props: {
               </label>
             ))}
           </fieldset>
+          {formError ? (
+            <p role="alert" className="ui-field-error">
+              {formError}
+            </p>
+          ) : null}
           <p className="ui-actions">
-            <Button type="submit">{props.submitLabel}</Button>
+            <Button type="submit" disabled={saving}>
+              {props.submitLabel}
+            </Button>
             <NavLink
               to={props.agent ? `/agents/${props.agent.id}` : "/agents"}
               className="ui-button ui-button-ghost"
@@ -473,19 +502,43 @@ function AgentCreate() {
   const [catalog, setCatalog] = useState<Skill[]>([]);
   const [sourceCatalog, setSourceCatalog] = useState<Source[]>([]);
   const [error, setError] = useState<string>();
+  const [capMessage, setCapMessage] = useState<string>();
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     void Promise.all([
       api<{ skills: Skill[] }>("/api/v1/skills"),
       api<{ sources: Source[] }>("/api/v1/sources"),
+      api<{ agents: Agent[]; maxAgents?: number }>("/api/v1/agents"),
     ])
-      .then(([skills, sources]) => {
+      .then(([skills, sources, listed]) => {
         setCatalog(skills.skills);
         setSourceCatalog(sources.sources);
+        const max = listed.maxAgents ?? 16;
+        if (listed.agents.length >= max) {
+          setCapMessage(`At most ${max} agents can exist. Delete one before creating another.`);
+        }
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"))
+      .finally(() => setReady(true));
   }, []);
   if (error) {
     return <EmptyState title="Unable to load catalogs" body={error} />;
+  }
+  if (!ready) {
+    return <p>Loading catalogs…</p>;
+  }
+  if (capMessage) {
+    return (
+      <EmptyState
+        title="Agent limit reached"
+        body={capMessage}
+        action={
+          <NavLink to="/agents" className="ui-button ui-button-primary">
+            View agents
+          </NavLink>
+        }
+      />
+    );
   }
   return (
     <AgentForm

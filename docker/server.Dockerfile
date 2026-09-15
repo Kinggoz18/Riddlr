@@ -7,6 +7,7 @@ COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/domain/package.json packages/domain/package.json
 COPY packages/domain-crypto/package.json packages/domain-crypto/package.json
+COPY packages/domain-equities/package.json packages/domain-equities/package.json
 COPY packages/api-contract/package.json packages/api-contract/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/db/package.json packages/db/package.json

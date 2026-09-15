@@ -1,4 +1,4 @@
-import type { CatalystKind } from "./catalysts.js";
+import type { CatalystKind } from "./catalyst-kinds.js";
 import type { ClaimCandidate, NormalizedClaim } from "./claims.js";
 import type { NormalizedEvidence } from "./evidence.js";
 import type { EventJoinWindow } from "./lifecycle.js";

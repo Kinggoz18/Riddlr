@@ -1,4 +1,5 @@
-import { Button, Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
+import { RELIABILITY_STATUSES } from "@riddlr/domain/web";
+import { Button, Card, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
@@ -38,28 +39,56 @@ function EventsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [reliability, setReliability] = useState("");
+
+  function eventsUrl(before?: string) {
+    const params = new URLSearchParams({ limit: "50" });
+    if (before) {
+      params.set("before", before);
+    }
+    if (reliability) {
+      params.set("reliability", reliability);
+    }
+    return `/api/v1/events?${params.toString()}`;
+  }
+
   useEffect(() => {
-    void api<{ events: EventRow[] }>("/api/v1/events?limit=50")
+    setLoading(true);
+    setError(undefined);
+    void api<{ events: EventRow[] }>(eventsUrl())
       .then((value) => {
         setRows(value.events);
         setHasMore(value.events.length === 50);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"))
       .finally(() => setLoading(false));
-  }, []);
-  if (loading) {
-    return <p>Loading events…</p>;
-  }
-  if (error) {
-    return <EmptyState title="Unable to load events" body={error} />;
-  }
+  }, [reliability]);
+
   return (
     <>
       <PageHeader
         title="Events"
         description="Clusters of related evidence. Independent origins are not reprints. Discovery can surface a candidate before analysis. A candidate is not a recommendation to buy, sell, or trade. Signals are created later, only after material analysis and the signal gate."
       />
-      {rows.length === 0 ? (
+      <Field label="Reliability">
+        <select
+          value={reliability}
+          onChange={(event) => setReliability(event.target.value)}
+          aria-label="Reliability"
+        >
+          <option value="">All statuses</option>
+          {RELIABILITY_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {reliabilityStatusLabel(status)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {loading ? (
+        <p>Loading events…</p>
+      ) : error ? (
+        <EmptyState title="Unable to load events" body={error} />
+      ) : rows.length === 0 ? (
         <EmptyState
           title="No events"
           body="An event is a cluster of evidence — a web article or a quantitative anomaly on a watched asset. Independent origins are not reprints. Run a scan from Agents, or wait for the observation poll."
@@ -112,9 +141,7 @@ function EventsPage() {
                 if (!last) {
                   return;
                 }
-                const body = await api<{ events: EventRow[] }>(
-                  `/api/v1/events?limit=50&before=${encodeURIComponent(last.windowStart)}`,
-                );
+                const body = await api<{ events: EventRow[] }>(eventsUrl(last.windowStart));
                 setRows((current) => takeBoundedClient(current, body.events));
                 setHasMore(body.events.length === 50);
               }}

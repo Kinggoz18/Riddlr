@@ -20,7 +20,7 @@ test-only implementation, not a fake product domain.
 Integration tests use Testcontainers for PostgreSQL and Valkey. PostgreSQL
 uses a tmpfs data directory so the suite can start when the Docker VM disk is
 exhausted. They cover four-step onboarding, first-run access, default-agent Crypto association,
-coming-soon scan rejection, custom agents, Equities agent create, EDGAR 8-K
+coming-soon scan rejection, custom agents, agent cap (`agent_limit`), Equities agent create, EDGAR 8-K
 scan to official filing evidence, skill privilege rejection, canonical
 watchlist identity, CoinGecko registry seed and search, asset-registry migration
 backfill, observation poll to series, detectors, and observed events without an
@@ -61,19 +61,34 @@ corroboration. Signal proof rows must match `claim_evidence`.
 Playwright specs in `tests/e2e` cover adding a watchlist asset by registry
 search against a running Compose stack, Overview morning charts, opening an
 asset page from a morning card, the Health Observations card, opening
-an observed quantitative event on Events, the catalyst kind label on that
+an observed quantitative event on Events (Events → Reliability → Observed),
+the catalyst kind label on that
 event, the RSS/Atom source form, and Discord incoming-webhook configuration
-with a recorded delivery. Discord delivery requires
-`RIDDLR_E2E_DISCORD_WEBHOOK` set to a type-1 incoming webhook URL.
-First-run credentials default to `ops@example.com`. On an already-set-up
-instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
+with a recorded delivery. Discord delivery against Compose uses
+`docker-compose.e2e.yml`, which rewrites webhook fetches to
+`http://discord-webhook-mock:8080` and seeds a Bitcoin return-shock through
+the production detector path after setup. A live type-1 incoming webhook can
+still be supplied as `RIDDLR_E2E_DISCORD_WEBHOOK`.
+
+First-run credentials default to `ops@example.com`. The model step is skipped
+in Playwright: Compose runs `RIDDLR_ENV=production`, so Save provider probes
+the key and a dummy key cannot advance. On an already-set-up instance, set `RIDDLR_E2E_EMAIL` and `RIDDLR_E2E_PASSWORD` (and
 `RIDDLR_E2E_OTPAUTH` when authenticator is enabled). The first-run spec skips
 when setup is already complete.
 
 ```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+pnpm compose:smoke
 pnpm exec playwright test
-pnpm exec playwright test tests/e2e/morning.spec.ts tests/e2e/discord-delivery.spec.ts
 ```
+
+Playwright runs `onboarding.spec.ts` first (`workers: 1`). Morning and Discord
+projects depend on that file so a wiped Compose volume still completes
+first-run before those specs sign in.
+
+`docker/server.Dockerfile` and `docker/web.Dockerfile` copy every
+`packages/*/package.json` before `pnpm install` so workspace packages such as
+`@riddlr/domain-equities` are linked in the image.
 
 The replay harness (`apps/server/test/replay/`) runs under `pnpm test:unit`. It
 replays detectors, clustering, lead time, scorecard precision, UTC daily

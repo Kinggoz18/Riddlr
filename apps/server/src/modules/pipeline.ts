@@ -127,7 +127,7 @@ import {
   redactRequestUrl,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { listRegistryAssets, snapshotSpacesForAgent } from "./asset-registry.js";
 import {
@@ -378,6 +378,7 @@ export async function runScan(
       .from(agentSources)
       .innerJoin(sources, eq(agentSources.sourceId, sources.id))
       .where(and(eq(agentSources.agentId, scan.agentId), eq(sources.enabled, true)))
+      .orderBy(asc(sources.adapterId), asc(sources.id))
       .limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
     const boundSources = sourceRows
       .map((row) => row.source)

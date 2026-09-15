@@ -4,6 +4,15 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Creating a 17th agent returns `agent_limit`. The Agents list shows N of
+  `RIDDLR_MAX_AGENTS` and blocks the create form when the cap is reached.
+  Playwright adds a watchlist asset by registry search on the default watcher
+  instead of inserting a new agent on every run. Saving the same Discord
+  channel or the same observation-alert threshold returns the existing row.
+
+- Onboarding step 4 can select Equities. Crypto stays checked and remains the
+  default agent. Forex, Commodities, and Macro stay Coming soon.
+
 - Replay harness under `apps/server/test/replay/` feeds recorded observation
   fixtures and spec-shaped series through detectors, clustering, lead time, and
   the scorecard. `pnpm bench:observe` records RSS and peak RSS for 1,000

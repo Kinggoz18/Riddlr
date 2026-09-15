@@ -17,6 +17,8 @@ ObservationProvider → observation_series → detectors → observation evidenc
 ## Process split
 
 - `apps/web` — Vite React dashboard with a side navigation and light/dark appearance.
+  The SPA imports `@riddlr/domain/web` only. That export is constants and labels;
+  it does not pull `node:crypto` hashing used by evidence fingerprints.
   Overview is the morning view. Asset pages chart observation series with event
   markers. See [dashboard.md](dashboard.md) and
   [ADR 0030](adr/0030-dashboard-charting.md).

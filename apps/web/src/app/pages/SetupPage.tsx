@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { api, type Domain } from "../api.js";
 import { AuthShell } from "../Brand.js";
 import { passwordManagerLabel, storeInPasswordManager } from "../password-store.js";
+import {
+  completeSetupMarketDomains,
+  initialSetupMarketDomains,
+  toggleSetupMarketDomain,
+} from "../setup-domains.js";
 import { toastFail, useToast } from "../Toast.js";
 import { TotpEnroll } from "../TotpEnroll.js";
 
@@ -44,6 +49,7 @@ function SetupPage() {
   const [apiKey, setApiKey] = useState("");
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChat, setTelegramChat] = useState("");
+  const [marketDomainIds, setMarketDomainIds] = useState(initialSetupMarketDomains);
 
   async function refreshStatus() {
     const value = await api<SetupStatus>("/api/v1/setup/status");
@@ -442,9 +448,14 @@ function SetupPage() {
               <label key={domain.id} className="ui-field domain-option">
                 <input
                   type="checkbox"
-                  checked={domain.id === "crypto"}
-                  disabled={!domain.selectable}
-                  readOnly={domain.id === "crypto"}
+                  name="market-domain"
+                  checked={marketDomainIds.includes(domain.id)}
+                  disabled={!domain.selectable || domain.id === "crypto"}
+                  onChange={() =>
+                    setMarketDomainIds((current) =>
+                      toggleSetupMarketDomain(current, domain.id, domain.selectable),
+                    )
+                  }
                 />
                 <span>
                   {domain.name}{" "}
@@ -483,7 +494,7 @@ function SetupPage() {
                   await api("/api/v1/setup/complete", {
                     method: "POST",
                     body: JSON.stringify({
-                      marketDomainIds: ["crypto"],
+                      marketDomainIds: completeSetupMarketDomains(marketDomainIds),
                       telegramBotToken: telegramToken || undefined,
                       telegramChatId: telegramChat || undefined,
                     }),

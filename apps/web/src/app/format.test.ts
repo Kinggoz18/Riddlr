@@ -1,4 +1,4 @@
-import { DEFAULT_DAILY_TOKEN_BUDGET as domainDefault } from "@riddlr/domain";
+import { DEFAULT_DAILY_TOKEN_BUDGET as domainDefault } from "@riddlr/domain/web";
 import { describe, expect, it } from "vitest";
 import {
   adapterLabel,

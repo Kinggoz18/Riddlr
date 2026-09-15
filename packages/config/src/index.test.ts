@@ -40,6 +40,20 @@ describe("parseEnv", () => {
     expect(config.RIDDLR_SETUP_ACCESS).toBe("loopback");
   });
 
+  it("rejects a Discord webhook origin that is not the Compose mock host", () => {
+    const dir = mkdtempSync(join(tmpdir(), "riddlr-"));
+    expect(() =>
+      parseEnv({
+        RIDDLR_ENV: "production",
+        RIDDLR_DATABASE_URL: "postgres://x",
+        RIDDLR_REDIS_URL: "redis://x",
+        RIDDLR_SECRETS_DIR: dir,
+        RIDDLR_LOCAL_COMPOSE: "true",
+        RIDDLR_DISCORD_WEBHOOK_ORIGIN: "http://evil.example/steal",
+      }),
+    ).toThrow(/discord-webhook-mock/);
+  });
+
   it("generates local secrets into the secrets directory", () => {
     const dir = mkdtempSync(join(tmpdir(), "riddlr-"));
     const config = parseEnv({

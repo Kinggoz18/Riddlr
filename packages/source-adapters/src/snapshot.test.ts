@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonicalizeUrl } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import {
   createSnapshotAdapter,
@@ -36,6 +37,20 @@ describe("Snapshot governance adapter", () => {
     expect(parsed.proposals[0]?.link).toBe(
       "https://snapshot.box/#/s:grovefinance.eth/proposal/0x1a95608718c0fa345422e19fffce5f7e93f3af6d5a7e8318f567d11cfe545335",
     );
+    const firstProposal = parsed.proposals[0];
+    const secondProposal = parsed.proposals[1];
+    expect(firstProposal).toBeDefined();
+    expect(secondProposal).toBeDefined();
+    const first = snapshotEvidenceFromProposal(
+      firstProposal as NonNullable<typeof firstProposal>,
+      fetchedAt,
+    );
+    const second = snapshotEvidenceFromProposal(
+      secondProposal as NonNullable<typeof secondProposal>,
+      fetchedAt,
+    );
+    expect(canonicalizeUrl(first.canonicalUrl)).toContain("grovefinance.eth/proposal/");
+    expect(canonicalizeUrl(first.canonicalUrl)).not.toBe(canonicalizeUrl(second.canonicalUrl));
   });
 
   it("builds native-complete evidence with a snapshot space identity", () => {

@@ -27,6 +27,8 @@ const envSchema = z.object({
   RIDDLR_SECRETS_DIR: z.string().default(".secrets"),
   RIDDLR_GENERATE_DEV_SECRETS: z.enum(["true", "false"]).optional().default("false"),
   RIDDLR_LOCAL_COMPOSE: z.enum(["true", "false"]).optional().default("false"),
+  RIDDLR_DISCORD_WEBHOOK_ORIGIN: z.string().optional().default(""),
+  RIDDLR_E2E_SEED_OBSERVATIONS: z.enum(["true", "false"]).optional().default("false"),
   RIDDLR_PROCESS_ROLE: z.enum(["api", "worker"]).optional().default("api"),
   RIDDLR_METRICS_PUBLIC: z.enum(["true", "false"]).optional().default("false"),
   RIDDLR_ENCRYPTION_MASTER_KEY_PREVIOUS: z.string().optional().default(""),
@@ -112,6 +114,25 @@ export function parseEnv(raw: NodeJS.Dict<string> = process.env): AppConfig {
 
   if (!cookieSecret || !masterKey) {
     throw new Error("RIDDLR_COOKIE_SECRET and RIDDLR_ENCRYPTION_MASTER_KEY are required.");
+  }
+
+  if (env.RIDDLR_DISCORD_WEBHOOK_ORIGIN) {
+    if (env.RIDDLR_LOCAL_COMPOSE !== "true") {
+      throw new Error("RIDDLR_DISCORD_WEBHOOK_ORIGIN requires RIDDLR_LOCAL_COMPOSE=true.");
+    }
+    let origin: URL;
+    try {
+      origin = new URL(env.RIDDLR_DISCORD_WEBHOOK_ORIGIN);
+    } catch {
+      throw new Error("RIDDLR_DISCORD_WEBHOOK_ORIGIN must be a URL.");
+    }
+    if (
+      origin.protocol !== "http:" ||
+      origin.hostname !== "discord-webhook-mock" ||
+      (origin.port !== "" && origin.port !== "8080")
+    ) {
+      throw new Error("RIDDLR_DISCORD_WEBHOOK_ORIGIN must be http://discord-webhook-mock:8080");
+    }
   }
 
   return {

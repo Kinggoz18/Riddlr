@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATALYST_KINDS } from "./catalysts.js";
+import { CATALYST_KINDS } from "./catalyst-kinds.js";
 import { claimCandidateSchema, excerptPresent, takeClaims } from "./claims.js";
 import { MAX_CATALYST_KINDS, takeBounded } from "./limits.js";
 import { PAGE_CLASSES, type PageClass } from "./reliability.js";

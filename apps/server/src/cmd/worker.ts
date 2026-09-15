@@ -14,7 +14,11 @@ import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
 import { processInboundReceipt } from "../modules/inbound-webhooks.js";
 import { enrichAndUnderstandScan } from "../modules/intelligence.js";
 import { deliverSignalNotifications } from "../modules/notify.js";
-import { enqueueObserveIfDue, pollObservationProvider } from "../modules/observe.js";
+import {
+  enqueueObserveIfDue,
+  pollObservationProvider,
+  seedE2eObservedShock,
+} from "../modules/observe.js";
 import { recordDueOutcomes, resolveExpiredEvents } from "../modules/outcomes.js";
 import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
 import { enqueueAgentScan } from "../modules/scans.js";
@@ -208,6 +212,9 @@ const scheduler = setInterval(() => {
   });
   void enqueueObserveIfDue(ctx).catch((error) => {
     ctx.logger.warn({ err: error }, "observe enqueue tick failed");
+  });
+  void seedE2eObservedShock(ctx).catch((error) => {
+    ctx.logger.warn({ err: error }, "e2e observation seed failed");
   });
   void ctx.outcomesQueue
     ?.add(

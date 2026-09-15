@@ -15,7 +15,8 @@ source. Channel ingestion is documented in
 Riddlr checks the URL shape, resolves the host through the SSRF allowlist,
 then `GET`s the webhook and requires `type === 1`. The URL is stored encrypted
 and never returned. The list shows the Discord `channel_id` and whether the
-target is `ok` or `auth` (401/404, webhook deleted).
+target is `ok` or `auth` (401/404, webhook deleted). Saving a webhook for a
+channel that already has a target returns the existing row.
 
 ## Send
 
@@ -33,8 +34,12 @@ error falls back to `content` only. 401/404 mark the target `auth`. HTTP 429
 honors `retry_after` (including fractional seconds) up to 5 seconds and two
 retries. Per-webhook traffic is capped at 30 requests/minute; overflow and
 queue overflow (`32` pending) are recorded as failed deliveries, never dropped
-silently. High and critical still attempt send when the local minute budget is
-exhausted so informational traffic cannot starve them.
+silently. Queue overflow is recorded before cooldown or quiet hours so a full
+queue is not stored as a suppression. High and critical still attempt send when
+the local minute budget is exhausted so informational traffic cannot starve
+them. Confirmation, dispute, and retraction skip cooldown, quiet hours, and
+minimum-risk so they still follow the original destinations after a failed
+original send. Cooldown is per target, not shared across every webhook.
 
 Delivery claims a `pending` `notification_deliveries` row before the POST.
 Retries are idempotent. Confirmation, dispute, and retraction reuse the
@@ -53,7 +58,7 @@ the agent page. Two rules that name the same target deliver once.
 Settings → **Notifications** → **Observation alerts** sets thresholds on
 `spot_price`, `funding_rate_apr`, `tvl_usd`, or `odds_yes` (`gte`, `lte`,
 `pct_drop`, `pct_move`). Messages are labeled **Observation** and are not
-signals. Quiet hours and per-destination cooldown apply. Minimum risk does
+signals. Quiet hours and per-target cooldown apply. Minimum risk does
 not. Dedup is one delivery per rule, subject, UTC hour, and target.
 
 ## Failure classes

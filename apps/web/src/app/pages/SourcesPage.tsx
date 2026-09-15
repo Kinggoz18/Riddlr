@@ -2100,18 +2100,16 @@ function SourceEdit() {
             Source enabled
           </label>
           {row.adapterId === "searxng" ? (
-            <Field label="Engine allowlist">
+            <Field
+              label="Engine allowlist"
+              hint="Comma-separated SearXNG engine names, for example bing news, reuters. Empty means every engine enabled on the bundled instance. The search endpoint is not editable here."
+            >
               <input
                 id="searxng-engines"
                 value={engines}
                 onChange={(e) => setEngines(e.target.value)}
                 placeholder="Leave empty for every JSON engine"
               />
-              <p className="field-note">
-                Comma-separated SearXNG engine names, for example <code>bing news, reuters</code>.
-                Empty means every engine enabled on the bundled instance. The search endpoint is not
-                editable here.
-              </p>
             </Field>
           ) : null}
           <p className="ui-actions">

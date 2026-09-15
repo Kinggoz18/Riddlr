@@ -52,7 +52,9 @@ export function canonicalizeUrl(url: string | undefined): string | undefined {
   }
   try {
     const parsed = new URL(url);
-    parsed.hash = "";
+    if (!parsed.hash.startsWith("#/")) {
+      parsed.hash = "";
+    }
     parsed.hostname = parsed.hostname.toLowerCase();
     if (parsed.pathname.endsWith("/") && parsed.pathname !== "/") {
       parsed.pathname = parsed.pathname.slice(0, -1);

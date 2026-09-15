@@ -48,6 +48,29 @@ describe("package boundaries", () => {
     }
   });
 
+  it("keeps the dashboard on @riddlr/domain/web so Vite never bundles node:crypto", () => {
+    const dir = join(root, "apps/web/src");
+    for (const file of filesUnder(dir)) {
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toMatch(/from ["']@riddlr\/domain["']/);
+    }
+  });
+
+  it("copies every workspace package.json into the image before pnpm install", () => {
+    const serverDocker = readFileSync(join(root, "docker/server.Dockerfile"), "utf8");
+    const webDocker = readFileSync(join(root, "docker/web.Dockerfile"), "utf8");
+    for (const name of readdirSync(join(root, "packages"))) {
+      const pkg = join(root, "packages", name, "package.json");
+      try {
+        readFileSync(pkg);
+      } catch {
+        continue;
+      }
+      expect(serverDocker, name).toContain(`packages/${name}/package.json`);
+      expect(webDocker, name).toContain(`packages/${name}/package.json`);
+    }
+  });
+
   it("keeps crypto implementation out of generic engine modules", () => {
     const files = [
       join(root, "apps/server/src/modules/pipeline.ts"),

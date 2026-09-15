@@ -9,15 +9,17 @@ Riddlr's core intelligence engine must remain asset-class agnostic.
 
 - `MarketDomain` and `AssetClass` are distinct types. Do not collapse them.
 - Crypto-specific logic belongs in `@riddlr/domain-crypto` (or `domains/crypto`).
+- Equities-specific logic belongs in `@riddlr/domain-equities`.
 - Future domains ship as domain adapters/providers. Do not contaminate the core
   with equity tickers, forex pairs, commodity contracts, or macro calendars.
 - `packages/crypto` is cryptography. Never put market-crypto types there.
 - `source-adapters`, `llm`, `queue`, and `notifications` depend on `domain` only.
-- The application composition root registers the Crypto module.
+- The application composition root registers the Crypto and Equities modules.
 - Coming-soon domains are registry rows. They cannot start scans or agents.
 - Do not create empty domain packages to look complete.
 - Use abstractions only where they are a real boundary (adapter, context
   provider, registry). Do not invent a plugin SDK for unimplemented domains.
 
-Onboarding step 4 consumes the registry. Crypto is selectable. Others are
+Onboarding step 4 consumes the registry. Crypto is selected by default and stays
+the default agent. Equities is selectable. Forex, Commodities, and Macro are
 Coming soon and disabled.

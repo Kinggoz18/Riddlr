@@ -13,6 +13,17 @@ describe("evidence provenance", () => {
     );
   });
 
+  it("keeps hash-routed Snapshot proposal identity and strips in-page fragments", () => {
+    expect(
+      canonicalizeUrl(
+        "https://snapshot.box/#/s:grovefinance.eth/proposal/0x1a95608718c0fa345422e19fffce5f7e93f3af6d5a7e8318f567d11cfe545335",
+      ),
+    ).toBe(
+      "https://snapshot.box/#/s:grovefinance.eth/proposal/0x1a95608718c0fa345422e19fffce5f7e93f3af6d5a7e8318f567d11cfe545335",
+    );
+    expect(canonicalizeUrl("https://example.com/story#comments")).toBe("https://example.com/story");
+  });
+
   it("collapses reprints by URL or content hash", () => {
     expect(classifyReprint({ sameCanonicalUrl: true, sameContentHash: false })).toBe("derived");
     expect(classifyReprint({ sameCanonicalUrl: false, sameContentHash: true })).toBe("derived");

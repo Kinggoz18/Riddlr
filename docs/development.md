@@ -26,8 +26,10 @@ Production-shaped path remains `./scripts/riddlr-up.sh` (dashboard on
 http://127.0.0.1:8080). Windows: `scripts/riddlr-up.ps1`. Host first-run:
 `docker compose exec -it api node apps/server/dist/cmd/onboard.js`.
 
-`RIDDLR_MAX_AGENTS` defaults to 16. `RIDDLR_DEFAULT_TOKEN_BUDGET` defaults to
-100000 daily prompt-plus-completion tokens per agent. An agent may set its
+`RIDDLR_MAX_AGENTS` defaults to 16. The Agents list shows how many of that cap
+are in use. Create and Duplicate return `agent_limit` at the cap.
+`RIDDLR_DEFAULT_TOKEN_BUDGET` defaults to 100000 daily prompt-plus-completion
+tokens per agent. An agent may set its
 daily budget to unlimited (`null`); analysis is then not skipped for a daily
 cap, and usage is still recorded. `RIDDLR_REGISTRY_TOP_N` defaults to 1000
 (max 2000). `RIDDLR_REGISTRY_SEED_INTERVAL_HOURS` defaults to 24 (max 168).

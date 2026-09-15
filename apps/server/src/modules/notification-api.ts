@@ -25,9 +25,10 @@ import {
 } from "@riddlr/domain";
 import { parseDiscordWebhookUrl, validateDiscordWebhook } from "@riddlr/notifications";
 import { assertSafeResolvedHttpUrl, type LookupFn } from "@riddlr/source-adapters";
-import { count, eq } from "drizzle-orm";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
+import { composeDiscordWebhookFetch } from "./discord-compose-fetch.js";
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
@@ -49,7 +50,12 @@ export async function assertDiscordWebhookTargetUrl(url: string, lookup?: Lookup
 }
 
 export async function publicNotificationTargets(ctx: AppContext) {
-  const rows = await ctx.db.select().from(notificationTargets).limit(MAX_NOTIFICATION_TARGETS);
+  const rows = await ctx.db
+    .select()
+    .from(notificationTargets)
+    .where(eq(notificationTargets.channel, "discord"))
+    .orderBy(desc(notificationTargets.createdAt))
+    .limit(MAX_NOTIFICATION_TARGETS);
   return takeBounded(rows, MAX_NOTIFICATION_TARGETS).map((row) => ({
     id: row.id,
     channel: row.channel,
@@ -83,6 +89,8 @@ async function knownTargetIds(ctx: AppContext): Promise<Set<string>> {
   const rows = await ctx.db
     .select({ id: notificationTargets.id })
     .from(notificationTargets)
+    .where(eq(notificationTargets.channel, "discord"))
+    .orderBy(desc(notificationTargets.createdAt))
     .limit(MAX_NOTIFICATION_TARGETS);
   const providers = await ctx.db
     .select({ kind: providerConfigs.kind })
@@ -107,21 +115,34 @@ export async function createDiscordWebhookTarget(
   if (input.avatarUrl) {
     await assertSafeResolvedHttpUrl(input.avatarUrl, [], deps?.lookup);
   }
+  const validated = await validateDiscordWebhook({
+    url: input.webhookUrl,
+    fetchImpl: composeDiscordWebhookFetch(ctx, deps?.fetchImpl),
+  });
+  if (!validated.ok) {
+    const error = new Error(validated.message);
+    (error as Error & { code: string }).code = "discord_webhook_invalid";
+    throw error;
+  }
+  const [sameChannel] = await ctx.db
+    .select()
+    .from(notificationTargets)
+    .where(
+      and(
+        eq(notificationTargets.channel, "discord"),
+        eq(notificationTargets.destination, validated.info.channelId),
+      ),
+    )
+    .limit(1);
+  if (sameChannel) {
+    return sameChannel;
+  }
   const [{ value: existing } = { value: 0 }] = await ctx.db
     .select({ value: count() })
     .from(notificationTargets);
   if (Number(existing) >= MAX_NOTIFICATION_TARGETS) {
     const error = new Error(`At most ${MAX_NOTIFICATION_TARGETS} Discord webhook targets.`);
     (error as Error & { code: string }).code = "target_limit";
-    throw error;
-  }
-  const validated = await validateDiscordWebhook({
-    url: input.webhookUrl,
-    fetchImpl: deps?.fetchImpl,
-  });
-  if (!validated.ok) {
-    const error = new Error(validated.message);
-    (error as Error & { code: string }).code = "discord_webhook_invalid";
     throw error;
   }
   const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
@@ -315,6 +336,29 @@ export function registerNotificationTargetRoutes(
 
   app.post("/api/v1/observation-alert-rules", { preHandler: authed }, async (request, reply) => {
     const body = observationAlertRuleSchema.parse(request.body);
+    const [same] = await ctx.db
+      .select()
+      .from(observationAlertRules)
+      .where(
+        and(
+          eq(observationAlertRules.metric, body.metric),
+          eq(observationAlertRules.op, body.op),
+          eq(observationAlertRules.threshold, body.threshold),
+          body.windowMinutes == null
+            ? isNull(observationAlertRules.windowMinutes)
+            : eq(observationAlertRules.windowMinutes, body.windowMinutes),
+          body.subjectCanonicalId
+            ? eq(observationAlertRules.subjectCanonicalId, body.subjectCanonicalId)
+            : isNull(observationAlertRules.subjectCanonicalId),
+          body.provider
+            ? eq(observationAlertRules.provider, body.provider)
+            : isNull(observationAlertRules.provider),
+        ),
+      )
+      .limit(1);
+    if (same) {
+      return { rule: same };
+    }
     const [{ value: existing } = { value: 0 }] = await ctx.db
       .select({ value: count() })
       .from(observationAlertRules);

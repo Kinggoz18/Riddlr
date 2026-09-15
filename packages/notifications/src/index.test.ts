@@ -30,6 +30,17 @@ describe("notification policy", () => {
     ).toBe(false);
   });
 
+  it("allows a send when cooldown is zero", () => {
+    expect(
+      decideNotification({
+        policy: { minRisk: "moderate", cooldownMs: 0 },
+        risk: "high",
+        lastSentAt: new Date("2026-09-10T00:00:00Z"),
+        now: new Date("2026-09-10T00:00:00Z"),
+      }).send,
+    ).toBe(true);
+  });
+
   it("splits telegram payloads", () => {
     expect(splitTelegramText("a".repeat(5000)).length).toBe(2);
   });

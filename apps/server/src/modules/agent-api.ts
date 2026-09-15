@@ -309,6 +309,7 @@ async function listAgentsPayload(ctx: AppContext) {
     itemRows.map((item) => item.canonicalId),
   );
   return {
+    maxAgents: max,
     agents: rows.map((agent) => {
       const watchlist = watchlistRows.find((row) => row.agentId === agent.id);
       return {

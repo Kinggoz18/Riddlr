@@ -1,4 +1,4 @@
-import { chartMetricLabel, DASHBOARD_CHART_METRICS } from "@riddlr/domain";
+import { chartMetricLabel, DASHBOARD_CHART_METRICS } from "@riddlr/domain/web";
 import { Card, EmptyState, PageHeader, Skeleton } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";

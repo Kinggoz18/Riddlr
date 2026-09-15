@@ -25,7 +25,10 @@ No social sign-on.
   (`docker compose exec -T api node apps/server/dist/cmd/reset-password.js`)
 - Security mail for new sessions, recovery use, recovery rotate, password
   change, and key rotation (failures do not block the auth path)
-- Rate limits on login, 2FA, and reset
+- Rate limits on login, 2FA, and reset (8 / 5 per minute). The dashboard
+  global cap is 600 requests per minute per session cookie, or per client IP
+  before sign-in. Compose trusts the Caddy `X-Forwarded-For` hop.
+  `/healthz` and `GET /api/v1/setup/status` are not counted.
 - Paginated audit log at `GET /api/v1/audit`. Settings can clear it with
   `DELETE /api/v1/audit`, which deletes every row then records `audit.cleared`.
 

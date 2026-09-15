@@ -35,7 +35,7 @@ import {
   updateAlchemyWebhookAddresses,
   updateHeliusWebhookAddresses,
 } from "@riddlr/source-adapters";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.js";
 import { clusterScanEvents } from "./pipeline.js";
@@ -511,7 +511,11 @@ async function handleHelius(ctx: AppContext, request: FastifyRequest, reply: Fas
 export async function syncAddressActivityWebhooks(ctx: AppContext): Promise<void> {
   const eth = await monitoredAddresses(ctx, "ethereum");
   const sol = await monitoredAddresses(ctx, "solana");
-  const rows = await ctx.db.select().from(sources).limit(ctx.config.RIDDLR_SCAN_SOURCE_LIMIT);
+  const rows = await ctx.db
+    .select()
+    .from(sources)
+    .where(inArray(sources.adapterId, ["alchemy", "helius"]))
+    .limit(2);
   for (const row of rows) {
     if (!row.enabled) {
       continue;

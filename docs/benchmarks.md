@@ -144,3 +144,70 @@ Binance BTC mark 78_732.5. Each detector fired on all 1,000 subjects.
 | after 1,000 × 5 detectors | 102_236_160 bytes (97.5 MiB) | 102_236_160 bytes |
 
 No numeric latency or throughput targets are published.
+
+## 15 Sep 2026 — Compose E2E overlay after Playwright
+
+Conditions:
+
+- host: Apple M2, 8 CPUs, 16 GiB RAM, Darwin arm64, macOS 26.5.1, Node v22.23.2
+- Docker Desktop VM memory limit 3.826 GiB (from `docker stats`)
+- Compose files: `docker-compose.yml` + `docker-compose.e2e.yml` (`:8080` only)
+- container Node: v22.23.2
+- `RIDDLR_E2E_SEED_OBSERVATIONS=true`; worker/scan/enrich/understand limits unset
+  (package defaults: worker concurrency 2, scan evidence 50, analysis evidence 20)
+- LLM: an API key was stored during first-run; no live provider round-trip
+- `pnpm compose:smoke` against `http://127.0.0.1:8080` passed
+- `pnpm exec playwright test`: 6 passed, 1 skipped (first-run already complete),
+  21.6s
+
+Image IDs (`docker inspect`):
+
+| service | image |
+| --- | --- |
+| api / worker | `ghcr.io/kinggoz18/riddlr-server:latest` `sha256:eaed38647774…` |
+| web | `ghcr.io/kinggoz18/riddlr-web:latest` `sha256:312d2e1a7428…` |
+| postgres | `postgres:17-alpine` `ff80089083d7` |
+| valkey | `valkey/valkey:8-alpine` `620f0540c6e3` |
+| caddy | `caddy:2.10-alpine` `8f5619aac3ed` |
+| mailpit | `axllent/mailpit:v1.27.2` `dc09358fdd1e` |
+| searxng | `searxng/searxng:latest` `e69e62ed1443` |
+| discord-webhook-mock | `node:22-alpine` `828963118f68` |
+
+Dataset after the Playwright run (Postgres counts):
+
+| relation | count |
+| --- | --- |
+| sources | 3 |
+| evidence_items | 39 |
+| agents | 16 |
+| scans | 32 |
+| events | 144 |
+| signals | 0 |
+| observation_series | 333 |
+
+Process RSS is `/proc/1/status` `VmRSS` / `VmHWM` of PID 1 (`node`) inside
+the api and worker containers. Cgroup `docker stats` is lower than `VmRSS`
+because of shared pages.
+
+| sample | api VmRSS | api VmHWM | worker VmRSS | worker VmHWM |
+| --- | --- | --- | --- | --- |
+| after Playwright | 250_908 kB (245.0 MiB) | 250_908 kB (245.0 MiB) | 106_148 kB (103.7 MiB) | 154_244 kB (150.6 MiB) |
+
+`docker stats --no-stream` after Playwright:
+
+| container | MemUsage |
+| --- | --- |
+| riddlr-api-1 | 200.3 MiB |
+| riddlr-worker-1 | 57.03 MiB |
+| riddlr-postgres-1 | 56.89 MiB |
+| riddlr-searxng-1 | 152.8 MiB |
+| riddlr-proxy-1 | 39.98 MiB |
+| riddlr-valkey-1 | 13.37 MiB |
+| riddlr-mailpit-1 | 14.57 MiB |
+| riddlr-web-1 | 7.098 MiB |
+| riddlr-discord-webhook-mock-1 | 14.98 MiB |
+
+Not measured on this run: source fan-out time, queue wait, evidence
+throughput, scan duration, AI provider latency.
+
+No numeric latency or throughput targets are published.

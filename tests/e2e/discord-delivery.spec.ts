@@ -4,7 +4,9 @@ import { totpFromOtpauth } from "./totp.js";
 const password = process.env.RIDDLR_E2E_PASSWORD ?? "correct horse battery";
 const email = process.env.RIDDLR_E2E_EMAIL ?? "ops@example.com";
 const otpauth = process.env.RIDDLR_E2E_OTPAUTH ?? "";
-const webhook = process.env.RIDDLR_E2E_DISCORD_WEBHOOK ?? "";
+const webhook =
+  process.env.RIDDLR_E2E_DISCORD_WEBHOOK ??
+  "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd";
 
 async function signIn(page: Page) {
   await page.goto("/");
@@ -29,19 +31,23 @@ async function signIn(page: Page) {
 }
 
 test("configures a Discord webhook and records a delivery", async ({ page }) => {
-  if (!webhook) {
-    throw new Error("Set RIDDLR_E2E_DISCORD_WEBHOOK to a type-1 incoming webhook URL.");
-  }
   await signIn(page);
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.locator(".page-subnav").getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: "Discord webhook" })).toBeVisible();
-  await page.getByLabel("Webhook URL").fill(webhook);
-  await page.getByRole("button", { name: "Save Discord webhook" }).click();
-  await expect(page.getByText(/^Channel /)).toBeVisible({ timeout: 15_000 });
-  await page.getByLabel("Threshold").fill("1");
-  await page.getByRole("button", { name: "Save observation alert" }).click();
-  await expect(page.getByText(/spot_price gte 1/)).toBeVisible();
+  if ((await page.getByText(/^Channel /).count()) === 0) {
+    await page.getByLabel("Webhook URL").fill(webhook);
+    await page.getByRole("button", { name: "Save Discord webhook" }).click();
+  }
+  await expect(page.getByText(/^Channel /).first()).toBeVisible({ timeout: 15_000 });
+  if ((await page.getByText(/spot_price gte 1/).count()) === 0) {
+    await page.getByLabel("Threshold").fill("1");
+    await page.getByRole("button", { name: "Save observation alert" }).click();
+  }
+  await expect(page.getByText(/spot_price gte 1/).first()).toBeVisible();
   await expect
     .poll(
       async () => {

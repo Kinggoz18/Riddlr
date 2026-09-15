@@ -1,9 +1,11 @@
 import { estimatePromptTokens } from "./analysis-facts.js";
 import { DEFAULT_ANALYSIS_EVIDENCE_LIMIT } from "./limits.js";
 
-export const MIN_DAILY_TOKEN_BUDGET = 500;
-export const MAX_DAILY_TOKEN_BUDGET = 200_000;
-export const DEFAULT_DAILY_TOKEN_BUDGET = 100_000;
+export {
+  DEFAULT_DAILY_TOKEN_BUDGET,
+  MAX_DAILY_TOKEN_BUDGET,
+  MIN_DAILY_TOKEN_BUDGET,
+} from "./token-budget-limits.js";
 export const ANALYSIS_COMPLETION_TOKEN_RESERVE = 2_048;
 export const MAX_EVIDENCE_PROMPT_CHARS = 4_000;
 export const MAX_ANALYSIS_EVIDENCE_PROMPT_ITEMS = DEFAULT_ANALYSIS_EVIDENCE_LIMIT;

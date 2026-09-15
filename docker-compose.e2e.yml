@@ -1,0 +1,17 @@
+services:
+  discord-webhook-mock:
+    image: node:22-alpine
+    command: ["node", "/mock/e2e-discord-webhook.mjs"]
+    volumes:
+      - ./docker/e2e-discord-webhook.mjs:/mock/e2e-discord-webhook.mjs:ro
+    restart: unless-stopped
+
+  api:
+    environment:
+      RIDDLR_DISCORD_WEBHOOK_ORIGIN: http://discord-webhook-mock:8080
+      RIDDLR_E2E_SEED_OBSERVATIONS: "true"
+
+  worker:
+    environment:
+      RIDDLR_DISCORD_WEBHOOK_ORIGIN: http://discord-webhook-mock:8080
+      RIDDLR_E2E_SEED_OBSERVATIONS: "true"

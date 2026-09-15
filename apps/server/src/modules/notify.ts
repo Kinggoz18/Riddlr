@@ -54,6 +54,7 @@ import {
 } from "@riddlr/notifications";
 import { and, count, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { AppContext } from "../context.js";
+import { composeDiscordWebhookFetch } from "./discord-compose-fetch.js";
 import { markFirstNotifiedAt } from "./event-lifecycle.js";
 
 const IMPACT_SET = new Set(["informational", "low", "moderate", "high", "critical"]);
@@ -167,6 +168,8 @@ export async function loadAvailableNotificationTargets(
   const discordRows = await ctx.db
     .select()
     .from(notificationTargets)
+    .where(eq(notificationTargets.channel, "discord"))
+    .orderBy(desc(notificationTargets.createdAt))
     .limit(MAX_NOTIFICATION_TARGETS);
   const targets: AvailableTarget[] = [];
   const telegram = providers.find((item) => item.kind === "telegram");
@@ -207,9 +210,6 @@ export async function loadAvailableNotificationTargets(
     });
   }
   for (const row of takeBounded(discordRows, MAX_NOTIFICATION_TARGETS)) {
-    if (row.channel !== "discord") {
-      continue;
-    }
     targets.push({
       id: row.id,
       channel: "discord",
@@ -224,11 +224,19 @@ export async function loadAvailableNotificationTargets(
 }
 
 async function loadInstancePolicy(ctx: AppContext): Promise<Policy> {
-  const settingsRows = await ctx.db.select().from(instanceSettings).limit(1);
-  const stored = settingsRows[0]?.notificationPolicy;
+  const [settings] = await ctx.db
+    .select()
+    .from(instanceSettings)
+    .where(eq(instanceSettings.id, 1))
+    .limit(1);
+  const stored = settings?.notificationPolicy;
+  const cooldownMinutes =
+    typeof stored?.cooldownMinutes === "number" && Number.isFinite(stored.cooldownMinutes)
+      ? stored.cooldownMinutes
+      : 30;
   return {
     minRisk: stored?.minRisk ?? DEFAULT_NOTIFICATION_POLICY.minRisk,
-    cooldownMs: (stored?.cooldownMinutes ?? 30) * 60 * 1000,
+    cooldownMs: cooldownMinutes * 60 * 1000,
     quietHours: stored?.quietHours,
     earlyWarnings: Boolean(stored?.earlyWarnings),
   };
@@ -239,6 +247,7 @@ async function loadAgentRoutes(ctx: AppContext, agentId: string): Promise<Notifi
     .select()
     .from(agentNotificationRoutes)
     .where(eq(agentNotificationRoutes.agentId, agentId))
+    .orderBy(desc(agentNotificationRoutes.createdAt))
     .limit(MAX_NOTIFICATION_ROUTES_PER_AGENT);
   return takeBounded(rows, MAX_NOTIFICATION_ROUTES_PER_AGENT).map((row) => ({
     minImpact: asImpact(row.minImpact),
@@ -250,14 +259,14 @@ async function loadAgentRoutes(ctx: AppContext, agentId: string): Promise<Notifi
   }));
 }
 
-async function lastSentDestination(ctx: AppContext, channel: string, destination: string) {
+async function lastSentTarget(ctx: AppContext, target: AvailableTarget) {
   const [row] = await ctx.db
-    .select()
+    .select({ createdAt: notificationDeliveries.createdAt })
     .from(notificationDeliveries)
     .where(
       and(
-        eq(notificationDeliveries.channel, channel),
-        eq(notificationDeliveries.destination, destination),
+        eq(notificationDeliveries.channel, target.channel),
+        eq(notificationDeliveries.targetId, target.id),
         eq(notificationDeliveries.status, "sent"),
       ),
     )
@@ -551,7 +560,7 @@ async function sendDiscord(
     embeds: payload.embeds,
     username: target.username,
     avatarUrl: target.avatarUrl,
-    fetchImpl,
+    fetchImpl: composeDiscordWebhookFetch(ctx, fetchImpl),
   });
   if (result.errorClass === "auth") {
     await ctx.db
@@ -578,6 +587,7 @@ async function deliverToTarget(input: {
   risk?: "low" | "moderate" | "high" | "critical";
   eventId?: string;
   fetchImpl?: typeof fetch;
+  bypassPolicy?: boolean;
   observation?: {
     ruleId: string;
     metric: string;
@@ -587,39 +597,6 @@ async function deliverToTarget(input: {
     observedAt: Date;
   };
 }) {
-  const decision =
-    input.kind === "observation"
-      ? decideObservationNotification({
-          policy: input.policy,
-          lastSentAt: await lastSentDestination(
-            input.ctx,
-            input.target.channel,
-            input.target.destination,
-          ),
-        })
-      : decideNotification({
-          policy: input.policy,
-          risk: input.risk ?? "moderate",
-          lastSentAt: await lastSentDestination(
-            input.ctx,
-            input.target.channel,
-            input.target.destination,
-          ),
-        });
-  if (!decision.send) {
-    await recordTerminal({
-      ctx: input.ctx,
-      key: `${input.key}:suppressed`,
-      signalId: input.signalId,
-      kind: input.kind,
-      channel: input.target.channel,
-      destination: input.target.destination,
-      targetId: input.target.id,
-      status: "suppressed",
-      observation: input.observation,
-    });
-    return;
-  }
   if (input.target.channel === "discord") {
     const pending = await pendingForTarget(input.ctx, input.target.id);
     if (pending >= DISCORD_WEBHOOK_QUEUE_CAP) {
@@ -637,6 +614,35 @@ async function deliverToTarget(input: {
       });
       return;
     }
+  }
+  if (!input.bypassPolicy) {
+    const decision =
+      input.kind === "observation"
+        ? decideObservationNotification({
+            policy: input.policy,
+            lastSentAt: await lastSentTarget(input.ctx, input.target),
+          })
+        : decideNotification({
+            policy: input.policy,
+            risk: input.risk ?? "moderate",
+            lastSentAt: await lastSentTarget(input.ctx, input.target),
+          });
+    if (!decision.send) {
+      await recordTerminal({
+        ctx: input.ctx,
+        key: `${input.key}:suppressed`,
+        signalId: input.signalId,
+        kind: input.kind,
+        channel: input.target.channel,
+        destination: input.target.destination,
+        targetId: input.target.id,
+        status: "suppressed",
+        observation: input.observation,
+      });
+      return;
+    }
+  }
+  if (input.target.channel === "discord") {
     const budget = await consumeDiscordBudget(input.ctx, input.target.id, input.impact);
     if (budget === "rate_limited") {
       await recordTerminal({
@@ -903,6 +909,7 @@ export async function deliverSignalNotifications(
       risk: riskLevel(signal.risk),
       eventId: signal.eventId,
       fetchImpl,
+      bypassPolicy: kind === "confirmation" || kind === "dispute" || kind === "retraction",
     });
   }
   for (const id of targetIds) {

@@ -1,0 +1,3 @@
+export const MIN_DAILY_TOKEN_BUDGET = 500;
+export const MAX_DAILY_TOKEN_BUDGET = 200_000;
+export const DEFAULT_DAILY_TOKEN_BUDGET = 100_000;

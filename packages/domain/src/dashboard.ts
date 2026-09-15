@@ -1,4 +1,4 @@
-import { type CatalystKind, isCatalystKind } from "./catalysts.js";
+import type { CatalystKind } from "./catalyst-kinds.js";
 import { observationDelta } from "./lifecycle.js";
 import {
   CHANGE_24H_TOLERANCE_MS,
@@ -8,13 +8,12 @@ import {
   takeBounded,
 } from "./limits.js";
 
-export const DASHBOARD_CHART_METRICS = [
-  "spot_price",
-  "funding_rate_apr",
-  "open_interest_usd",
-  "tvl_usd",
-] as const;
-export type DashboardChartMetric = (typeof DASHBOARD_CHART_METRICS)[number];
+export {
+  chartMetricLabel,
+  DASHBOARD_CHART_METRICS,
+  type DashboardChartMetric,
+  isDashboardChartMetric,
+} from "./dashboard-charts.js";
 
 export const UPCOMING_CATALYST_KINDS = [
   "token_unlock",
@@ -22,10 +21,6 @@ export const UPCOMING_CATALYST_KINDS = [
   "scheduled_release",
   "listing_or_delisting",
 ] as const satisfies readonly CatalystKind[];
-
-export function isDashboardChartMetric(value: string): value is DashboardChartMetric {
-  return (DASHBOARD_CHART_METRICS as readonly string[]).includes(value);
-}
 
 export function isUpcomingCatalystKind(value: string | null | undefined): boolean {
   return Boolean(value && (UPCOMING_CATALYST_KINDS as readonly string[]).includes(value));
@@ -71,19 +66,4 @@ export function change24hPct(input: {
     return undefined;
   }
   return observationDelta(prior.value, latest.value).pct;
-}
-
-export function chartMetricLabel(metric: string): string {
-  switch (metric) {
-    case "spot_price":
-      return "Spot price";
-    case "funding_rate_apr":
-      return "Funding APR";
-    case "open_interest_usd":
-      return "Open interest";
-    case "tvl_usd":
-      return "TVL";
-    default:
-      return isCatalystKind(metric) ? metric : metric.replaceAll("_", " ");
-  }
 }

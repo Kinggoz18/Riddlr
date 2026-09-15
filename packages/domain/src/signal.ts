@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATALYST_KINDS } from "./catalysts.js";
+import { CATALYST_KINDS } from "./catalyst-kinds.js";
 import type { ReliabilityStatus } from "./reliability.js";
 import { SIGNAL_OUTPUT_KINDS } from "./reliability.js";
 

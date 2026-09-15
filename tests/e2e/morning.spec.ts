@@ -35,23 +35,41 @@ async function expectNoSeriousAxe(page: Page) {
   ).toEqual([]);
 }
 
+function primaryNav(page: Page) {
+  return page.getByRole("navigation", { name: "Primary" });
+}
+
 test("adds a watchlist asset by search and shows it on the morning view with a chart @a11y", async ({
   page,
 }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Agents", exact: true }).click();
-  const existing = page.getByRole("heading", { name: "Morning agent" });
-  const existingLink = page.getByRole("link", { name: "Morning agent" });
-  if ((await existing.count()) === 0 && (await existingLink.count()) === 0) {
-    await page.getByRole("link", { name: "Create agent" }).click();
-    await page.getByLabel("Agent name").fill("Morning agent");
-    await page.getByLabel("Description").fill("Watches Bitcoin for the morning view.");
-    await page.getByLabel("Watchlist").fill("Bitcoin");
-    await page.getByRole("option", { name: "Bitcoin · BTC", exact: true }).click();
-    await page.getByRole("button", { name: "Create agent" }).click();
+  await primaryNav(page).getByRole("link", { name: "Watchlists", exact: true }).click();
+  await page
+    .getByRole("link", { name: /Default watchlist/i })
+    .first()
+    .click();
+  await expect(page.getByRole("heading", { name: "Assets" })).toBeVisible();
+  const ethereum = page.locator(".asset-list strong").filter({ hasText: /^Ethereum$/ });
+  if ((await ethereum.count()) === 0) {
+    await page.getByRole("link", { name: "Edit watchlist" }).click();
+    await page.getByLabel("Watchlist").fill("Ethereum");
+    await expect(page.getByRole("option", { name: "Ethereum · ETH", exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByRole("option", { name: "Ethereum · ETH", exact: true }).click();
+    await expect(page.getByText("Ethereum · ETH").first()).toBeVisible();
+    await page.getByRole("button", { name: "Save agent" }).click();
+    await expect(page.getByRole("heading", { name: "Riddlr Intelligence Agent" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await primaryNav(page).getByRole("link", { name: "Watchlists", exact: true }).click();
+    await page
+      .getByRole("link", { name: /Default watchlist/i })
+      .first()
+      .click();
   }
-  await expect(page.getByRole("heading", { name: "Morning agent" }).or(existingLink)).toBeVisible();
-  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(ethereum).toBeVisible();
+  await primaryNav(page).getByRole("link", { name: "Overview", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Morning" })).toBeVisible();
   await page
     .getByRole("article")
@@ -65,9 +83,9 @@ test("adds a watchlist asset by search and shows it on the morning view with a c
 
 test("opens an observed quantitative event", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Events" }).click();
+  await primaryNav(page).getByRole("link", { name: "Events", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Events/ })).toBeVisible();
-  const eventsResponse = await page.request.get("/api/v1/events?limit=50");
+  const eventsResponse = await page.request.get("/api/v1/events?limit=50&reliability=observed");
   expect(eventsResponse.ok()).toBeTruthy();
   const eventsBody = (await eventsResponse.json()) as {
     events: Array<{ id: string; title: string; reliabilityStatus?: string | null }>;
@@ -76,6 +94,8 @@ test("opens an observed quantitative event", async ({ page }) => {
   if (!observed) {
     throw new Error("Expected an observed quantitative event on Events.");
   }
+  await page.getByLabel("Reliability").selectOption("observed");
+  await expect(page.getByRole("link", { name: observed.title })).toBeVisible();
   await page.getByRole("link", { name: observed.title }).click();
   await expect(page.getByRole("heading", { name: observed.title })).toBeVisible();
   await expect(page.getByText("Observed", { exact: true }).first()).toBeVisible();

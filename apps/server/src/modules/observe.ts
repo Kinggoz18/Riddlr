@@ -7,6 +7,7 @@ import {
   claimEvidence,
   claims,
   encryptedSecrets,
+  events,
   evidenceItems,
   evidenceOccurrences,
   observationPins,
@@ -53,6 +54,7 @@ import {
   createHyperliquidProvider,
   createKalshiProvider,
   createPolymarketProvider,
+  createScriptedObservationProvider,
   DEFILLAMA_PROVIDER_ID,
   HYPERLIQUID_PROVIDER_ID,
   KALSHI_PROVIDER_ID,
@@ -60,7 +62,7 @@ import {
   POLYMARKET_PROVIDER_ID,
   redactRequestUrl,
 } from "@riddlr/source-adapters";
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import {
   findRegistryAsset,
@@ -83,6 +85,81 @@ export function createObservationProviders(): ObservationProviderRegistry {
   registry.register(createPolymarketProvider());
   registry.register(createKalshiProvider());
   return registry;
+}
+
+export async function seedE2eObservedShock(ctx: AppContext): Promise<{ seeded: boolean }> {
+  if (ctx.config.RIDDLR_E2E_SEED_OBSERVATIONS !== "true") {
+    return { seeded: false };
+  }
+  if (ctx.config.RIDDLR_LOCAL_COMPOSE !== "true") {
+    return { seeded: false };
+  }
+  const subjects = await listWatchedCanonicalIds(ctx);
+  if (!subjects.has("coingecko:bitcoin")) {
+    return { seeded: false };
+  }
+  const [existing] = await ctx.db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        eq(events.reliabilityStatus, "observed"),
+        gte(events.windowStart, new Date(Date.now() - 6 * 60 * 60 * 1000)),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    return { seeded: false };
+  }
+  await ctx.db
+    .delete(observationSeries)
+    .where(
+      and(
+        eq(observationSeries.subjectCanonicalId, "coingecko:bitcoin"),
+        eq(observationSeries.metric, "spot_price"),
+        eq(observationSeries.resolution, "raw"),
+      ),
+    );
+  const origin = Date.now() - 20 * 60_000;
+  await ctx.db.insert(observationSeries).values(
+    Array.from({ length: 20 }, (_, index) => ({
+      provider: COINGECKO_SPOT_PROVIDER_ID,
+      metric: "spot_price",
+      subjectCanonicalId: "coingecko:bitcoin",
+      observedAt: new Date(origin + index * 60_000),
+      value: 100,
+      unit: "usd",
+      resolution: "raw",
+    })),
+  );
+  const previous = ctx.observationProviders;
+  ctx.observationProviders = new ObservationProviderRegistry();
+  ctx.observationProviders.register(
+    createScriptedObservationProvider({
+      id: COINGECKO_SPOT_PROVIDER_ID,
+      observe: () => ({
+        observations: [
+          {
+            provider: COINGECKO_SPOT_PROVIDER_ID,
+            metric: "spot_price",
+            subjectCanonicalId: "coingecko:bitcoin",
+            value: 110,
+            unit: "usd",
+            observedAt: new Date(origin + 20 * 60_000),
+          },
+        ],
+        partial: false,
+        errors: [],
+      }),
+    }),
+  );
+  await ctx.redis.del(`${OBSERVE_LOCK}${COINGECKO_SPOT_PROVIDER_ID}`);
+  try {
+    await pollObservationProvider(ctx, COINGECKO_SPOT_PROVIDER_ID);
+  } finally {
+    ctx.observationProviders = previous;
+  }
+  return { seeded: true };
 }
 
 function executedRows(result: unknown): unknown[] {

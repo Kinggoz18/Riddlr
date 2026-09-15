@@ -1,4 +1,4 @@
-import { isTypedSignalId, TYPED_SIGNAL_LABELS } from "@riddlr/domain";
+import { isTypedSignalId, TYPED_SIGNAL_LABELS } from "@riddlr/domain/web";
 
 export const DEFAULT_DAILY_TOKEN_BUDGET = 100_000;
 export const MIN_DAILY_TOKEN_BUDGET = 500;
