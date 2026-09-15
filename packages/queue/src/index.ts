@@ -1,5 +1,6 @@
 export const QUEUE_NAMES = {
   scanRun: "riddlr.scan.run",
+  /** Reserved. Source ingest runs in-process inside `runScan`. */
   ingestSource: "riddlr.ingest.source",
   enrichEvidence: "riddlr.enrich.evidence",
   understandEvidence: "riddlr.understand.evidence",

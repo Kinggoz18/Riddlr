@@ -4,6 +4,30 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Morning and asset charts show time and value axes. Compact charts still clip
+  to the card width.
+
+- Events list shows a lead headline or snippet, discovery reason, materiality,
+  and source host. Evidence detail includes a short excerpt.
+
+- Run scan on an agent starts a scan even when that schedule window already
+  completed. It still returns `duplicate` while a scan for that agent is queued
+  or running. The scheduler stays one scan per window.
+
+- Agent routing rules list targets, assets, reliability, and catalyst kinds.
+  Unverified early warnings still need Settings → Notifications as well as the
+  route checkbox.
+
+- Event titles use the search headline instead of `Search mention · host`.
+  Per-scan CoinGecko market snapshots no longer open events. Morning charts
+  clip to the asset card.
+
+- Native `pnpm dev` starts the API, BullMQ worker, and Vite dashboard together.
+  Development defaults Postgres and Valkey to loopback when `.env` is absent.
+  The development Compose overlay publishes SearXNG on `127.0.0.1:8888`. Vite
+  proxies `/hooks` to the API so Alchemy and Helius URLs on `:5173` reach the
+  server.
+
 - Creating a 17th agent returns `agent_limit`. The Agents list shows N of
   `RIDDLR_MAX_AGENTS` and blocks the create form when the cap is reached.
   Playwright adds a watchlist asset by registry search on the default watcher

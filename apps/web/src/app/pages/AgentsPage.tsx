@@ -164,7 +164,7 @@ function AgentsList() {
                 <Button
                   onClick={async () => {
                     const result = await api<{ duplicate?: boolean }>(
-                      `/api/v1/agents/${agent.id}/scan`,
+                      `/api/v1/agents/${agent.id}/scan?force=true`,
                       { method: "POST" },
                     );
                     toast(result.duplicate ? "Scan already running" : "Scan queued");
@@ -559,6 +559,7 @@ function AgentNotificationRoutes({
 }) {
   const toast = useToast();
   const [targets, setTargets] = useState<Array<{ id: string; label: string }>>([]);
+  const [instanceEarlyWarnings, setInstanceEarlyWarnings] = useState(false);
   const [minImpact, setMinImpact] = useState("high");
   const [kinds, setKinds] = useState<string[]>([]);
   const [assets, setAssets] = useState<string[]>([]);
@@ -571,7 +572,11 @@ function AgentNotificationRoutes({
       api<{
         targets: Array<{ id: string; destination: string; name?: string | null }>;
       }>("/api/v1/notification-targets"),
-      api<{ telegramConfigured: boolean; whatsappConfigured?: boolean }>("/api/v1/settings"),
+      api<{
+        telegramConfigured: boolean;
+        whatsappConfigured?: boolean;
+        notificationPolicy?: { earlyWarnings?: boolean };
+      }>("/api/v1/settings"),
     ]).then(([listed, settings]) => {
       const rows: Array<{ id: string; label: string }> = [];
       if (settings.telegramConfigured) {
@@ -587,26 +592,50 @@ function AgentNotificationRoutes({
         });
       }
       setTargets(rows);
+      setInstanceEarlyWarnings(Boolean(settings.notificationPolicy?.earlyWarnings));
     });
   }, []);
+
+  function routeCopy(route: NonNullable<Agent["notificationRoutes"]>[number]) {
+    const targetLabels = route.targetIds
+      .map((id) => targets.find((target) => target.id === id)?.label ?? id)
+      .join(", ");
+    const kindLabels =
+      route.catalystKinds.length > 0
+        ? route.catalystKinds.map((kind) => catalystKindLabel(kind)).join(", ")
+        : "all catalyst kinds";
+    const assetLabels =
+      route.assetCanonicalIds.length > 0
+        ? route.assetCanonicalIds.map((id) => assetLabel(id)).join(", ")
+        : "all assets";
+    const reliabilityLabels =
+      route.reliabilityStatuses.length > 0
+        ? route.reliabilityStatuses.map((status) => reliabilityStatusLabel(status)).join(", ")
+        : "all reliability";
+    return [
+      `Min impact ${route.minImpact}`,
+      kindLabels,
+      assetLabels,
+      reliabilityLabels,
+      targetLabels || "no targets",
+      route.includeEarlyWarnings ? "early warnings" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
 
   return (
     <>
       <p className="field-note">
         Custom rules replace the defaults (high and critical to every target, moderate to the
-        primary). Confirmation, dispute, and retraction still follow the original destinations.
+        primary). Empty catalyst kinds, assets, or reliability lists match all. Confirmation,
+        dispute, and retraction still follow the original destinations.
       </p>
       {(agent.notificationRoutes ?? []).length > 0 ? (
         <ul className="attached-list">
           {(agent.notificationRoutes ?? []).map((route) => (
             <li key={route.id}>
-              <span>
-                {route.minImpact}
-                {route.catalystKinds.length > 0
-                  ? ` · ${route.catalystKinds.map((kind) => catalystKindLabel(kind)).join(", ")}`
-                  : ""}
-                {route.includeEarlyWarnings ? " · early warnings" : ""}
-              </span>
+              <span>{routeCopy(route)}</span>
               <Button
                 variant="ghost"
                 onClick={async () => {
@@ -771,6 +800,11 @@ function AgentNotificationRoutes({
           />
           Include unverified early warnings
         </label>
+        <p className="field-note">
+          {instanceEarlyWarnings
+            ? "This rule can deliver unverified early warnings. They stay labelled unverified."
+            : "Also enable Unverified early warnings under Settings → Notifications, or this rule will not deliver them."}
+        </p>
         <Button type="submit" disabled={selected.length === 0}>
           Add routing rule
         </Button>
@@ -805,7 +839,7 @@ function AgentDetail() {
   const agentId = agent.id;
 
   async function runScan() {
-    const result = await api<{ duplicate?: boolean }>(`/api/v1/agents/${agentId}/scan`, {
+    const result = await api<{ duplicate?: boolean }>(`/api/v1/agents/${agentId}/scan?force=true`, {
       method: "POST",
     });
     toast(result.duplicate ? "Scan already running" : "Scan queued");

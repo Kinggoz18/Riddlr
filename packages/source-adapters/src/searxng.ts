@@ -30,6 +30,9 @@ type SearxPayload = {
   unresponsive_engines?: unknown;
 };
 
+/** Compose DNS name plus the native overlay bind (`127.0.0.1:8888`). */
+export const SEARXNG_SAFE_HOSTS = ["searxng", "localhost", "127.0.0.1"] as const;
+
 const SEARXNG_ENGINE_RE = /^[a-z0-9][a-z0-9._ -]{0,63}$/;
 
 export function parseSearxngEngines(value: unknown): string[] {
@@ -173,7 +176,7 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
     async validate(config) {
       const endpoint = String(config.endpoint ?? "");
       try {
-        assertSafeHttpUrl(endpoint, ["searxng", "localhost", "127.0.0.1"]);
+        assertSafeHttpUrl(endpoint, [...SEARXNG_SAFE_HOSTS]);
         parseSearxngEngines(config.engines);
         return { ok: true, message: "Endpoint looks valid." };
       } catch (error) {
@@ -207,7 +210,7 @@ export function createSearxngAdapter(fetchImpl: typeof fetch = fetch): SourceAda
     },
     async fetch(config, query) {
       const endpoint = String(config.endpoint ?? "");
-      assertSafeHttpUrl(endpoint, ["searxng", "localhost", "127.0.0.1"]);
+      assertSafeHttpUrl(endpoint, [...SEARXNG_SAFE_HOSTS]);
       const url = new URL("/search", `${endpoint.replace(/\/$/, "")}/`);
       url.searchParams.set("q", query.query);
       url.searchParams.set("format", "json");

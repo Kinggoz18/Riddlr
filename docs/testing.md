@@ -1,7 +1,15 @@
 # Testing
 
+Unit and license checks do not need a running stack. Integration tests start
+PostgreSQL and Valkey with Testcontainers. Playwright needs Compose.
+
+Native dashboard development is [development.md](development.md): overlay
+Postgres/Valkey/SearXNG/Mailpit, then `pnpm dev` (API, worker, Vite on
+http://localhost:5173). Production-shaped UI is `./scripts/riddlr-up.sh`
+(http://127.0.0.1:8080).
+
 ```bash
-pnpm test:unit
+pnpm check
 pnpm test:integration
 pnpm compose:smoke
 pnpm licenses:check

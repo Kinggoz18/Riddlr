@@ -20,4 +20,5 @@ claims, and identities that reported first sit on the same page.
 Scorecard lists precision, retraction rate, and median lead by catalyst kind
 and by the identity that reported first.
 
-Charts use uPlot. See [ADR 0030](adr/0030-dashboard-charting.md).
+Charts use uPlot. Morning compact charts and asset charts show time and value
+axes. See [ADR 0030](adr/0030-dashboard-charting.md).

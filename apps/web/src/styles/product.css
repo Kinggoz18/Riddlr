@@ -1810,6 +1810,7 @@ a.ui-button {
   display: grid;
   gap: 0.65rem;
   min-width: 0;
+  overflow: hidden;
   padding: 1rem 1.15rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
@@ -1846,10 +1847,12 @@ a.ui-button {
 .series-chart-plot {
   min-height: 12rem;
   min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .series-chart-compact .series-chart-plot {
-  min-height: 4.5rem;
+  min-height: 8.75rem;
 }
 
 .series-chart-empty {
@@ -1869,6 +1872,12 @@ a.ui-button {
 
 .riddlr-uplot {
   font-family: inherit;
+  max-width: 100%;
+}
+
+.riddlr-uplot .u-wrap,
+.riddlr-uplot .u-over {
+  max-width: 100%;
 }
 
 .series-chart-markers {

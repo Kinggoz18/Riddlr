@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 
 export type ChartPoint = { observedAt: string; value: number };
 export type ChartMarker = { at: string; href: string; label: string };
@@ -47,58 +48,73 @@ function SeriesChart(props: {
       plotRef.current = null;
       return;
     }
-    const colors = {
-      stroke: readColor(host, "--mint", "#4edeb3"),
-      grid: readColor(host, "--line", "#22312a"),
-      axis: readColor(host, "--muted", "#8da097"),
-    };
-    const height = props.compact ? 72 : 192;
-    const first = xs[0] ?? 0;
-    const last = ys[0] ?? 0;
-    const paddedXs = xs.length === 1 ? [first - 1800, first, first + 1800] : xs;
-    const paddedYs = ys.length === 1 ? [last, last, last] : ys;
-    plotRef.current?.destroy();
-    plotRef.current = new uPlot(
-      {
-        width: Math.max(host.clientWidth, 32),
-        height,
-        class: "riddlr-uplot",
-        legend: { show: false },
-        cursor: { drag: { x: false, y: false }, focus: { prox: 24 } },
-        series: [
-          {},
-          {
-            stroke: colors.stroke,
-            width: props.compact ? 1.25 : 1.75,
-            points: { show: xs.length < 8 },
-            spanGaps: false,
-          },
-        ],
-        axes: props.compact
-          ? [{ show: false }, { show: false }]
-          : [
-              {
-                stroke: colors.axis,
-                grid: { stroke: colors.grid },
-                ticks: { stroke: colors.grid },
-              },
-              {
-                stroke: colors.axis,
-                grid: { stroke: colors.grid },
-                ticks: { stroke: colors.grid },
-              },
-            ],
-        scales: { x: { time: true } },
-      },
-      [paddedXs, paddedYs],
-      host,
-    );
-    const observer = new ResizeObserver(() => {
-      const plot = plotRef.current;
-      if (!plot) {
+    const height = props.compact ? 140 : 192;
+    const draw = () => {
+      const width = host.clientWidth;
+      if (width < 32) {
         return;
       }
-      plot.setSize({ width: Math.max(host.clientWidth, 32), height });
+      const colors = {
+        stroke: readColor(host, "--mint", "#4edeb3"),
+        grid: readColor(host, "--line", "#22312a"),
+        axis: readColor(host, "--muted", "#8da097"),
+      };
+      const axis = {
+        stroke: colors.axis,
+        grid: { show: !props.compact, stroke: colors.grid },
+        ticks: { stroke: colors.grid, size: props.compact ? 4 : 8 },
+        font: props.compact ? "10px ui-sans-serif, system-ui, sans-serif" : undefined,
+        gap: props.compact ? 4 : 8,
+      };
+      const first = xs[0] ?? 0;
+      const last = ys[0] ?? 0;
+      const paddedXs = xs.length === 1 ? [first - 1800, first, first + 1800] : xs;
+      const paddedYs = ys.length === 1 ? [last, last, last] : ys;
+      plotRef.current?.destroy();
+      plotRef.current = new uPlot(
+        {
+          width,
+          height,
+          class: "riddlr-uplot",
+          legend: { show: false },
+          cursor: props.compact
+            ? { show: false }
+            : { drag: { x: false, y: false }, focus: { prox: 24 } },
+          series: [
+            {},
+            {
+              stroke: colors.stroke,
+              width: props.compact ? 1.25 : 1.75,
+              points: { show: xs.length < 8 },
+              spanGaps: false,
+            },
+          ],
+          axes: [
+            axis,
+            {
+              ...axis,
+              grid: { stroke: colors.grid },
+              size: props.compact ? 44 : undefined,
+            },
+          ],
+          scales: { x: { time: true } },
+        },
+        [paddedXs, paddedYs],
+        host,
+      );
+    };
+    draw();
+    const observer = new ResizeObserver(() => {
+      const plot = plotRef.current;
+      const width = host.clientWidth;
+      if (width < 32) {
+        return;
+      }
+      if (!plot) {
+        draw();
+        return;
+      }
+      plot.setSize({ width, height });
     });
     observer.observe(host);
     return () => {

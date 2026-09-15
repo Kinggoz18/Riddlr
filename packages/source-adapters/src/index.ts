@@ -169,6 +169,7 @@ export {
   createSearxngAdapter,
   parseSearxngEngines,
   parseSearxngPayload,
+  SEARXNG_SAFE_HOSTS,
 } from "./searxng.js";
 export {
   createSnapshotAdapter,

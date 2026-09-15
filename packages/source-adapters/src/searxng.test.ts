@@ -3,7 +3,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MAX_SEARXNG_ENGINES } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
-import { createSearxngAdapter, parseSearxngEngines, parseSearxngPayload } from "./searxng.js";
+import {
+  createSearxngAdapter,
+  parseSearxngEngines,
+  parseSearxngPayload,
+  SEARXNG_SAFE_HOSTS,
+} from "./searxng.js";
 import { assertSafeHttpUrl, classifyHttpStatus } from "./types.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "../test/fixtures/searxng");
@@ -95,6 +100,7 @@ describe("SearXNG contract fixtures", () => {
     expect(() => assertSafeHttpUrl("http://localhost./")).toThrow();
     expect(() => assertSafeHttpUrl("http://LocalHost./")).toThrow();
     expect(assertSafeHttpUrl("http://searxng:8080", ["searxng"]).hostname).toBe("searxng");
+    expect(assertSafeHttpUrl("http://127.0.0.1:8888", [...SEARXNG_SAFE_HOSTS]).port).toBe("8888");
     expect(assertSafeHttpUrl("https://api.openai.com").hostname).toBe("api.openai.com");
   });
 

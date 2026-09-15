@@ -151,6 +151,7 @@ workflow, publishes new tags. Set `RIDDLR_SERVER_IMAGE` and
 
 ## Native development
 
-See [development.md](development.md). Setup is still the four-step wizard.
-`pnpm dev` talks to the API on the same machine, so the setup-code screen does
-not appear there. Use Compose `--public` to try that gate.
+See [development.md](development.md). `pnpm dev` starts the API, worker, and
+Vite dashboard. Setup is still the four-step wizard. Native setup talks to
+the API on the same machine, so the setup-code screen does not appear there.
+Use Compose `--public` to try that gate.

@@ -79,6 +79,7 @@ import {
   leadTimeHours,
   MARKET_DOMAIN_REGISTRY,
   MAX_CLAIMS_PER_DOCUMENT,
+  MAX_EVIDENCE_CLUSTERS,
   ONBOARDING_STEP_COUNT,
   parsePageCursor,
   sourceHostname,
@@ -88,7 +89,7 @@ import {
 import { parseWhatsAppInbound, WHATSAPP_SESSION_WINDOW_MS } from "@riddlr/notifications";
 import { snapshotProcessMemory } from "@riddlr/observability";
 import { QUEUE_NAMES } from "@riddlr/queue";
-import { assertSafeResolvedHttpUrl } from "@riddlr/source-adapters";
+import { assertSafeResolvedHttpUrl, SEARXNG_SAFE_HOSTS } from "@riddlr/source-adapters";
 import { and, count, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
@@ -195,6 +196,57 @@ function requireUser(
     (error as Error & { statusCode?: number }).statusCode = 401;
     throw error;
   }
+}
+
+const EVENT_LIST_SNIPPET_CHARS = 180;
+
+function clipEventSnippet(value?: string | null): string | null {
+  const text = value?.replace(/\s+/g, " ").trim() ?? "";
+  if (text.length < 12) {
+    return null;
+  }
+  return text.length > EVENT_LIST_SNIPPET_CHARS
+    ? `${text.slice(0, EVENT_LIST_SNIPPET_CHARS - 1)}…`
+    : text;
+}
+
+function eventListLeads(
+  links: Array<{ eventId: string; evidenceId: string; role: string }>,
+  items: Array<{
+    id: string;
+    title: string | null;
+    canonicalUrl: string | null;
+    snippet: string | null;
+  }>,
+) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const grouped = new Map<string, typeof links>();
+  for (const link of links) {
+    const current = grouped.get(link.eventId) ?? [];
+    current.push(link);
+    grouped.set(link.eventId, current);
+  }
+  const leads = new Map<
+    string,
+    { title: string | null; snippet: string | null; hostname: string | null }
+  >();
+  for (const [eventId, eventLinks] of grouped) {
+    const ordered = [...eventLinks].sort((left, right) => {
+      const rank = (role: string) => (role === "primary" ? 0 : 1);
+      return rank(left.role) - rank(right.role);
+    });
+    const item = ordered.map((link) => byId.get(link.evidenceId)).find(Boolean);
+    if (!item) {
+      continue;
+    }
+    const hostname = sourceHostname(item.canonicalUrl);
+    leads.set(eventId, {
+      title: item.title,
+      snippet: clipEventSnippet(item.snippet),
+      hostname: hostname === "unknown-host" ? null : hostname,
+    });
+  }
+  return leads;
 }
 
 export async function buildApp(ctx: AppContext) {
@@ -511,7 +563,7 @@ export async function buildApp(ctx: AppContext) {
     }
     const searxngUrl = body.searxngUrl ?? ctx.config.RIDDLR_SEARXNG_URL;
     try {
-      await assertSafeResolvedHttpUrl(searxngUrl, ["searxng"]);
+      await assertSafeResolvedHttpUrl(searxngUrl, [...SEARXNG_SAFE_HOSTS]);
     } catch {
       return reply.code(400).send({
         error: { code: "unsafe_url", message: "SearXNG URL host is not allowed." },
@@ -1183,21 +1235,59 @@ export async function buildApp(ctx: AppContext) {
       current.push(row.kind);
       kindsByEvent.set(row.eventId, current);
     }
+    const evidenceLinks =
+      ids.length > 0
+        ? await ctx.db
+            .select()
+            .from(eventEvidence)
+            .where(inArray(eventEvidence.eventId, ids))
+            .limit(ids.length * MAX_EVIDENCE_CLUSTERS)
+        : [];
+    const leadEvidenceIds = [...new Set(evidenceLinks.map((item) => item.evidenceId))];
+    const leadEvidenceRows =
+      leadEvidenceIds.length > 0
+        ? await ctx.db
+            .select({
+              id: evidenceItems.id,
+              title: evidenceItems.title,
+              canonicalUrl: evidenceItems.canonicalUrl,
+              snippet: sql<string | null>`left(${evidenceItems.bodyText}, 240)`,
+            })
+            .from(evidenceItems)
+            .where(
+              inArray(
+                evidenceItems.id,
+                takeBounded(leadEvidenceIds, ids.length * MAX_EVIDENCE_CLUSTERS),
+              ),
+            )
+            .limit(ids.length * MAX_EVIDENCE_CLUSTERS)
+        : [];
+    const leads = eventListLeads(evidenceLinks, leadEvidenceRows);
     return {
-      events: rows.map((row) => ({
-        ...row,
-        catalystKind: catalystKindForEvent(ctx, row.marketDomainId, kindsByEvent.get(row.id) ?? []),
-        leadTimeHours: leadTimeHours(row.firstObservedAt, row.firstPrimaryAt),
-        assets: assetLinks
-          .filter((link) => link.eventId === row.id)
-          .map((link) => assetRows.find((asset) => asset.id === link.assetId))
-          .filter((item): item is (typeof assetRows)[number] => Boolean(item))
-          .map((asset) => ({
-            canonicalId: asset.canonicalId,
-            symbol: asset.symbol,
-            name: asset.name,
-          })),
-      })),
+      events: rows.map((row) => {
+        const lead = row.status === "deferred" ? undefined : leads.get(row.id);
+        return {
+          ...row,
+          catalystKind: catalystKindForEvent(
+            ctx,
+            row.marketDomainId,
+            kindsByEvent.get(row.id) ?? [],
+          ),
+          leadTimeHours: leadTimeHours(row.firstObservedAt, row.firstPrimaryAt),
+          leadTitle: lead?.title ?? null,
+          snippet: lead?.snippet ?? null,
+          leadHostname: lead?.hostname ?? null,
+          assets: assetLinks
+            .filter((link) => link.eventId === row.id)
+            .map((link) => assetRows.find((asset) => asset.id === link.assetId))
+            .filter((item): item is (typeof assetRows)[number] => Boolean(item))
+            .map((asset) => ({
+              canonicalId: asset.canonicalId,
+              symbol: asset.symbol,
+              name: asset.name,
+            })),
+        };
+      }),
     };
   });
   app.get("/api/v1/events/:id", { preHandler: authed }, async (request, reply) => {

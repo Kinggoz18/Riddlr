@@ -48,9 +48,6 @@ export async function migrate(url: string) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const url = process.env.RIDDLR_DATABASE_URL;
-  if (!url) {
-    throw new Error("RIDDLR_DATABASE_URL required");
-  }
+  const url = process.env.RIDDLR_DATABASE_URL ?? "postgres://riddlr:riddlr@127.0.0.1:5432/riddlr";
   await migrate(url);
 }

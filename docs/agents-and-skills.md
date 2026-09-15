@@ -21,6 +21,10 @@ The default agent cannot be deleted or renamed. First-run seeds its watchlist
 with `coingecko:bitcoin`, `coingecko:ethereum`, and `coingecko:tether`, and
 attaches SearXNG plus CoinGecko.
 
+Run scan on the agent page starts a scan immediately. The scheduler still uses
+one scan per schedule window. Run scan is a no-op only when that agent already
+has a queued or running scan.
+
 Agents, skills, sources, and portfolios are list / create / edit routes, not
 one page of stacked forms. Discord may be added more than once.
 

@@ -6,6 +6,7 @@ import {
   characterShingles,
   clusterEventTitle,
   clusterEvidence,
+  clusterOpensEvent,
   eventClusterFingerprint,
   independenceGraph,
   isNearDuplicate,
@@ -235,6 +236,43 @@ describe("near-duplicate clustering", () => {
         reliabilityStatus: "observed",
       }),
     ).toBe("bitcoin 4.25σ spot price return shock (v1, threshold 3σ)");
+  });
+
+  it("titles mention clusters from the article headline, not the host", () => {
+    expect(
+      clusterEventTitle({
+        assets: [{ canonicalId: "coingecko:bitcoin", displayName: "Bitcoin" }],
+        evidenceTitles: ["SEC charges exchange with unregistered securities offering"],
+        hostnames: ["www.reuters.com"],
+        reliabilityStatus: "mention",
+        sourceFamilies: ["search"],
+      }),
+    ).toBe("SEC charges exchange with unregistered securities offering");
+  });
+
+  it("does not title CoinGecko market snapshots as search mentions", () => {
+    expect(
+      clusterEventTitle({
+        assets: [
+          { canonicalId: "coingecko:bitcoin", displayName: "Bitcoin" },
+          { canonicalId: "coingecko:ethereum", displayName: "Ethereum" },
+        ],
+        evidenceTitles: ["Bitcoin market snapshot", "Ethereum market snapshot"],
+        hostnames: ["www.coingecko.com"],
+        reliabilityStatus: "mention",
+        sourceFamilies: ["market_data", "market_data"],
+      }),
+    ).toBe("Bitcoin, Ethereum spot observations");
+  });
+
+  it("does not open events from market-data snapshots unless a detector fired", () => {
+    expect(
+      clusterOpensEvent({ sourceFamilies: ["market_data", "market_data"], observedAnomaly: false }),
+    ).toBe(false);
+    expect(clusterOpensEvent({ sourceFamilies: ["market_data"], observedAnomaly: true })).toBe(
+      true,
+    );
+    expect(clusterOpensEvent({ sourceFamilies: ["search"], observedAnomaly: false })).toBe(true);
   });
 
   it("titles clusters from assets and hosts instead of homepage copy", () => {

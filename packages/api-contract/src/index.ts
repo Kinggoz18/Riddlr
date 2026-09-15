@@ -84,6 +84,10 @@ export const eventsListQuerySchema = pageQuerySchema.extend({
   reliability: z.enum(RELIABILITY_STATUSES).optional(),
 });
 
+export const agentScanQuerySchema = z.object({
+  force: z.enum(["true", "1", "false", "0"]).optional(),
+});
+
 export const llmSetupSchema = z.object({
   provider: z.enum(["openai_compatible", "anthropic_compatible"]),
   baseUrl: z.string().url(),

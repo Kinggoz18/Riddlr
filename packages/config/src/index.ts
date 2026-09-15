@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateMasterKey, randomToken } from "@riddlr/crypto";
 import {
@@ -14,13 +14,13 @@ const envSchema = z.object({
   RIDDLR_HTTP_PORT: z.coerce.number().default(3001),
   RIDDLR_PUBLIC_URL: z.string().url().default("http://localhost:8080"),
   RIDDLR_SETUP_ACCESS: z.enum(["loopback", "public"]).default("loopback"),
-  RIDDLR_DATABASE_URL: z.string().min(1),
-  RIDDLR_REDIS_URL: z.string().min(1),
+  RIDDLR_DATABASE_URL: z.string().min(1).optional(),
+  RIDDLR_REDIS_URL: z.string().min(1).optional(),
   RIDDLR_COOKIE_SECRET: z.string().optional().default(""),
   RIDDLR_ENCRYPTION_MASTER_KEY: z.string().optional().default(""),
   RIDDLR_LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   RIDDLR_LOG_FORMAT: z.enum(["json", "pretty"]).default("json"),
-  RIDDLR_SEARXNG_URL: z.string().url().default("http://127.0.0.1:8080"),
+  RIDDLR_SEARXNG_URL: z.string().url().default("http://127.0.0.1:8888"),
   RIDDLR_SMTP_URL: z.string().optional(),
   RIDDLR_RESEND_API_KEY: z.string().optional(),
   RIDDLR_EMAIL_FROM: z.string().default("Riddlr <noreply@localhost>"),
@@ -66,7 +66,12 @@ const envSchema = z.object({
   RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS: z.coerce.number().int().min(60).max(300).default(60),
 });
 
-export type AppConfig = z.infer<typeof envSchema> & {
+export type AppConfig = Omit<
+  z.infer<typeof envSchema>,
+  "RIDDLR_DATABASE_URL" | "RIDDLR_REDIS_URL"
+> & {
+  RIDDLR_DATABASE_URL: string;
+  RIDDLR_REDIS_URL: string;
   cookieSecret: string;
   encryptionMasterKey: string;
   previousMasterKey?: string;
@@ -82,6 +87,39 @@ function persistGeneratedSecrets(
   return path;
 }
 
+const LOCAL_DATABASE_URL = "postgres://riddlr:riddlr@127.0.0.1:5432/riddlr";
+const LOCAL_REDIS_URL = "redis://127.0.0.1:6379";
+
+function loadDotEnvIfPresent() {
+  for (const path of [join(process.cwd(), ".env"), join(process.cwd(), "../../.env")]) {
+    if (!existsSync(path)) {
+      continue;
+    }
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+      const eq = trimmed.indexOf("=");
+      if (eq < 1) {
+        continue;
+      }
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+    return;
+  }
+}
+
 function loadGeneratedSecrets(dir: string): { cookieSecret?: string; masterKey?: string } {
   try {
     return JSON.parse(readFileSync(join(dir, "local-secrets.json"), "utf8")) as {
@@ -94,11 +132,21 @@ function loadGeneratedSecrets(dir: string): { cookieSecret?: string; masterKey?:
 }
 
 export function parseEnv(raw: NodeJS.Dict<string> = process.env): AppConfig {
+  if (raw === process.env) {
+    loadDotEnvIfPresent();
+  }
   const parsed = envSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`Invalid environment: ${parsed.error.message}`);
   }
   const env = parsed.data;
+  const databaseUrl =
+    env.RIDDLR_DATABASE_URL ?? (env.RIDDLR_ENV === "development" ? LOCAL_DATABASE_URL : undefined);
+  const redisUrl =
+    env.RIDDLR_REDIS_URL ?? (env.RIDDLR_ENV === "development" ? LOCAL_REDIS_URL : undefined);
+  if (!databaseUrl || !redisUrl) {
+    throw new Error("RIDDLR_DATABASE_URL and RIDDLR_REDIS_URL are required.");
+  }
   let cookieSecret = env.RIDDLR_COOKIE_SECRET;
   let masterKey = env.RIDDLR_ENCRYPTION_MASTER_KEY;
   const allowGenerate =
@@ -137,6 +185,8 @@ export function parseEnv(raw: NodeJS.Dict<string> = process.env): AppConfig {
 
   return {
     ...env,
+    RIDDLR_DATABASE_URL: databaseUrl,
+    RIDDLR_REDIS_URL: redisUrl,
     cookieSecret,
     encryptionMasterKey: masterKey,
     previousMasterKey: env.RIDDLR_ENCRYPTION_MASTER_KEY_PREVIOUS || undefined,

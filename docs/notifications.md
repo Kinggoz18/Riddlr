@@ -16,8 +16,13 @@ Application code templates the text; the LLM never writes a notification.
 
 Defaults: high and critical to every configured target; moderate to the
 primary target. Agents may replace those defaults with routing rules on the
-agent page. Confirmation, dispute, and retraction follow the original
+agent page. Empty catalyst kinds, assets, or reliability lists match all
+values. Confirmation, dispute, and retraction follow the original
 destinations even when the original send failed.
+
+Unverified early warnings require Settings → Notifications (Unverified early
+warnings) and Include unverified early warnings on the matching agent route.
+They stay labelled unverified. Candidates are not delivered.
 
 Observation threshold alerts are labeled Observation and are never signals.
 See [discord-webhooks.md](integrations/discord-webhooks.md),

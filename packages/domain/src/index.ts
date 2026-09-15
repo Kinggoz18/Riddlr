@@ -53,6 +53,7 @@ export {
   characterShingles,
   clusterEventTitle,
   clusterEvidence,
+  clusterOpensEvent,
   eventClusterFingerprint,
   type IndependenceEdge,
   type IndependenceNode,

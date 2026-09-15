@@ -52,6 +52,7 @@ import {
   classifyReprint,
   clusterEventTitle,
   clusterEvidence,
+  clusterOpensEvent,
   collectSignalProofFacts,
   decideSignalGate,
   discoverCandidate,
@@ -1115,7 +1116,7 @@ export async function clusterScanEvents(
           (other, otherIndex) =>
             otherIndex < index && overlappingOutbound(item.outboundUrls, other.outboundUrls),
         ),
-        snippetOnly: false,
+        snippetOnly: item.row.contentCompleteness === "snippet",
         opposingClaims: cluster.some(
           (other, otherIndex) => otherIndex < index && textOpposes(item.text, other.text),
         ),
@@ -1160,6 +1161,14 @@ export async function clusterScanEvents(
             item.kind === "crypto:macro_policy_decision" ||
             item.kind === "crypto:regulatory_action",
         ));
+    if (
+      !clusterOpensEvent({
+        sourceFamilies: cluster.map((item) => item.sourceFamily ?? item.row.sourceFamily ?? ""),
+        observedAnomaly,
+      })
+    ) {
+      continue;
+    }
     const retractingCount = clusterClaims.filter((item) => item.stance === "retracts").length;
     const contradictingFromClaims = clusterClaims.filter(
       (item) => item.stance === "contradicts",
@@ -1279,6 +1288,7 @@ export async function clusterScanEvents(
       hostnames: cluster.map((item) => item.hostname ?? "unknown-host"),
       principalClaimTitle: principal?.title,
       reliabilityStatus: reliability.status,
+      sourceFamilies: cluster.map((item) => item.sourceFamily ?? item.row.sourceFamily ?? ""),
     });
     const catalystKind = principalCatalystKindForClaims(
       clusterClaims.map((item) => item.kind),

@@ -51,6 +51,13 @@ describe("evidence provenance", () => {
       classifyReprint({
         sameCanonicalUrl: false,
         sameContentHash: false,
+        snippetOnly: true,
+      }),
+    ).toBe("supporting");
+    expect(
+      classifyReprint({
+        sameCanonicalUrl: false,
+        sameContentHash: false,
         opposingClaims: true,
       }),
     ).toBe("contradicting");

@@ -12,6 +12,7 @@ import {
   independenceCopy,
   leadTimeLabel,
   lifecycleStatusLabel,
+  materialityReasonLabel,
   reliabilityStatusLabel,
 } from "../format.js";
 
@@ -31,8 +32,22 @@ type EventRow = {
   contentCompleteness?: string | null;
   lifecycleState?: string | null;
   leadTimeHours?: number | null;
+  discoveryReason?: string | null;
+  leadTitle?: string | null;
+  snippet?: string | null;
+  leadHostname?: string | null;
   assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
 };
+
+function eventSummary(row: EventRow) {
+  if (row.snippet) {
+    return row.snippet;
+  }
+  if (row.leadTitle && row.leadTitle !== row.title) {
+    return row.leadTitle;
+  }
+  return row.discoveryReason ?? undefined;
+}
 
 function EventsPage() {
   const [rows, setRows] = useState<EventRow[]>([]);
@@ -96,43 +111,53 @@ function EventsPage() {
       ) : (
         <>
           <section className="record-list">
-            {rows.map((row) => (
-              <Card key={row.id} className="record-row">
-                <NavLink to={`/events/${row.id}`}>{row.title}</NavLink>
-                <StatusBadge label={eventStatusLabel(row.status)} />
-                {row.lifecycleState ? (
-                  <StatusBadge label={lifecycleStatusLabel(row.lifecycleState)} />
-                ) : null}
-                <p className="record-meta">
-                  <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
-                  {row.candidateKind ? <span>{candidateKindLabel(row.candidateKind)}</span> : null}
-                  {row.catalystKind ? <span>{catalystKindLabel(row.catalystKind)}</span> : null}
-                  {row.reliabilityStatus ? (
-                    <span>{reliabilityStatusLabel(row.reliabilityStatus)}</span>
+            {rows.map((row) => {
+              const summary = eventSummary(row);
+              return (
+                <Card key={row.id} className="record-row">
+                  <NavLink to={`/events/${row.id}`}>{row.title}</NavLink>
+                  <StatusBadge label={eventStatusLabel(row.status)} />
+                  {row.lifecycleState ? (
+                    <StatusBadge label={lifecycleStatusLabel(row.lifecycleState)} />
                   ) : null}
-                  {leadTimeLabel(row.leadTimeHours) ? (
-                    <span>{leadTimeLabel(row.leadTimeHours)}</span>
-                  ) : null}
-                  {row.impactLevel ? <span>Impact {row.impactLevel}</span> : null}
-                  {row.contentCompleteness ? (
-                    <span>{row.contentCompleteness.replaceAll("_", " ")}</span>
-                  ) : null}
-                  {row.epistemicStatus ? (
-                    <span>{epistemicStatusLabel(row.epistemicStatus)}</span>
-                  ) : null}
-                  <time dateTime={row.windowStart}>
-                    {dateTime.format(new Date(row.windowStart))}
-                  </time>
-                  {(row.assets ?? []).length > 0 ? (
-                    <span>
-                      {(row.assets ?? [])
-                        .map((asset) => asset.symbol || asset.name || asset.canonicalId)
-                        .join(", ")}
-                    </span>
-                  ) : null}
-                </p>
-              </Card>
-            ))}
+                  {summary ? <p className="record-copy">{summary}</p> : null}
+                  <p className="record-meta">
+                    <span>{independenceCopy(row.independentCount, row.derivedCount)}</span>
+                    {row.candidateKind ? (
+                      <span>{candidateKindLabel(row.candidateKind)}</span>
+                    ) : null}
+                    {row.catalystKind ? <span>{catalystKindLabel(row.catalystKind)}</span> : null}
+                    {row.reliabilityStatus ? (
+                      <span>{reliabilityStatusLabel(row.reliabilityStatus)}</span>
+                    ) : null}
+                    {row.materialityReason ? (
+                      <span>{materialityReasonLabel(row.materialityReason)}</span>
+                    ) : null}
+                    {leadTimeLabel(row.leadTimeHours) ? (
+                      <span>{leadTimeLabel(row.leadTimeHours)}</span>
+                    ) : null}
+                    {row.impactLevel ? <span>Impact {row.impactLevel}</span> : null}
+                    {row.contentCompleteness ? (
+                      <span>{row.contentCompleteness.replaceAll("_", " ")}</span>
+                    ) : null}
+                    {row.epistemicStatus ? (
+                      <span>{epistemicStatusLabel(row.epistemicStatus)}</span>
+                    ) : null}
+                    {row.leadHostname ? <span>{row.leadHostname}</span> : null}
+                    <time dateTime={row.windowStart}>
+                      {dateTime.format(new Date(row.windowStart))}
+                    </time>
+                    {(row.assets ?? []).length > 0 ? (
+                      <span>
+                        {(row.assets ?? [])
+                          .map((asset) => asset.symbol || asset.name || asset.canonicalId)
+                          .join(", ")}
+                      </span>
+                    ) : null}
+                  </p>
+                </Card>
+              );
+            })}
           </section>
           {hasMore && rows.length < CLIENT_LIST_CAP ? (
             <Button

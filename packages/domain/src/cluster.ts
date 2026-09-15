@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { EvidenceRole } from "./evidence.js";
 import { normalizeText } from "./evidence.js";
 import { takeBounded } from "./limits.js";
+import { DEFAULT_PRICE_TRACKER_HOSTS, hostMatchesPublisherPolicy } from "./publisher-hosts.js";
 
 export const NEAR_DUPLICATE_THRESHOLD = 0.82;
 export const CLUSTER_SIMILARITY_THRESHOLD = 0.45;
@@ -203,32 +204,44 @@ function syntheticClaimTitle(title: string): boolean {
   return /^[\w .-]+: [a-z]+_[a-z0-9_]+/i.test(title.trim());
 }
 
-export function clusterEventTitle(input: {
-  assets: Array<{ displayName?: string | null; symbol?: string | null; canonicalId: string }>;
-  evidenceTitles: Array<string | null | undefined>;
-  hostnames: string[];
-  principalClaimTitle?: string;
-  reliabilityStatus?: string;
-}): string {
-  const principal = input.principalClaimTitle?.trim();
-  if (principal && !syntheticClaimTitle(principal)) {
-    return principal;
-  }
-  if (input.reliabilityStatus === "mention") {
-    const host = input.hostnames.find((host) => host && host !== "unknown-host");
-    return host ? `Search mention · ${host}` : "Search mention";
-  }
-  const useful = input.evidenceTitles.find((title) => {
-    const value = title?.trim() ?? "";
-    return value.length >= 28 && value.length <= 140 && !syntheticClaimTitle(value);
-  });
-  if (useful?.trim()) {
-    return useful.trim();
-  }
-  const assetLabels = takeBounded(
+function isPriceTrackerHost(host: string): boolean {
+  return DEFAULT_PRICE_TRACKER_HOSTS.some((pattern) => hostMatchesPublisherPolicy(host, pattern));
+}
+
+function newsHostnames(hosts: readonly string[]): string[] {
+  const normalized = [
+    ...new Set(
+      hosts
+        .map((host) => host.toLowerCase())
+        .filter((host) => host.length > 0 && host !== "unknown-host"),
+    ),
+  ];
+  const news = normalized.filter((host) => !isPriceTrackerHost(host));
+  return news.length > 0 ? news : normalized;
+}
+
+function usefulEvidenceTitle(titles: Array<string | null | undefined>): string | undefined {
+  return titles
+    .find((title) => {
+      const value = title?.trim() ?? "";
+      if (value.length < 28 || value.length > 140 || syntheticClaimTitle(value)) {
+        return false;
+      }
+      if (/wikipedia/i.test(value) || /market snapshot$/i.test(value)) {
+        return false;
+      }
+      return true;
+    })
+    ?.trim();
+}
+
+function assetLabelsForTitle(
+  assets: Array<{ displayName?: string | null; symbol?: string | null; canonicalId: string }>,
+): string[] {
+  return takeBounded(
     [
       ...new Set(
-        input.assets.map((asset) => {
+        assets.map((asset) => {
           if (asset.displayName?.trim()) {
             return asset.displayName.trim();
           }
@@ -241,17 +254,53 @@ export function clusterEventTitle(input: {
     ],
     3,
   );
-  const hosts = takeBounded(
-    [
-      ...new Set(
-        input.hostnames
-          .map((host) => host.toLowerCase())
-          .filter((host) => host.length > 0 && host !== "unknown-host"),
-      ),
-    ],
-    2,
-  );
+}
+
+export function clusterOpensEvent(input: {
+  sourceFamilies: readonly string[];
+  observedAnomaly: boolean;
+}): boolean {
+  if (input.sourceFamilies.length === 0) {
+    return true;
+  }
+  const marketDataOnly = input.sourceFamilies.every((family) => family === "market_data");
+  return !marketDataOnly || input.observedAnomaly;
+}
+
+export function clusterEventTitle(input: {
+  assets: Array<{ displayName?: string | null; symbol?: string | null; canonicalId: string }>;
+  evidenceTitles: Array<string | null | undefined>;
+  hostnames: string[];
+  principalClaimTitle?: string;
+  reliabilityStatus?: string;
+  sourceFamilies?: readonly string[];
+}): string {
+  const principal = input.principalClaimTitle?.trim();
+  if (principal && !syntheticClaimTitle(principal)) {
+    return principal;
+  }
+  const families = input.sourceFamilies ?? [];
+  const observationOrMarket =
+    families.length > 0 &&
+    families.every((family) => family === "observation" || family === "market_data");
+  const useful = usefulEvidenceTitle(input.evidenceTitles);
+  if (observationOrMarket) {
+    if (useful) {
+      return useful;
+    }
+    const labels = assetLabelsForTitle(input.assets);
+    return labels.length > 0 ? `${labels.join(", ")} spot observations` : "Spot observations";
+  }
+  if (useful) {
+    return useful;
+  }
+  const assetLabels = assetLabelsForTitle(input.assets);
+  const hosts = takeBounded(newsHostnames(input.hostnames), 2);
   const hostSuffix = hosts.length > 0 ? ` · ${hosts.join(", ")}` : "";
+  if (input.reliabilityStatus === "mention") {
+    const host = hosts[0];
+    return host ? `Search mention · ${host}` : "Search mention";
+  }
   if (assetLabels.length > 0) {
     return `${assetLabels.join(", ")} cluster${hostSuffix}`;
   }

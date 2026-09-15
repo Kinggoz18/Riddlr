@@ -240,7 +240,6 @@ const shutdown = async () => {
   await observeWorker.close();
   await outcomesWorker.close();
   await ctx.scanQueue.close();
-  await ctx.ingestQueue?.close();
   await ctx.enrichQueue?.close();
   await ctx.understandQueue?.close();
   await ctx.clusterQueue?.close();

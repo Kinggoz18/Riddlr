@@ -67,5 +67,26 @@ describe("parseEnv", () => {
     expect(config.encryptionMasterKey.length).toBeGreaterThan(16);
     expect(config.RIDDLR_OBSERVE_PRICE_INTERVAL_SECONDS).toBe(60);
     expect(config.RIDDLR_OBSERVE_RETENTION_DAYS).toBe(90);
+    expect(config.RIDDLR_SEARXNG_URL).toBe("http://127.0.0.1:8888");
+  });
+
+  it("defaults local database and redis URLs in development", () => {
+    const dir = mkdtempSync(join(tmpdir(), "riddlr-"));
+    const config = parseEnv({
+      RIDDLR_ENV: "development",
+      RIDDLR_SECRETS_DIR: dir,
+    });
+    expect(config.RIDDLR_DATABASE_URL).toBe("postgres://riddlr:riddlr@127.0.0.1:5432/riddlr");
+    expect(config.RIDDLR_REDIS_URL).toBe("redis://127.0.0.1:6379");
+  });
+
+  it("requires database and redis URLs outside development", () => {
+    expect(() =>
+      parseEnv({
+        RIDDLR_ENV: "test",
+        RIDDLR_COOKIE_SECRET: "x".repeat(32),
+        RIDDLR_ENCRYPTION_MASTER_KEY: "Y".repeat(44),
+      }),
+    ).toThrow(/RIDDLR_DATABASE_URL/);
   });
 });

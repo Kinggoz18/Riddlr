@@ -523,6 +523,37 @@ describe("setup, auth, and domain persistence", () => {
       headers: { cookie },
     });
     expect(duplicate.json().duplicate).toBe(true);
+    const forcedWhileQueued = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${agentId}/scan?force=true`,
+      headers: { cookie },
+    });
+    expect(forcedWhileQueued.json().duplicate).toBe(true);
+    await ctx.db
+      .update(scans)
+      .set({ status: "succeeded", finishedAt: new Date() })
+      .where(
+        and(eq(scans.agentId, agentId as string), inArray(scans.status, ["queued", "running"])),
+      );
+    const windowClosed = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${agentId}/scan`,
+      headers: { cookie },
+    });
+    expect(windowClosed.json().duplicate).toBe(true);
+    const forced = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${agentId}/scan?force=true`,
+      headers: { cookie },
+    });
+    expect(forced.statusCode).toBe(200);
+    expect(forced.json().duplicate).toBe(false);
+    const forcedAgain = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${agentId}/scan?force=true`,
+      headers: { cookie },
+    });
+    expect(forcedAgain.json().duplicate).toBe(true);
   });
 
   it("revokes sessions on logout and accepts a recovery code after login", async () => {
@@ -829,6 +860,15 @@ describe("setup, auth, and domain persistence", () => {
         (row) =>
           row.reliabilityStatus === "corroborated" && row.catalystKind === "listing_or_delisting",
       ),
+    ).toBe(true);
+    expect(
+      (
+        listedEvents.json().events as Array<{
+          leadTitle?: string | null;
+          snippet?: string | null;
+          discoveryReason?: string | null;
+        }>
+      ).some((row) => Boolean(row.leadTitle || row.snippet || row.discoveryReason)),
     ).toBe(true);
     const signalRows = await ctx.db.select().from(signals);
     const produced = signalRows.find((row) => row.headline.includes("Bitcoin ETF"));

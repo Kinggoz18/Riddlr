@@ -5,6 +5,9 @@ services:
   valkey:
     ports:
       - "6379:6379"
+  searxng:
+    ports:
+      - "8888:8080"
   mailpit:
     ports:
       - "8025:8025"

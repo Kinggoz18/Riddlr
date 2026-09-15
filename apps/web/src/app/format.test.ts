@@ -19,6 +19,7 @@ import {
   lifecycleStatusLabel,
   MAX_DAILY_TOKEN_BUDGET,
   MIN_DAILY_TOKEN_BUDGET,
+  materialityReasonLabel,
   objectiveLabel,
   parseClockHour,
   reliabilityStatusLabel,
@@ -84,6 +85,8 @@ describe("agent labels", () => {
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
     expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
+    expect(materialityReasonLabel("independent_origins")).toBe("Independent origins");
+    expect(materialityReasonLabel("below_threshold")).toBe("Below materiality threshold");
     expect(typedSignalLabel("exploit_or_bridge_drain")).toBe("Exploit or bridge drain");
     expect(typedSignalLabel("token_unlock", true)).toBe("Token unlock · Anticipated");
     expect(typedSignalLabel("perp_stress")).toBe("Perp stress");

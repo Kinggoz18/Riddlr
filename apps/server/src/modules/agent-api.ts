@@ -1,5 +1,6 @@
 import {
   agentCreateSchema,
+  agentScanQuerySchema,
   agentUpdateSchema,
   assetSearchQuerySchema,
   skillCreateSchema,
@@ -734,8 +735,11 @@ export function registerAgentRoutes(
 
   app.post("/api/v1/agents/:id/scan", { preHandler: authed }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const query = agentScanQuerySchema.parse(request.query);
     try {
-      return await enqueueAgentScan(ctx, id);
+      return await enqueueAgentScan(ctx, id, {
+        force: query.force === "true" || query.force === "1",
+      });
     } catch (error) {
       const status = (error as Error & { statusCode?: number }).statusCode;
       if (status) {

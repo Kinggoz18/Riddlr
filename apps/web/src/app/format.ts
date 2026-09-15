@@ -303,6 +303,29 @@ export function candidateKindLabel(kind: string) {
   }
 }
 
+export function materialityReasonLabel(reason: string) {
+  switch (reason) {
+    case "independent_origins":
+      return "Independent origins";
+    case "reprint_only":
+      return "Reprints only";
+    case "early_warning_candidate":
+      return "Early warning candidate";
+    case "observed_anomaly":
+      return "Observed anomaly";
+    case "watchlist_observation":
+      return "Watchlist observation";
+    case "portfolio_overlap":
+      return "Portfolio overlap";
+    case "below_threshold":
+      return "Below materiality threshold";
+    case "no_evidence":
+      return "No evidence";
+    default:
+      return reason.replaceAll("_", " ");
+  }
+}
+
 export function independenceCopy(independent: number, derived: number) {
   return `${independent} independent origin${independent === 1 ? "" : "s"} · ${derived} reprint${derived === 1 ? "" : "s"}`;
 }

@@ -12,9 +12,27 @@ import {
   independenceCopy,
   leadTimeLabel,
   lifecycleStatusLabel,
+  materialityReasonLabel,
   reliabilityStatusLabel,
 } from "../format.js";
 import { assetPagePath } from "../morning.js";
+
+function observationValue(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "observation";
+    }
+  }
+  return "—";
+}
 
 function EventDetailPage() {
   const { id } = useParams();
@@ -47,7 +65,14 @@ function EventDetailPage() {
       contentCompleteness?: string;
     }>;
     roles: Array<{ evidenceId: string; role: string }>;
-    observations?: Array<{ kind: string; value: unknown; sourceId: string }>;
+    observations?: Array<{
+      kind: string;
+      value: unknown;
+      sourceId: string;
+      unit?: string | null;
+      assetCanonicalId?: string | null;
+      observedAt?: string;
+    }>;
     assets?: Array<{ canonicalId: string; symbol?: string | null; name?: string | null }>;
     independence?: { nodes: Array<{ evidenceId: string; hostname: string; role: string }> };
     claims?: Array<{
@@ -141,6 +166,9 @@ function EventDetailPage() {
         {data.event.impactLevel ? <span>Impact {data.event.impactLevel}</span> : null}
         {data.event.contentCompleteness ? (
           <span>{data.event.contentCompleteness.replaceAll("_", " ")}</span>
+        ) : null}
+        {data.event.materialityReason ? (
+          <span>{materialityReasonLabel(data.event.materialityReason)}</span>
         ) : null}
       </p>
       {data.event.status === "candidate" ? (
@@ -321,11 +349,17 @@ function EventDetailPage() {
           <h2>Sourced observations</h2>
           <ul className="data-list">
             {data.observations.map((item) => (
-              <li key={`${item.kind}-${item.sourceId}`}>
+              <li key={`${item.kind}-${item.sourceId}-${item.observedAt ?? ""}`}>
                 <span>
-                  {item.kind}: {String(item.value)}
+                  {item.kind.replaceAll("_", " ")}
+                  {item.assetCanonicalId ? ` · ${item.assetCanonicalId}` : ""}:{" "}
+                  {observationValue(item.value)}
+                  {item.unit ? ` ${item.unit}` : ""}
                 </span>
-                <small>{item.sourceId}</small>
+                <small>
+                  {item.sourceId}
+                  {item.observedAt ? ` · ${dateTime.format(new Date(item.observedAt))}` : ""}
+                </small>
               </li>
             ))}
           </ul>
@@ -381,6 +415,9 @@ function EventDetailPage() {
                     ? ` · ${item.contentCompleteness.replaceAll("_", " ")}`
                     : ""}
                 </small>
+                {item.bodyText ? (
+                  <small>{item.bodyText.replace(/\s+/g, " ").trim().slice(0, 220)}</small>
+                ) : null}
               </span>
             </li>
           ))}

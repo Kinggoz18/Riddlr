@@ -19,7 +19,8 @@ clone. CI still uses `--build`. Pin a digest or version with
 
 Use `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
 to overlay the development Caddyfile (`/mailpit*`, `/searxng*`) and publish
-Postgres/Valkey/Mailpit (UI 8025, SMTP 1025) for native Node.
+Postgres, Valkey, Mailpit (UI 8025, SMTP 1025), and SearXNG (8888) for native
+Node.
 
 Services: Caddy 2.10, web (nginx 1.27), api/worker (Node 22, compiled, non-root),
 postgres 17, valkey 8, searxng, mailpit v1.27.

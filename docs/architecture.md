@@ -28,7 +28,9 @@ ObservationProvider → observation_series → detectors → observation evidenc
 - `apps/server` `cmd/reset-password` — print a one-hour password-reset URL when
   email is not configured
 
-The API does not run scans in-process.
+The API does not run scans in-process. The scan worker ingests sources
+inside `runScan`, then enrich, cluster, analyze, notify, observe, and
+outcome jobs. There is no separate ingest consumer.
 
 ## Bounded memory
 

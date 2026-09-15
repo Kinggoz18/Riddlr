@@ -416,9 +416,10 @@ function IdentityPolicies() {
       <Card>
         <h2>Publisher hosts</h2>
         <p className="field-note">
-          Blocked hosts skip SearXNG enrichment and cannot produce claims. Price-tracker hosts
-          (CoinGecko, CoinMarketCap, TradingView, and the rest of the default list) start blocked.
-          CoinGecko observations still poll.
+          Blocked hosts skip SearXNG enrichment and cannot produce claims. They are not paused
+          sources. Price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest of the
+          default list) start blocked so search hits to price pages do not open events. CoinGecko,
+          CoinMarketCap, and Crypto.com sources above stay enabled; spot observations still poll.
         </p>
         {hosts.length > 0 ? (
           <ul className="data-list">
