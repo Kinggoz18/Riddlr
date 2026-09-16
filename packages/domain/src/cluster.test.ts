@@ -334,6 +334,15 @@ describe("near-duplicate clustering", () => {
         sourceFamilies: ["market_data", "market_data"],
       }),
     ).toBe("Bitcoin, Ethereum spot observations");
+    expect(
+      clusterEventTitle({
+        assets: [{ canonicalId: "coingecko:bitcoin", displayName: "Bitcoin" }],
+        evidenceTitles: ["market cap USD"],
+        hostnames: ["www.coingecko.com"],
+        reliabilityStatus: "mention",
+        sourceFamilies: ["market_data"],
+      }),
+    ).toBe("Bitcoin spot observations");
   });
 
   it("does not open events from market-data snapshots unless a detector fired", () => {

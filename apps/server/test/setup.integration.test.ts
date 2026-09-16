@@ -39,6 +39,7 @@ import {
   passwordResetTokens,
   portfolios,
   publisherHostPolicies,
+  scanSourceRuns,
   scans,
   sessions,
   signalClaimProofs,
@@ -90,13 +91,43 @@ import { createDiscordWebhookTarget } from "../src/modules/notification-api.js";
 import { deliverObservationAlerts, deliverSignalNotifications } from "../src/modules/notify.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
 import { recordDueOutcomes } from "../src/modules/outcomes.js";
-import { analyzeQueuedEvent, runScan } from "../src/modules/pipeline.js";
+import { analyzeQueuedEvent, finalizeScanStatus, runScan } from "../src/modules/pipeline.js";
 import { enforceSessionCap } from "../src/modules/sessions.js";
 
 function cookieHeader(setCookie: string | string[] | undefined): string {
   const list = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
   const session = list.find((item) => item.startsWith("riddlr_session=")) ?? list[0];
   return String(session ?? "").split(";")[0] ?? "";
+}
+
+async function enrichmentAttemptTotal(metrics: AppContext["metrics"]): Promise<number> {
+  const snapshot = await metrics.enrichmentOutcomes.get();
+  return snapshot.values
+    .filter((row) => row.labels.status !== "skipped_robots")
+    .reduce((sum, row) => sum + row.value, 0);
+}
+
+async function withEnabledAdapters(
+  appCtx: AppContext,
+  adapters: string[],
+  fn: () => Promise<void>,
+) {
+  const rows = await appCtx.db
+    .select({ id: sources.id, adapterId: sources.adapterId, enabled: sources.enabled })
+    .from(sources);
+  const disableIds = rows
+    .filter((row) => row.enabled && !adapters.includes(row.adapterId))
+    .map((row) => row.id);
+  if (disableIds.length > 0) {
+    await appCtx.db.update(sources).set({ enabled: false }).where(inArray(sources.id, disableIds));
+  }
+  try {
+    await fn();
+  } finally {
+    if (disableIds.length > 0) {
+      await appCtx.db.update(sources).set({ enabled: true }).where(inArray(sources.id, disableIds));
+    }
+  }
 }
 
 const DISCORD_TEST_TOKEN_PAD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ab";
@@ -4559,5 +4590,224 @@ describe("setup, auth, and domain persistence", () => {
       payload: { token: sibling, newPassword: "another horse battery!" },
     });
     expect(reuseSibling.statusCode).toBe(400);
+  });
+
+  it("stores SearXNG unresponsive engines without marking the scan partial", async () => {
+    await withEnabledAdapters(ctx, ["searxng", "coingecko"], async () => {
+      const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+      const [scan] = await ctx.db
+        .insert(scans)
+        .values({
+          agentId: agent?.id as string,
+          status: "queued",
+          windowStart: new Date("2026-09-16T12:00:00.000Z"),
+          idempotencyKey: "pipeline:crypto:unresponsive-engines-1",
+        })
+        .returning();
+      const fetchImpl: typeof fetch = async (input) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("api.coingecko.com")) {
+          return coinGeckoMarketsResponse();
+        }
+        if (url.includes("/search")) {
+          return Response.json({
+            results: [
+              {
+                url: "https://news.example.com/bitcoin-unresponsive",
+                title: "Bitcoin filing details today after the issuer update",
+                content: "The filing said Bitcoin demand rose after reported ETF inflows.",
+                engine: "fixture",
+              },
+            ],
+            unresponsive_engines: ["wikipedia", "google news"],
+          });
+        }
+        if (url.endsWith("/robots.txt")) {
+          return new Response("User-agent: *\nAllow: /", { status: 200 });
+        }
+        if (url.includes("news.example.com/bitcoin-unresponsive")) {
+          return new Response(
+            fixtureArticleHtml(
+              "Bitcoin filing",
+              "Bitcoin demand rose after reported ETF inflows covering listed products.",
+            ),
+          );
+        }
+        return new Response("unexpected fetch", { status: 404 });
+      };
+      await runScan(ctx, scan?.id as string, { fetchImpl });
+      const [finished] = await ctx.db
+        .select()
+        .from(scans)
+        .where(eq(scans.id, scan?.id as string));
+      expect(finished?.status).toBe("succeeded");
+      expect(finished?.partial).toBe(false);
+      const runs = await ctx.db
+        .select()
+        .from(scanSourceRuns)
+        .where(eq(scanSourceRuns.scanId, scan?.id as string));
+      expect(runs.some((row) => (row.unresponsiveEngines ?? []).includes("wikipedia"))).toBe(true);
+      expect(runs.some((row) => (row.unresponsiveEngines ?? []).includes("google news"))).toBe(
+        true,
+      );
+    });
+  });
+
+  it("enqueues one scan-level enrich job outside test env and leaves the scan running", async () => {
+    await withEnabledAdapters(ctx, ["searxng", "coingecko"], async () => {
+      const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+      const [scan] = await ctx.db
+        .insert(scans)
+        .values({
+          agentId: agent?.id as string,
+          status: "queued",
+          windowStart: new Date("2026-09-16T13:00:00.000Z"),
+          idempotencyKey: "pipeline:crypto:enrich-scan-queue-1",
+        })
+        .returning();
+      const enrichJobs: Array<{ name: string; evidenceIds: string[] }> = [];
+      const understandJobs: string[] = [];
+      const clusterJobs: string[] = [];
+      const queuedCtx: AppContext = {
+        ...ctx,
+        config: { ...ctx.config, RIDDLR_ENV: "development" },
+        enrichQueue: {
+          add: async (name: string, data: { evidenceIds?: string[] }) => {
+            enrichJobs.push({ name, evidenceIds: data.evidenceIds ?? [] });
+            return { id: "enrich-scan" };
+          },
+        } as unknown as AppContext["enrichQueue"],
+        understandQueue: {
+          add: async () => {
+            understandJobs.push("understand");
+            return { id: "understand" };
+          },
+        } as unknown as AppContext["understandQueue"],
+        clusterQueue: {
+          add: async () => {
+            clusterJobs.push("cluster");
+            return { id: "cluster" };
+          },
+        } as unknown as AppContext["clusterQueue"],
+      };
+      const fetchImpl: typeof fetch = async (input) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("api.coingecko.com")) {
+          return coinGeckoMarketsResponse();
+        }
+        if (url.includes("/search")) {
+          return Response.json({
+            results: [
+              {
+                url: "https://news.example.com/bitcoin-queue",
+                title: "Bitcoin filing details today after the issuer update",
+                content: "The filing said Bitcoin demand rose after reported ETF inflows.",
+                engine: "fixture",
+              },
+            ],
+          });
+        }
+        return new Response("unexpected fetch", { status: 404 });
+      };
+      await runScan(queuedCtx, scan?.id as string, { fetchImpl });
+      expect(enrichJobs).toHaveLength(1);
+      expect(enrichJobs[0]?.name).toBe("enrich-scan");
+      expect(enrichJobs[0]?.evidenceIds.length).toBeGreaterThan(0);
+      expect(understandJobs).toEqual([]);
+      expect(clusterJobs).toEqual([]);
+      const [running] = await ctx.db
+        .select()
+        .from(scans)
+        .where(eq(scans.id, scan?.id as string));
+      expect(running?.status).toBe("running");
+      expect(running?.finishedAt).toBeNull();
+      await finalizeScanStatus(ctx, scan?.id as string);
+      const [finished] = await ctx.db
+        .select()
+        .from(scans)
+        .where(eq(scans.id, scan?.id as string));
+      expect(finished?.status).toBe("succeeded");
+      expect(finished?.finishedAt).toBeTruthy();
+    });
+  });
+
+  it("enriches at most RIDDLR_ENRICH_PER_SCAN pages and records RSS around a scan", async () => {
+    await withEnabledAdapters(ctx, ["searxng", "coingecko"], async () => {
+      const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+      const [scan] = await ctx.db
+        .insert(scans)
+        .values({
+          agentId: agent?.id as string,
+          status: "queued",
+          windowStart: new Date("2026-09-16T14:00:00.000Z"),
+          idempotencyKey: "pipeline:crypto:enrich-cap-rss-1",
+        })
+        .returning();
+      const articleFetches: string[] = [];
+      const fetchImpl: typeof fetch = async (input) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("api.coingecko.com")) {
+          return coinGeckoMarketsResponse();
+        }
+        if (url.includes("/search")) {
+          return Response.json({
+            results: [
+              {
+                url: "https://alpha.example.com/bitcoin-one",
+                title: "Bitcoin filing details today after the issuer update",
+                content: "The filing said Bitcoin demand rose after reported ETF inflows.",
+                engine: "fixture",
+              },
+              {
+                url: "https://beta.example.com/bitcoin-two",
+                title: "Bitcoin ETF inflows accelerate after latest issuer filing",
+                content:
+                  "Listed products attracted cash this week as Bitcoin allocations increased.",
+                engine: "fixture",
+              },
+              {
+                url: "https://gamma.example.com/bitcoin-three",
+                title: "Bitcoin demand rose after reported ETF inflows this week",
+                content: "Issuers described stronger allocator demand for listed Bitcoin products.",
+                engine: "fixture",
+              },
+            ],
+          });
+        }
+        if (url.endsWith("/robots.txt")) {
+          return new Response("User-agent: *\nAllow: /", { status: 200 });
+        }
+        if (url.includes(".example.com/bitcoin-")) {
+          articleFetches.push(url);
+          return new Response(
+            fixtureArticleHtml(
+              "Bitcoin filing",
+              "Bitcoin demand rose after reported ETF inflows covering listed products this week.",
+            ),
+          );
+        }
+        return new Response("unexpected fetch", { status: 404 });
+      };
+      const capped: AppContext = {
+        ...ctx,
+        config: { ...ctx.config, RIDDLR_ENRICH_PER_SCAN: 1 },
+      };
+      const attemptsBefore = await enrichmentAttemptTotal(ctx.metrics);
+      const memoryBefore = snapshotProcessMemory();
+      await runScan(capped, scan?.id as string, { fetchImpl });
+      const memoryAfter = snapshotProcessMemory();
+      const attemptsAfter = await enrichmentAttemptTotal(ctx.metrics);
+      expect(articleFetches).toHaveLength(1);
+      expect(attemptsAfter - attemptsBefore).toBeLessThanOrEqual(
+        capped.config.RIDDLR_ENRICH_PER_SCAN,
+      );
+      expect(memoryBefore.rss).toBeGreaterThan(1_000_000);
+      expect(memoryAfter.rss).toBeGreaterThan(1_000_000);
+      expect(memoryAfter.peakRss).toBeGreaterThanOrEqual(memoryAfter.rss);
+      expect(memoryAfter.peakRss).toBeGreaterThanOrEqual(memoryBefore.peakRss);
+    });
   });
 });

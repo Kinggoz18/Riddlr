@@ -28,7 +28,8 @@ export type IngestSourceJob = {
 
 export type EnrichEvidenceJob = {
   scanId: string;
-  evidenceId: string;
+  evidenceId?: string;
+  evidenceIds?: string[];
   marketDomainId: string;
   idempotencyKey: string;
 };

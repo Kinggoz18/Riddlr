@@ -77,6 +77,7 @@ import {
   MAX_OBSERVE_PINS,
   MAX_SEARXNG_ASSET_QUERIES,
   MAX_SKILLS_PER_AGENT,
+  MAX_UNRESPONSIVE_ENGINES,
   MAX_WATCHLIST_ITEMS,
   type MarketObservation,
   mentionIsDomainRelevant,
@@ -132,7 +133,7 @@ import {
   redactRequestUrl,
   SourceAdapterRegistry,
 } from "@riddlr/source-adapters";
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { listRegistryAssets, snapshotSpacesForAgent } from "./asset-registry.js";
 import {
@@ -366,6 +367,37 @@ async function oddsContextObservations(
   return out;
 }
 
+export function scanPipelineRunsInline(env: string): boolean {
+  return env === "test";
+}
+
+export async function finalizeScanStatus(ctx: AppContext, scanId: string): Promise<void> {
+  const [scan] = await ctx.db.select().from(scans).where(eq(scans.id, scanId)).limit(1);
+  if (!scan || scan.finishedAt) {
+    return;
+  }
+  const runs = await ctx.db.select().from(scanSourceRuns).where(eq(scanSourceRuns.scanId, scanId));
+  const failures = runs.filter((row) => row.status === "failed").length;
+  const successes = runs.filter((row) => row.status === "succeeded").length;
+  const [occurrence] = await ctx.db
+    .select({ value: count() })
+    .from(evidenceOccurrences)
+    .where(eq(evidenceOccurrences.scanId, scanId));
+  const collected = Number(occurrence?.value ?? 0);
+  const failed = successes === 0 && (failures > 0 || collected === 0);
+  const partial = Boolean(scan.partial) || (failures > 0 && successes > 0);
+  const status = failed ? "failed" : partial ? "partial" : "succeeded";
+  await ctx.db
+    .update(scans)
+    .set({
+      status,
+      partial: status === "partial",
+      finishedAt: new Date(),
+    })
+    .where(eq(scans.id, scanId));
+  ctx.metrics.scans.inc({ status });
+}
+
 export async function runScan(
   ctx: AppContext,
   scanId: string,
@@ -534,7 +566,7 @@ export async function runScan(
       const merged: Array<{ raw: RawEvidence; fetchRequestId?: string }> = [];
       const seenUrls = new Set<string>();
       const allErrors: FetchResult["errors"] = [];
-      let anyPartial = false;
+      const unresponsiveEngines: string[] = [];
       let lastPersistConfig: Record<string, unknown> | undefined;
       let rejectedIrrelevant = 0;
       for (const queryText of texts) {
@@ -579,10 +611,8 @@ export async function runScan(
             })
             .where(eq(sourceFetchRequests.id, fetchRequest.id));
         }
-        if (result.partial || result.errors.length > 0) {
-          anyPartial = true;
-        }
         allErrors.push(...result.errors);
+        unresponsiveEngines.push(...(result.unresponsiveEngines ?? []));
         const persistConfig =
           result.adapterMetadata &&
           typeof result.adapterMetadata.persistConfig === "object" &&
@@ -632,9 +662,6 @@ export async function runScan(
       if (rejectedIrrelevant > 0) {
         ctx.metrics.scanIrrelevantRejects.inc({ family: source.family }, rejectedIrrelevant);
       }
-      if (anyPartial) {
-        partial = true;
-      }
       const bounded = takeBounded(gated, remaining);
       await ctx.db.insert(scanSourceRuns).values({
         scanId,
@@ -644,6 +671,10 @@ export async function runScan(
         errorMessage: allErrors.map((item) => item.message).join("; ") || null,
         evidenceCount: bounded.length,
         rejectedIrrelevantCount: rejectedIrrelevant,
+        unresponsiveEngines: takeBounded(
+          [...new Set(unresponsiveEngines)],
+          MAX_UNRESPONSIVE_ENGINES,
+        ),
       });
       if (allErrors.length && bounded.length === 0) {
         sourceFailures += 1;
@@ -757,75 +788,65 @@ export async function runScan(
       }
     }
 
-    const initialRows =
-      usedIds.length > 0
-        ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, usedIds))
-        : [];
-    if (ctx.enrichQueue) {
-      for (const row of takeBounded(initialRows, ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)) {
-        await ctx.enrichQueue.add(
-          "enrich",
-          {
-            scanId,
-            evidenceId: row.id,
-            marketDomainId: module.id,
-            idempotencyKey: `enrich:${row.id}`,
-          },
-          {
-            jobId: `enrich:${scanId}:${row.id}`,
-            attempts: 3,
-            backoff: { type: "exponential", delay: 5_000 },
-          },
-        );
-      }
+    if (sourceFailures > 0 && sourceSuccesses > 0) {
+      partial = true;
     }
-    if (ctx.understandQueue) {
-      for (const row of takeBounded(initialRows, ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)) {
-        await ctx.understandQueue.add(
-          "understand",
-          {
-            scanId,
-            evidenceId: row.id,
-            marketDomainId: module.id,
-            idempotencyKey: `understand:${row.id}`,
-          },
-          {
-            jobId: `understand:${scanId}:${row.id}`,
-            attempts: 3,
-            backoff: { type: "exponential", delay: 5_000 },
-          },
-        );
+
+    await ctx.db
+      .update(scans)
+      .set({
+        status: "running",
+        partial,
+      })
+      .where(eq(scans.id, scanId));
+
+    const enqueueCluster = async () => {
+      if (!ctx.clusterQueue) {
+        return false;
       }
-    }
-    if (ctx.clusterQueue) {
       await ctx.clusterQueue.add(
         "cluster",
         { scanId, marketDomainId: module.id, idempotencyKey: `cluster:${scanId}` },
         { jobId: `cluster:${scanId}`, attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
       );
-    }
-    if (initialRows.length > 0) {
-      await enrichAndUnderstandScan({
-        ctx,
-        module,
-        evidenceRows: initialRows,
-        fetchImpl: deps.fetchImpl,
-        windowStart: scan.windowStart,
-      });
-    }
-    await clusterScanEvents(ctx, scan, usedIds, deps);
+      return true;
+    };
 
-    const failed = sourceSuccesses === 0 && (sourceFailures > 0 || collected.length === 0);
-    const status = failed ? "failed" : partial ? "partial" : "succeeded";
-    await ctx.db
-      .update(scans)
-      .set({
-        status,
-        partial: status === "partial",
-        finishedAt: new Date(),
-      })
-      .where(eq(scans.id, scanId));
-    ctx.metrics.scans.inc({ status });
+    if (scanPipelineRunsInline(ctx.config.RIDDLR_ENV)) {
+      const initialRows =
+        usedIds.length > 0
+          ? await ctx.db.select().from(evidenceItems).where(inArray(evidenceItems.id, usedIds))
+          : [];
+      if (initialRows.length > 0) {
+        await enrichAndUnderstandScan({
+          ctx,
+          module,
+          evidenceRows: initialRows,
+          fetchImpl: deps.fetchImpl,
+          windowStart: scan.windowStart,
+        });
+      }
+      await clusterScanEvents(ctx, scan, usedIds, deps);
+      await finalizeScanStatus(ctx, scanId);
+    } else if (usedIds.length > 0 && ctx.enrichQueue) {
+      await ctx.enrichQueue.add(
+        "enrich-scan",
+        {
+          scanId,
+          evidenceIds: takeBounded(usedIds, ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT),
+          marketDomainId: module.id,
+          idempotencyKey: `enrich-scan:${scanId}`,
+        },
+        {
+          jobId: `enrich-scan:${scanId}`,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5_000 },
+        },
+      );
+    } else if (!(await enqueueCluster())) {
+      await clusterScanEvents(ctx, scan, usedIds, deps);
+      await finalizeScanStatus(ctx, scanId);
+    }
   } catch (error) {
     await ctx.db
       .update(scans)

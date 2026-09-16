@@ -29,8 +29,12 @@ ObservationProvider → observation_series → detectors → observation evidenc
   email is not configured
 
 The API does not run scans in-process. The scan worker ingests sources
-inside `runScan`, then enrich, cluster, analyze, notify, observe, and
-outcome jobs. There is no separate ingest consumer.
+inside `runScan`. Production then enqueues one enrich job for that scan's
+evidence IDs. Enrichment fetches at most `RIDDLR_ENRICH_PER_SCAN` pages. The
+enrich worker runs enrichment and understanding, then enqueues cluster.
+Cluster finalizes the scan status. `RIDDLR_ENV=test` runs enrich and cluster
+inside `runScan` so tests need no workers. There is no separate ingest
+consumer.
 
 ## Bounded memory
 
@@ -117,6 +121,8 @@ Public Caddy does not expose Mailpit or SearXNG.
 
 ## Failure
 
-A failed source records an explicit source-run error and marks the scan partial.
-It does not invent empty success. PostgreSQL down fails closed. Valkey down
-pauses jobs; authenticated reads can continue.
+A failed source records an explicit source-run error. The scan is partial only
+when at least one source failed and another succeeded. SearXNG
+`unresponsive_engines` are stored on the source run and do not mark the scan
+partial. PostgreSQL down fails closed. Valkey down pauses jobs; authenticated
+reads can continue.

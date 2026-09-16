@@ -53,7 +53,8 @@ blocked.
 | `too_large` | Body over 1 MB | Narrow engines or wait; the scan continues. |
 
 An empty `results` array is a successful empty fetch. `unresponsive_engines` is
-partial success and still stores the hits that arrived. Duplicate URLs across
+stored on the source run and does not mark the scan partial. Hits that arrived
+are still stored. Duplicate URLs across
 the per-asset queries persist once. A symbol that maps to two registry assets
 is not decided here: queries use the watchlist canonical id, name, and symbol
 already stored on the agent. Delisted assets remain on the watchlist until the

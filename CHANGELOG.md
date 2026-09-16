@@ -4,6 +4,11 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Production scans enqueue one enrich job per scan, then cluster after
+  enrichment. SearXNG `unresponsive_engines` are stored on the source run and
+  do not mark the scan partial. CoinGecko snapshot clusters keep the
+  "spot observations" title.
+
 - Content understanding rejects foreign subject IDs, unknown claim units, and
   off-domain page classes (`market_profile`, `promotion`, `opinion`,
   `documentation`). Non-cached understanding calls write `ai_usage_events`.

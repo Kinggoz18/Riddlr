@@ -1,6 +1,7 @@
 import {
   MAX_SEARXNG_BODY_BYTES,
   MAX_SEARXNG_ENGINES,
+  MAX_UNRESPONSIVE_ENGINES,
   normalizeEvidence,
   type RawEvidence,
   takeBounded,
@@ -69,7 +70,10 @@ export function parseSearxngPayload(
   const errors: FetchResult["errors"] = [];
   const evidence: RawEvidence[] = [];
   const unresponsive = Array.isArray(payload.unresponsive_engines)
-    ? payload.unresponsive_engines.slice(0, 16).map((item) => String(item))
+    ? takeBounded(
+        payload.unresponsive_engines.map((item) => String(item)),
+        MAX_UNRESPONSIVE_ENGINES,
+      )
     : [];
   if (payload.results !== undefined && !Array.isArray(payload.results)) {
     return {
@@ -120,7 +124,7 @@ export function parseSearxngPayload(
   }
   return {
     evidence,
-    partial: unresponsive.length > 0 || errors.length > 0,
+    partial: errors.length > 0,
     errors,
     unresponsiveEngines: unresponsive,
   };

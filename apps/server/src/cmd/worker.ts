@@ -1,14 +1,14 @@
 import { agents, evidenceItems, evidenceOccurrences, scans, sources } from "@riddlr/db";
 import { assertSupportedMarketDomains, type MarketDomainId, takeBounded } from "@riddlr/domain";
 import { snapshotProcessMemory } from "@riddlr/observability";
-import { type ClusterEventsJob, QUEUE_NAMES } from "@riddlr/queue";
+import { type ClusterEventsJob, type EnrichEvidenceJob, QUEUE_NAMES } from "@riddlr/queue";
 import {
   BINANCE_FUTURES_PROVIDER_ID,
   runBinanceForceOrderSocket,
   sharedBinanceForceOrderAggregator,
 } from "@riddlr/source-adapters";
 import { Worker } from "bullmq";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createContext } from "../context.js";
 import { seedAssetRegistryIfDue } from "../modules/asset-registry.js";
 import { processInboundReceipt } from "../modules/inbound-webhooks.js";
@@ -20,7 +20,12 @@ import {
   seedE2eObservedShock,
 } from "../modules/observe.js";
 import { recordDueOutcomes, resolveExpiredEvents } from "../modules/outcomes.js";
-import { analyzeQueuedEvent, clusterScanEvents, runScan } from "../modules/pipeline.js";
+import {
+  analyzeQueuedEvent,
+  clusterScanEvents,
+  finalizeScanStatus,
+  runScan,
+} from "../modules/pipeline.js";
 import { enqueueAgentScan } from "../modules/scans.js";
 
 const ctx = await createContext();
@@ -83,11 +88,44 @@ const analyzeWorker = new Worker(
   workerOptions,
 );
 
-async function enrichOrUnderstand(job: { data: { evidenceId?: string; marketDomainId?: string } }) {
-  const evidenceId = String(job.data.evidenceId ?? "");
-  const marketDomainId = String(job.data.marketDomainId ?? "") as MarketDomainId;
+async function enrichOrUnderstand(job: { data: EnrichEvidenceJob }) {
+  const data = job.data;
+  const marketDomainId = String(data.marketDomainId ?? "") as MarketDomainId;
   assertSupportedMarketDomains([marketDomainId]);
   const module = ctx.domains.require(marketDomainId);
+  const scanId = String(data.scanId ?? "");
+  const scanLevelIds = takeBounded(data.evidenceIds ?? [], ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT);
+  if (scanLevelIds.length > 0) {
+    const rows = await ctx.db
+      .select()
+      .from(evidenceItems)
+      .where(inArray(evidenceItems.id, scanLevelIds));
+    const [scan] = scanId
+      ? await ctx.db.select().from(scans).where(eq(scans.id, scanId)).limit(1)
+      : [];
+    try {
+      await enrichAndUnderstandScan({
+        ctx,
+        module,
+        evidenceRows: rows,
+        windowStart: scan?.windowStart,
+      });
+    } finally {
+      if (ctx.clusterQueue && scanId) {
+        await ctx.clusterQueue.add(
+          "cluster",
+          { scanId, marketDomainId, idempotencyKey: `cluster:${scanId}` },
+          {
+            jobId: `cluster:${scanId}`,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5_000 },
+          },
+        );
+      }
+    }
+    return;
+  }
+  const evidenceId = String(data.evidenceId ?? "");
   const [row] = await ctx.db
     .select()
     .from(evidenceItems)
@@ -138,6 +176,9 @@ const clusterWorker = new Worker(
               .limit(ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)
           ).map((item) => item.evidenceId);
     await clusterScanEvents(ctx, scan, usedIds, { overflowPass: overflowIds.length > 0 });
+    if (overflowIds.length === 0) {
+      await finalizeScanStatus(ctx, scanId);
+    }
   },
   workerOptions,
 );

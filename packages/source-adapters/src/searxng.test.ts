@@ -72,7 +72,21 @@ describe("SearXNG contract fixtures", () => {
     expect(parsed.errors.some((item) => item.class === "malformed")).toBe(true);
   });
 
-  it("treats unresponsive engines as partial success", () => {
+  it("records unresponsive engines without marking the fetch partial", () => {
+    const result = parseSearxngPayload(
+      {
+        results: [{ url: "https://example.com/a", title: "Bitcoin", content: "News" }],
+        unresponsive_engines: ["wikipedia"],
+      },
+      fetchedAt,
+    );
+    expect(result.evidence).toHaveLength(1);
+    expect(result.partial).toBe(false);
+    expect(result.unresponsiveEngines).toEqual(["wikipedia"]);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("marks malformed results partial even when engines are unresponsive", () => {
     const result = parseSearxngPayload(
       {
         results: [

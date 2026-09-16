@@ -7,10 +7,31 @@ const dateTime = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
+type ScanRow = {
+  id: string;
+  status: string;
+  partial: boolean;
+  startedAt: string;
+};
+
+type SourceRunRow = {
+  scanId?: string;
+  status: string;
+  errorMessage?: string | null;
+  unresponsiveEngines?: string[];
+};
+
+function uniqueEngines(runs: SourceRunRow[], scanId: string): string[] {
+  const names = runs
+    .filter((run) => run.scanId === scanId)
+    .flatMap((run) => run.unresponsiveEngines ?? []);
+  return takeBoundedClient([], [...new Set(names)]);
+}
+
 function ScansPage() {
   const [data, setData] = useState<{
-    scans: Array<{ id: string; status: string; partial: boolean; startedAt: string }>;
-    sourceRuns: Array<{ status: string; errorMessage?: string | null }>;
+    scans: ScanRow[];
+    sourceRuns: SourceRunRow[];
   }>();
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string>();
@@ -35,18 +56,24 @@ function ScansPage() {
     <>
       <PageHeader
         title="Scan history"
-        description="Each run records source success, partial failure, and evidence counts. Failed sources do not invent empty success."
+        description="Each run records source success, partial failure, and evidence counts. Failed sources do not invent empty success. Unresponsive search engines are listed on the run and do not mark the scan partial."
       />
       <section className="record-list">
-        {data.scans.map((scan) => (
-          <Card key={scan.id} className="record-row">
-            <time dateTime={scan.startedAt}>{dateTime.format(new Date(scan.startedAt))}</time>
-            <StatusBadge
-              label={scan.partial ? `${scan.status} · partial` : scan.status}
-              tone={scan.status === "failed" ? "danger" : "ok"}
-            />
-          </Card>
-        ))}
+        {data.scans.map((scan) => {
+          const engines = uniqueEngines(data.sourceRuns, scan.id);
+          return (
+            <Card key={scan.id} className="record-row">
+              <time dateTime={scan.startedAt}>{dateTime.format(new Date(scan.startedAt))}</time>
+              <StatusBadge
+                label={scan.partial ? `${scan.status} · partial` : scan.status}
+                tone={scan.status === "failed" ? "danger" : "ok"}
+              />
+              {engines.length > 0 ? (
+                <p className="field-note">Unresponsive engines: {engines.join(", ")}</p>
+              ) : null}
+            </Card>
+          );
+        })}
       </section>
       {data.sourceRuns.some((run) => run.errorMessage) ? (
         <Card>

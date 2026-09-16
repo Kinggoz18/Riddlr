@@ -304,6 +304,7 @@ export const scanSourceRuns = pgTable("scan_source_runs", {
   errorMessage: text("error_message"),
   evidenceCount: integer("evidence_count").notNull().default(0),
   rejectedIrrelevantCount: integer("rejected_irrelevant_count").notNull().default(0),
+  unresponsiveEngines: jsonb("unresponsive_engines").$type<string[]>().notNull().default([]),
 });
 
 export const evidenceItems = pgTable(

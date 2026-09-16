@@ -13,7 +13,8 @@ enriched. Operator-pasted RSS/Atom feeds are not gated.
 The search API parameters used: `q`, `categories=news`, `language=en`,
 `pageno`, `time_range=day`, `format=json`, and optional `engines` from Sources
 → SearXNG → Edit source. URL allow/block lists are applied after fetch.
-`unresponsive_engines` is a partial success, not a failed scan.
+`unresponsive_engines` is stored on the source run. It does not mark the scan
+partial. The scan is partial only when a source fails while another succeeds.
 
 Default price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest
 of the list under Sources → Publisher hosts) cannot produce claims. Unblock a
