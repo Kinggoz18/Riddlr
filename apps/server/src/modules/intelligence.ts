@@ -7,6 +7,7 @@ import {
   evidenceDocuments,
   evidenceItems,
   evidenceUnderstanding,
+  hostRobotsCache,
   providerConfigs,
   publisherHostPolicies,
   sourceIdentities,
@@ -21,7 +22,10 @@ import {
   claimSatisfiesCatalystContract,
   claimStanceFromExtraction,
   classifyPageHeuristic,
+  contentHash,
+  DEFAULT_OFFICIAL_FIRSTHAND_HOSTS,
   DEFAULT_PRICE_TRACKER_HOSTS,
+  DEFAULT_REPUTABLE_PRESS_HOSTS,
   type DomainModule,
   EXTRACTOR_VERSION,
   enrichmentEligibility,
@@ -30,12 +34,16 @@ import {
   excerptPresent,
   headlineBodyMismatch,
   hostMatchesPublisherPolicy,
+  isEnrichableSourceFamily,
   MAX_CATALYST_KINDS,
+  MAX_HOST_ROBOTS_CACHE,
+  MIN_NATIVE_COMPLETE_CHARS,
   type NormalizedEvidence,
   overlayNormalizedClaimNegation,
   preferEvidenceTitle,
   prioritizeEnrichment,
   publisherHostIsBlocked,
+  ROBOTS_CACHE_TTL_MS,
   skipUnderstandingForPageClass,
   sourceHostname,
   type TrustTier,
@@ -45,8 +53,8 @@ import {
   validateContentUnderstanding,
 } from "@riddlr/domain";
 import { createAnthropicCompatibleProvider, createOpenAiCompatibleProvider } from "@riddlr/llm";
-import { enrichPublicDocument } from "@riddlr/source-adapters";
-import { and, eq } from "drizzle-orm";
+import { enrichPublicDocument, pathDisallowedByRobots } from "@riddlr/source-adapters";
+import { and, asc, count, eq, gt } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { listRegistryAssets } from "./asset-registry.js";
 
@@ -287,6 +295,32 @@ export async function ensureDefaultPriceTrackerHostPolicies(ctx: AppContext) {
       })
       .onConflictDoNothing();
   }
+  for (const hostname of DEFAULT_REPUTABLE_PRESS_HOSTS) {
+    await ctx.db
+      .insert(publisherHostPolicies)
+      .values({
+        hostname,
+        revision: 1,
+        trustTier: "reputable_press",
+        blocked: false,
+        allowedUses: ["discovery", "analysis"],
+        notes: "Default reputable press host. Discovery and analysis only.",
+      })
+      .onConflictDoNothing();
+  }
+  for (const hostname of DEFAULT_OFFICIAL_FIRSTHAND_HOSTS) {
+    await ctx.db
+      .insert(publisherHostPolicies)
+      .values({
+        hostname,
+        revision: 1,
+        trustTier: "official_firsthand",
+        blocked: false,
+        allowedUses: ["discovery", "analysis", "early_warning", "confirmation"],
+        notes: "Default official firsthand host.",
+      })
+      .onConflictDoNothing();
+  }
 }
 
 export async function enrichAndUnderstandScan(input: {
@@ -300,9 +334,18 @@ export async function enrichAndUnderstandScan(input: {
   const registry = await listRegistryAssets(ctx);
   const trustMaps = await loadTrustMaps(ctx);
   const blocked = trustMaps.blockedHosts;
+  const robotsCache = await loadFreshRobotsCache(ctx);
   const eligible = [];
   for (const row of input.evidenceRows) {
-    if (row.sourceFamily !== "search") {
+    if (!isEnrichableSourceFamily(row.sourceFamily ?? undefined)) {
+      continue;
+    }
+    if (row.contentCompleteness === "native_complete") {
+      await persistNativeCompleteDocument(ctx, row);
+      continue;
+    }
+    if (cachedRobotsDeniesUrl(robotsCache, row.canonicalUrl ?? undefined)) {
+      ctx.metrics.enrichmentOutcomes.inc({ status: "skipped_robots" });
       continue;
     }
     const check = enrichmentEligibility({
@@ -345,6 +388,21 @@ export async function enrichAndUnderstandScan(input: {
       continue;
     }
     perHost.set(host, used + 1);
+    const origin = (() => {
+      try {
+        return new URL(row.canonicalUrl).origin;
+      } catch {
+        return undefined;
+      }
+    })();
+    const cachedRobots = origin ? robotsCache.get(origin) : undefined;
+    if (
+      cachedRobots &&
+      pathDisallowedByRobots(cachedRobots.text, new URL(row.canonicalUrl).pathname)
+    ) {
+      ctx.metrics.enrichmentOutcomes.inc({ status: "skipped_robots" });
+      continue;
+    }
     const existing = await ctx.db
       .select()
       .from(evidenceDocuments)
@@ -359,6 +417,15 @@ export async function enrichAndUnderstandScan(input: {
       timeoutMs: ctx.config.RIDDLR_ENRICH_TIMEOUT_MS,
       ifNoneMatch: prior?.etag ?? undefined,
       ifModifiedSince: prior?.lastModified ?? undefined,
+      cachedRobotsTxt: cachedRobots?.text,
+      cachedRobotsStatus: cachedRobots?.status,
+      onRobotsTxt: async (loaded) => {
+        if (!origin || loaded.fromCache) {
+          return;
+        }
+        robotsCache.set(origin, { text: loaded.text, status: loaded.status });
+        await persistRobotsCache(ctx, origin, loaded.text, loaded.status);
+      },
     });
     ctx.metrics.enrichmentOutcomes.inc({ status: document.status });
     if (document.status === "not_modified" && prior) {
@@ -418,6 +485,111 @@ export async function enrichAndUnderstandScan(input: {
       .where(eq(evidenceItems.id, original.id))
       .limit(1);
     await persistClaimsForEvidence(ctx, module, row ?? original, fetchImpl, registry, trustMaps);
+  }
+}
+
+async function persistNativeCompleteDocument(
+  ctx: AppContext,
+  row: typeof evidenceItems.$inferSelect,
+): Promise<void> {
+  const text = row.bodyText ?? "";
+  if (text.length < MIN_NATIVE_COMPLETE_CHARS) {
+    return;
+  }
+  const existing = await ctx.db
+    .select({ id: evidenceDocuments.id })
+    .from(evidenceDocuments)
+    .where(eq(evidenceDocuments.evidenceId, row.id))
+    .limit(1);
+  if (existing[0]) {
+    return;
+  }
+  const hash = contentHash(text);
+  await ctx.db
+    .insert(evidenceDocuments)
+    .values({
+      evidenceId: row.id,
+      requestedUrl: row.canonicalUrl ?? "",
+      finalUrl: row.canonicalUrl ?? undefined,
+      byteCount: Buffer.byteLength(text),
+      responseHash: hash,
+      cleanedContentHash: hash,
+      cleanedText: text,
+      extractedTitle: row.title,
+      extractorVersion: EXTRACTOR_VERSION,
+      fetchedAt: row.fetchedAt,
+      status: "extracted",
+    })
+    .onConflictDoNothing();
+  ctx.metrics.enrichmentOutcomes.inc({ status: "native" });
+}
+
+type CachedRobots = { text: string; status: number };
+
+function cachedRobotsDeniesUrl(
+  cache: ReadonlyMap<string, CachedRobots>,
+  url: string | undefined,
+): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    const cached = cache.get(parsed.origin);
+    return Boolean(cached && pathDisallowedByRobots(cached.text, parsed.pathname));
+  } catch {
+    return false;
+  }
+}
+
+async function loadFreshRobotsCache(ctx: AppContext): Promise<Map<string, CachedRobots>> {
+  const cutoff = new Date(Date.now() - ROBOTS_CACHE_TTL_MS);
+  const rows = await ctx.db
+    .select()
+    .from(hostRobotsCache)
+    .where(gt(hostRobotsCache.fetchedAt, cutoff))
+    .limit(MAX_HOST_ROBOTS_CACHE);
+  const cache = new Map<string, CachedRobots>();
+  for (const row of rows) {
+    cache.set(row.origin, { text: row.robotsTxt, status: row.httpStatus ?? 200 });
+  }
+  return cache;
+}
+
+async function persistRobotsCache(
+  ctx: AppContext,
+  origin: string,
+  text: string,
+  status: number,
+): Promise<void> {
+  await ctx.db
+    .insert(hostRobotsCache)
+    .values({
+      origin,
+      robotsTxt: text,
+      httpStatus: status,
+      fetchedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: hostRobotsCache.origin,
+      set: {
+        robotsTxt: text,
+        httpStatus: status,
+        fetchedAt: new Date(),
+      },
+    });
+  const [total] = await ctx.db.select({ value: count() }).from(hostRobotsCache);
+  const extra = Number(total?.value ?? 0) - MAX_HOST_ROBOTS_CACHE;
+  if (extra <= 0) {
+    return;
+  }
+  const oldest = await ctx.db
+    .select({ origin: hostRobotsCache.origin })
+    .from(hostRobotsCache)
+    .orderBy(asc(hostRobotsCache.fetchedAt))
+    .limit(extra);
+  for (const row of oldest) {
+    await ctx.db.delete(hostRobotsCache).where(eq(hostRobotsCache.origin, row.origin));
   }
 }
 

@@ -21,16 +21,18 @@ double the interval up to one hour.
 poll stored those headers. Response cap 2 MB. Redirects are followed with an
 SSRF check on each hop (max 3). XML DTD and external entities are rejected.
 
-Each new `item` or `entry` is a **snippet** keyed by `guid`/`id` or canonical
-link. Title, summary, author, and published time are stored. The source identity
-platform is `feed` and `externalId` is the feed hostname.
+Each new `item` or `entry` is keyed by `guid`/`id` or canonical link. Title,
+summary, author, and published time are stored. RSS `content:encoded` or Atom
+`content` of at least 400 characters is stored as `native_complete` and is not
+fetched again. Other items are snippets; enrichment may fetch the item link.
+The source identity platform is `feed` and `externalId` is the feed hostname.
 
 | Item | Value |
 | --- | --- |
 | Adapter | `feeds` |
 | Family | `feed` |
 | Licence | Per feed publisher; operator-local cache only |
-| Mapping | Evidence snippets; enrichment may fetch the item link |
+| Mapping | Evidence; `native_complete` when encoded content is ≥400 characters; otherwise snippet until enrichment |
 
 ## Failure classes
 

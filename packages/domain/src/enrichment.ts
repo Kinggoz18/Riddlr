@@ -10,6 +10,11 @@ export const MAX_ENRICH_CHARS = 50_000;
 export const MAX_ENRICH_REDIRECTS = 3;
 export const ENRICH_TIMEOUT_MS = 10_000;
 export const EXTRACTOR_VERSION = "html-main-1";
+export const ENRICHABLE_SOURCE_FAMILIES = ["search", "feed"] as const;
+
+export function isEnrichableSourceFamily(family: string | undefined): boolean {
+  return family === "search" || family === "feed";
+}
 
 const NAV_PATH =
   /\/(tag|tags|search|login|signin|signup|account|privacy|terms|cookies|category|categories)(\/|$)/i;

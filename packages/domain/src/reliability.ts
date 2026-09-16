@@ -11,6 +11,7 @@ export const TRUST_TIERS = [
   "unknown",
   "community",
   "known_analyst",
+  "reputable_press",
   "official_firsthand",
   "blocked",
 ] as const;

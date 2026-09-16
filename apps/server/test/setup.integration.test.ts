@@ -28,6 +28,7 @@ import {
   eventClaims,
   eventEvidence,
   events,
+  evidenceDocuments,
   evidenceItems,
   inboundWebhookReceipts,
   migrate,
@@ -67,6 +68,7 @@ import {
   KALSHI_PROVIDER_ID,
   ObservationProviderRegistry,
   POLYMARKET_PROVIDER_ID,
+  parseFeedXml,
 } from "@riddlr/source-adapters";
 import { Queue } from "bullmq";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -83,6 +85,7 @@ import {
   seedAssetRegistry,
 } from "../src/modules/asset-registry.js";
 import { processInboundReceipt } from "../src/modules/inbound-webhooks.js";
+import { enrichAndUnderstandScan } from "../src/modules/intelligence.js";
 import { createDiscordWebhookTarget } from "../src/modules/notification-api.js";
 import { deliverObservationAlerts, deliverSignalNotifications } from "../src/modules/notify.js";
 import { pollObservationProvider, retainObservationSeries } from "../src/modules/observe.js";
@@ -2145,6 +2148,70 @@ describe("setup, auth, and domain persistence", () => {
     expect(feedRow?.config.lastEtag).toBe('"feed-etag"');
   });
 
+  it("persists native_complete feed items as extracted documents without fetching the article", async () => {
+    const rss = readFileSync(
+      join(
+        process.cwd(),
+        "packages/source-adapters/test/fixtures/feeds/rss-native-complete-bitcoin.xml",
+      ),
+      "utf8",
+    );
+    const parsed = parseFeedXml(rss, new Date("2026-09-15T12:00:00.000Z"), {
+      feedUrl: "https://news.example.com/rss.xml",
+    });
+    const item = parsed.evidence[0];
+    expect(item?.contentCompleteness).toBe("native_complete");
+    const [source] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "feeds"))
+      .limit(1);
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-03-02T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:feeds-native-1",
+      })
+      .returning();
+    const [row] = await ctx.db
+      .insert(evidenceItems)
+      .values({
+        sourceId: source?.id as string,
+        scanId: scan?.id as string,
+        fingerprint: "native-complete-feed-evidence",
+        contentHash: "native-complete-feed-hash",
+        canonicalUrl: item?.canonicalUrl,
+        title: item?.title,
+        bodyText: item?.bodyText,
+        fetchedAt: item?.fetchedAt ?? new Date("2026-09-15T12:00:00.000Z"),
+        sourceFamily: "feed",
+        adapterId: "feeds",
+        contentCompleteness: "native_complete",
+      })
+      .returning();
+    const fetchedUrls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      fetchedUrls.push(url);
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await enrichAndUnderstandScan({
+      ctx,
+      module: cryptoDomainModule,
+      evidenceRows: [row as NonNullable<typeof row>],
+      fetchImpl,
+    });
+    const documents = await ctx.db
+      .select()
+      .from(evidenceDocuments)
+      .where(eq(evidenceDocuments.evidenceId, row?.id as string));
+    expect(documents.some((doc) => doc.status === "extracted")).toBe(true);
+    expect(fetchedUrls.some((url) => url.includes("bitcoin-bridge-exploit"))).toBe(false);
+  });
+
   it("runs per-asset SearXNG news queries, dedupes URLs, and drops price-tracker hosts", async () => {
     const hosts = await app.inject({
       method: "GET",
@@ -2155,6 +2222,16 @@ describe("setup, auth, and domain persistence", () => {
     expect(
       (hosts.json().hosts as Array<{ hostname: string; blocked: boolean }>).some(
         (row) => row.hostname === "coingecko.com" && row.blocked,
+      ),
+    ).toBe(true);
+    expect(
+      (hosts.json().hosts as Array<{ hostname: string; trustTier: string; blocked: boolean }>).some(
+        (row) => row.hostname === "reuters.com" && row.trustTier === "reputable_press",
+      ),
+    ).toBe(true);
+    expect(
+      (hosts.json().hosts as Array<{ hostname: string; trustTier: string }>).some(
+        (row) => row.hostname === "sec.gov" && row.trustTier === "official_firsthand",
       ),
     ).toBe(true);
     const listed = await app.inject({

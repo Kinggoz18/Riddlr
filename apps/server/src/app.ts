@@ -65,7 +65,6 @@ import {
   signalOutcomes,
   signals,
   sourceIdentities,
-  sourceIdentityPolicies,
   sources,
   users,
   whatsappSessions,
@@ -100,6 +99,7 @@ import { registerDashboardRoutes } from "./modules/dashboard-api.js";
 import { publicEmailSettings, resolveEmailTransport } from "./modules/email.js";
 import { loadEventTransitions } from "./modules/event-lifecycle.js";
 import { registerInboundWebhookRoutes } from "./modules/inbound-webhooks.js";
+import { loadTrustMaps } from "./modules/intelligence.js";
 import { rotateEncryptionKeys } from "./modules/key-rotation.js";
 import {
   publicNotificationTargets,
@@ -1407,34 +1407,20 @@ export async function buildApp(ctx: AppContext) {
             .where(inArray(sourceIdentities.id, identityIds))
             .limit(32)
         : [];
-    const identityPolicies =
-      identityIds.length > 0
-        ? await ctx.db
-            .select()
-            .from(sourceIdentityPolicies)
-            .where(
-              and(
-                inArray(sourceIdentityPolicies.identityId, identityIds),
-                eq(sourceIdentityPolicies.active, true),
-              ),
-            )
-            .limit(32)
-        : [];
+    const trustMaps = await loadTrustMaps(ctx);
     const trustSnapshot = evidence.map((item) => {
       const identity = identityRows.find((row) => row.id === item.sourceIdentityId);
-      const policy = identityPolicies
-        .filter((row) => row.identityId === item.sourceIdentityId)
-        .sort((left, right) => right.revision - left.revision)[0];
       const hostname = identity?.hostname ?? sourceHostname(item.canonicalUrl);
       const hostLabel = hostname && hostname !== "unknown-host" ? hostname : undefined;
+      const snap = trustMaps.snapshot(item.sourceIdentityId, hostLabel);
       return {
         evidenceId: item.id,
         identityId: item.sourceIdentityId,
         hostname: hostLabel,
         displayName: identity?.displayName ?? identity?.externalId ?? hostLabel,
         platform: identity?.platform,
-        trustTier: policy?.trustTier ?? "unknown",
-        allowedUses: policy?.allowedUses ?? [],
+        trustTier: snap.trustTier,
+        allowedUses: snap.allowedUses,
         originKey: item.originKey,
       };
     });

@@ -398,14 +398,14 @@ export const emailSetupSchema = z.object({
 });
 
 export const sourceIdentityPolicySchema = z.object({
-  trustTier: z.enum(["unknown", "community", "known_analyst", "official_firsthand", "blocked"]),
+  trustTier: z.enum(TRUST_TIERS),
   allowedUses: z.array(z.enum(["discovery", "analysis", "early_warning", "confirmation"])).min(1),
   notes: z.string().max(280).optional(),
 });
 
 export const publisherHostPolicySchema = z.object({
   hostname: z.string().min(1).max(253),
-  trustTier: z.enum(["unknown", "community", "known_analyst", "official_firsthand", "blocked"]),
+  trustTier: z.enum(TRUST_TIERS),
   blocked: z.boolean().optional(),
   notes: z.string().max(280).optional(),
 });

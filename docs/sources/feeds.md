@@ -7,14 +7,24 @@ Sources → **Add source** → **Configure RSS/Atom** accepts the feed URL, a tr
 tier, and a poll interval of 1–60 minutes. Add another feed source for a second
 URL. Suggested Federal Reserve and ECB URLs default to official firsthand.
 
-Items persist as snippets. Eligible public pages linked from an item follow the
-same enrichment path as SearXNG hits. The platform family `feed` is not
-authoritative; the operator sets trust on the feed hostname identity.
+Items with RSS `content:encoded` or Atom `content` of at least 400 characters
+persist as `native_complete`. Other items persist as snippets. Eligible public
+pages linked from a snippet follow the same enrichment path as SearXNG hits.
+The platform family `feed` is not authoritative; the operator sets trust on the
+feed hostname identity.
 
-Official feeds in the plan examples:
+Official and regulator feeds:
 
 - `https://www.federalreserve.gov/feeds/press_all.xml`
 - `https://www.ecb.europa.eu/rss/press.html`
+- `https://www.sec.gov/news/pressreleases.rss`
+
+Publisher and protocol feeds (paste the URL; none are enabled by default):
+
+- `https://blog.ethereum.org/en/feed.xml`
+- `https://www.coindesk.com/arc/outboundfeeds/rss/`
+- `https://decrypt.co/feed`
+- `https://cointelegraph.com/rss`
 - Substack `https://<pub>.substack.com/feed`
 - YouTube `https://www.youtube.com/feeds/videos.xml?channel_id=`
 

@@ -1,5 +1,10 @@
 export { CATALYST_KINDS } from "./catalyst-kinds.js";
 export { chartMetricLabel, DASHBOARD_CHART_METRICS } from "./dashboard-charts.js";
+export {
+  aggregateIndependenceByOrigin,
+  aggregateTrustByOrigin,
+  type OriginTrustRow,
+} from "./origin-aggregate.js";
 export { IMPACT_LEVELS, RELIABILITY_STATUSES } from "./reliability.js";
 export { needsSetupCode, SETUP_CODE_TTL_MINUTES } from "./setup-access.js";
 export { isTypedSignalId, TYPED_SIGNAL_LABELS } from "./signal-type-ids.js";

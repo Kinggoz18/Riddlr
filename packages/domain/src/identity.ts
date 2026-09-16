@@ -31,7 +31,11 @@ export function isCommunitySocialEvidence(input: {
   if (!isSocialClaimFamily(input.sourceFamily)) {
     return false;
   }
-  return input.trustTier !== "official_firsthand" && input.trustTier !== "known_analyst";
+  return (
+    input.trustTier !== "official_firsthand" &&
+    input.trustTier !== "known_analyst" &&
+    input.trustTier !== "reputable_press"
+  );
 }
 
 export function effectiveIdentityTrust(input: {

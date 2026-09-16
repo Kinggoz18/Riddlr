@@ -17,12 +17,18 @@ The search API parameters used: `q`, `categories=news`, `language=en`,
 
 Default price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest
 of the list under Sources → Publisher hosts) cannot produce claims. Unblock a
-host there if you need its pages. CoinGecko observations still poll.
+host there if you need its pages. CoinGecko observations still poll. Reputable
+press hosts start as `reputable_press` (discovery and analysis). Official and
+regulator hosts start as `official_firsthand`.
 
 See [integrations/searxng.md](../integrations/searxng.md).
 
 Eligible URLs are fetched with SSRF checks, robots.txt, a per-scan and per-host
-cap, and a decompressed byte limit. Main content is cleaned once; unchanged
-cleaned content is not sent to the model again.
+cap, and a decompressed byte limit. Fetches send `User-Agent: Riddlr/0.1.0
+(+https://github.com/Kinggoz18/Riddlr)` and honor `Allow`, longest-match, and a
+`Riddlr` robots group. Hosts whose cached robots.txt denies the path (24h TTL)
+are skipped so enrichment slots go to fetchable pages. A `Disallow: /` host such
+as reuters.com stays a search mention until a feed or other complete source
+covers the story.
 
 Official docs: https://docs.searxng.org/dev/search_api.html

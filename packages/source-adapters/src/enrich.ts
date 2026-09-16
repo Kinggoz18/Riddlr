@@ -10,8 +10,9 @@ import {
   MAX_ENRICH_BYTES,
   MAX_ENRICH_REDIRECTS,
 } from "@riddlr/domain";
-import { robotsDenied } from "./robots.js";
+import { loadRobotsTxt, pathDisallowedByRobots } from "./robots.js";
 import { isBlockedSsrfHost, type LookupFn, readBoundedBytes, safeFetchFollow } from "./types.js";
+import { RIDDLR_HTTP_USER_AGENT } from "./user-agent.js";
 
 const TEXT_TYPES = ["text/html", "application/xhtml+xml", "text/plain"];
 
@@ -53,6 +54,13 @@ export async function enrichPublicDocument(input: {
   skipDns?: boolean;
   ifNoneMatch?: string;
   ifModifiedSince?: string;
+  cachedRobotsTxt?: string;
+  cachedRobotsStatus?: number;
+  onRobotsTxt?: (loaded: {
+    text: string;
+    status: number;
+    fromCache: boolean;
+  }) => void | Promise<void>;
 }): Promise<EnrichmentDocument> {
   const fetchedAt = new Date();
   const requestedUrl = input.url;
@@ -76,13 +84,14 @@ export async function enrichPublicDocument(input: {
   } catch {
     return empty("failed", "invalid_url");
   }
-  if (
-    await robotsDenied({
-      origin: parsed.origin,
-      pathname: parsed.pathname,
-      fetchImpl: input.fetchImpl,
-    })
-  ) {
+  const robots = await loadRobotsTxt({
+    origin: parsed.origin,
+    fetchImpl: input.fetchImpl,
+    cachedText: input.cachedRobotsTxt,
+    cachedStatus: input.cachedRobotsStatus,
+  });
+  await input.onRobotsTxt?.(robots);
+  if (pathDisallowedByRobots(robots.text, parsed.pathname)) {
     return empty("robots_denied", "robots_denied");
   }
   try {
@@ -94,6 +103,7 @@ export async function enrichPublicDocument(input: {
       signal: AbortSignal.timeout(input.timeoutMs ?? ENRICH_TIMEOUT_MS),
       headers: {
         accept: "text/html,application/xhtml+xml,text/plain;q=0.9",
+        "user-agent": RIDDLR_HTTP_USER_AGENT,
         ...(input.ifNoneMatch ? { "if-none-match": input.ifNoneMatch } : {}),
         ...(input.ifModifiedSince ? { "if-modified-since": input.ifModifiedSince } : {}),
       },

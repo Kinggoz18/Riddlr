@@ -405,6 +405,7 @@ function IdentityPolicies() {
                   <option value="unknown">unknown</option>
                   <option value="community">community</option>
                   <option value="known_analyst">known analyst</option>
+                  <option value="reputable_press">reputable press</option>
                   <option value="official_firsthand">official firsthand</option>
                   <option value="blocked">blocked</option>
                 </select>
@@ -418,7 +419,8 @@ function IdentityPolicies() {
         <p className="field-note">
           Blocked hosts skip SearXNG enrichment and cannot produce claims. They are not paused
           sources. Price-tracker hosts (CoinGecko, CoinMarketCap, TradingView, and the rest of the
-          default list) start blocked so search hits to price pages do not open events. CoinGecko,
+          default list) start blocked so search hits to price pages do not open events. Reputable
+          press and official firsthand hosts are seeded and stay operator-editable. CoinGecko,
           CoinMarketCap, and Crypto.com sources above stay enabled; spot observations still poll.
         </p>
         {hosts.length > 0 ? (
@@ -471,6 +473,7 @@ function IdentityPolicies() {
               <option value="unknown">unknown</option>
               <option value="community">community</option>
               <option value="known_analyst">known analyst</option>
+              <option value="reputable_press">reputable press</option>
               <option value="official_firsthand">official firsthand</option>
               <option value="blocked">blocked</option>
             </select>
@@ -628,6 +631,7 @@ function FeedForm() {
             >
               <option value="community">community</option>
               <option value="known_analyst">known analyst</option>
+              <option value="reputable_press">reputable press</option>
               <option value="official_firsthand">official firsthand</option>
               <option value="unknown">unknown</option>
               <option value="blocked">blocked</option>

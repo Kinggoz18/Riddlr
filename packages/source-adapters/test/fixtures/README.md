@@ -13,6 +13,8 @@ Captured from live provider responses. Secrets are not present in these files.
 | `coingecko/simple-price-drift-missing-usd.json` | Captured simple/price body with bitcoin `usd` removed to represent schema drift | 2026-09-13 |
 | `coingecko/simple-price-invalid.json` | `GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=` (HTTP 422) | 2026-09-13 |
 | `feeds/rss-federalreserve-press-all.xml` | `GET https://www.federalreserve.gov/feeds/press_all.xml` (first three `<item>` elements) | 2026-09-14 |
+| `feeds/rss-native-complete-bitcoin.xml` | Constructed RSS 2.0 with `content:encoded` above 400 characters plus a short encoded item | 2026-09-16 |
+| `robots/reuters-robots.txt` | `GET https://www.reuters.com/robots.txt` (public policy file) | 2026-09-16 |
 | `feeds/rss-federalreserve-empty-channel.xml` | Same capture with all `<item>` elements removed to represent an empty channel | 2026-09-14 |
 | `feeds/rss-federalreserve-drift-missing-title.xml` | First captured item with `<title>` removed to represent schema drift | 2026-09-14 |
 | `feeds/atom-github-bitcoin-releases.xml` | `GET https://github.com/bitcoin/bitcoin/releases.atom` (first two `<entry>` elements) | 2026-09-14 |

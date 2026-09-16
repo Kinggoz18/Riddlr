@@ -11,9 +11,11 @@ source** sets an optional engine allowlist (comma-separated names such as
 `bing news, reuters`). Empty means every engine enabled on the instance. The
 endpoint is the Compose service URL and is not editable from the dashboard.
 
-Publisher hosts (Sources) seed default price-tracker hostnames as blocked.
-Unblock a hostname to allow its pages to produce claims. CoinGecko
-`/simple/price` observations still poll when that host is blocked for search.
+Publisher hosts (Sources) seed default price-tracker hostnames as blocked,
+reputable press hosts as `reputable_press`, and official/regulator hosts as
+`official_firsthand`. Unblock a hostname to allow its pages to produce claims.
+CoinGecko `/simple/price` observations still poll when that host is blocked for
+search.
 
 ## What the adapter actually fetches
 

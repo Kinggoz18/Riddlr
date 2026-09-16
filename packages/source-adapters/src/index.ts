@@ -164,7 +164,7 @@ export {
   type OpenFigiMappingResult,
   parseOpenFigiMapping,
 } from "./openfigi.js";
-export { pathDisallowedByRobots, robotsDenied } from "./robots.js";
+export { loadRobotsTxt, pathDisallowedByRobots, robotsDenied } from "./robots.js";
 export {
   createSearxngAdapter,
   parseSearxngEngines,
@@ -201,6 +201,7 @@ export {
   type SourceErrorClass,
   safeFetch,
 } from "./types.js";
+export { RIDDLR_HTTP_USER_AGENT, RIDDLR_ROBOTS_PRODUCT } from "./user-agent.js";
 export {
   buildRecentSearchQuery,
   clampXMonthlyReadBudget,

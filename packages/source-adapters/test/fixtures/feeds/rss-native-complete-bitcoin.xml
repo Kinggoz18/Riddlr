@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Crypto Wire</title>
+    <link>https://news.example.com/</link>
+    <description>Constructed RSS 2.0 item with content:encoded above the native_complete threshold</description>
+    <item>
+      <title>Bitcoin bridge exploit drains $40 million from watched protocol</title>
+      <link>https://news.example.com/bitcoin-bridge-exploit</link>
+      <guid>https://news.example.com/bitcoin-bridge-exploit</guid>
+      <pubDate>Tue, 15 Sep 2026 12:00:00 GMT</pubDate>
+      <description>Short teaser for the Bitcoin exploit.</description>
+      <content:encoded><![CDATA[
+        <p>Investigators said a Bitcoin bridge exploit drained about forty million dollars after an attacker reused a withdrawn message on a watched protocol. The operator paused deposits and published a post-mortem that names the contract, the transaction hash, and the recovery steps for remaining funds. Independent reporters confirmed the same hash on two explorers. Users are told not to sign new messages until a patched contract is live. This paragraph exists so the encoded body is long enough to persist as native complete content without fetching the article URL.</p>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Brief Bitcoin mention without full body</title>
+      <link>https://news.example.com/brief-bitcoin-note</link>
+      <guid>https://news.example.com/brief-bitcoin-note</guid>
+      <pubDate>Tue, 15 Sep 2026 11:00:00 GMT</pubDate>
+      <description>A one-line Bitcoin teaser.</description>
+      <content:encoded><![CDATA[<p>Too short.</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

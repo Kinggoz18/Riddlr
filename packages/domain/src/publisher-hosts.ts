@@ -11,6 +11,31 @@ export const DEFAULT_PRICE_TRACKER_HOSTS = [
   "coinlore.com",
 ] as const;
 
+export const DEFAULT_REPUTABLE_PRESS_HOSTS = [
+  "reuters.com",
+  "bloomberg.com",
+  "ft.com",
+  "wsj.com",
+  "apnews.com",
+  "coindesk.com",
+  "theblock.co",
+  "cointelegraph.com",
+  "decrypt.co",
+  "blockworks.co",
+  "dlnews.com",
+  "thedefiant.io",
+] as const;
+
+export const DEFAULT_OFFICIAL_FIRSTHAND_HOSTS = [
+  "sec.gov",
+  "cftc.gov",
+  "treasury.gov",
+  "federalreserve.gov",
+  "tether.to",
+  "circle.com",
+  "ethereum.org",
+] as const;
+
 export const MAX_PUBLISHER_HOST_POLICIES = 256;
 
 export type PublisherHostPolicyInput = {

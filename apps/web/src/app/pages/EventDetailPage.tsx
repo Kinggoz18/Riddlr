@@ -1,3 +1,4 @@
+import { aggregateIndependenceByOrigin, aggregateTrustByOrigin } from "@riddlr/domain/web";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
@@ -203,10 +204,13 @@ function EventDetailPage() {
         <Card>
           <h2>Independence</h2>
           <ul className="independence-graph">
-            {data.independence.nodes.map((node) => (
-              <li key={node.evidenceId}>
+            {aggregateIndependenceByOrigin(data.independence.nodes).map((node) => (
+              <li key={node.hostname}>
                 <span>{node.hostname}</span>
-                <small>{node.role}</small>
+                <small>
+                  {node.roles.join(", ")}
+                  {node.count > 1 ? ` · ${node.count}` : ""}
+                </small>
               </li>
             ))}
           </ul>
@@ -281,17 +285,13 @@ function EventDetailPage() {
         <Card>
           <h2>Source trust</h2>
           <ul className="data-list">
-            {data.trustSnapshot.map((item) => (
-              <li key={item.evidenceId}>
-                <span>
-                  {item.displayName ||
-                    item.originKey ||
-                    item.hostname ||
-                    data.independence?.nodes.find((node) => node.evidenceId === item.evidenceId)
-                      ?.hostname ||
-                    "Unknown source"}
-                </span>
-                <small>{item.trustTier.replaceAll("_", " ")}</small>
+            {aggregateTrustByOrigin(data.trustSnapshot).map((item) => (
+              <li key={item.key}>
+                <span>{item.label}</span>
+                <small>
+                  {item.trustTier.replaceAll("_", " ")}
+                  {item.count > 1 ? ` · ${item.count}` : ""}
+                </small>
               </li>
             ))}
           </ul>

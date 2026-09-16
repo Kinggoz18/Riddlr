@@ -34,6 +34,9 @@ describe("identity trust and track records", () => {
     expect(isCommunitySocialEvidence({ sourceFamily: "x", trustTier: "official_firsthand" })).toBe(
       false,
     );
+    expect(isCommunitySocialEvidence({ sourceFamily: "feed", trustTier: "reputable_press" })).toBe(
+      false,
+    );
     expect(isCommunitySocialEvidence({ sourceFamily: "search", trustTier: "community" })).toBe(
       false,
     );

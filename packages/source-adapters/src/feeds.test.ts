@@ -50,6 +50,19 @@ describe("RSS and Atom feed adapter", () => {
     });
   });
 
+  it("marks content:encoded above 400 characters as native_complete and leaves short items as snippets", () => {
+    const parsed = parseFeedXml(readFixture("rss-native-complete-bitcoin.xml"), fetchedAt, {
+      feedUrl: "https://news.example.com/rss.xml",
+    });
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.evidence).toHaveLength(2);
+    expect(parsed.evidence[0]?.contentCompleteness).toBe("native_complete");
+    expect(parsed.evidence[0]?.bodyText).toMatch(/Bitcoin bridge exploit drained/);
+    expect((parsed.evidence[0]?.bodyText ?? "").length).toBeGreaterThanOrEqual(400);
+    expect(parsed.evidence[1]?.contentCompleteness).toBe("snippet");
+    expect(parsed.evidence[1]?.bodyText).toMatch(/Too short|one-line Bitcoin teaser/);
+  });
+
   it("parses a captured GitHub Atom feed and keeps out-of-order updated timestamps", () => {
     const parsed = parseFeedXml(readFixture("atom-github-bitcoin-releases.xml"), fetchedAt, {
       feedUrl: "https://github.com/bitcoin/bitcoin/releases.atom",

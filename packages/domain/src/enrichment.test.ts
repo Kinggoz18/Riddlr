@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPageHeuristic,
   enrichmentEligibility,
+  isEnrichableSourceFamily,
   prioritizeEnrichment,
   trustAllowsUse,
 } from "./enrichment.js";
@@ -58,8 +59,17 @@ describe("enrichment eligibility", () => {
     expect(trustAllowsUse("official_firsthand", "early_warning")).toBe(true);
     expect(trustAllowsUse("known_analyst", "early_warning")).toBe(true);
     expect(trustAllowsUse("known_analyst", "confirmation")).toBe(false);
+    expect(trustAllowsUse("reputable_press", "analysis")).toBe(true);
+    expect(trustAllowsUse("reputable_press", "early_warning")).toBe(false);
     expect(trustAllowsUse("blocked", "analysis")).toBe(false);
     expect(trustAllowsUse("community", "analysis", ["discovery"])).toBe(false);
     expect(trustAllowsUse("community", "analysis", ["discovery", "analysis"])).toBe(true);
+  });
+
+  it("enriches search and feed families only", () => {
+    expect(isEnrichableSourceFamily("search")).toBe(true);
+    expect(isEnrichableSourceFamily("feed")).toBe(true);
+    expect(isEnrichableSourceFamily("market_data")).toBe(false);
+    expect(isEnrichableSourceFamily("x")).toBe(false);
   });
 });

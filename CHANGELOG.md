@@ -4,6 +4,18 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- RSS and Atom items with `content:encoded` or Atom `content` of at least 400
+  characters persist as `native_complete`. Feed items are enriched on the same
+  path as search hits. See [docs/sources/feeds.md](docs/sources/feeds.md).
+
+- Page fetches send `User-Agent: Riddlr/0.1.0 (+https://github.com/Kinggoz18/Riddlr)`,
+  honor robots.txt `Allow` / longest-match / `Riddlr` groups, and skip hosts
+  whose cached robots.txt (24h) denies the path.
+
+- Publisher hosts seed `reputable_press` (wires and trade press) and
+  `official_firsthand` (regulators and principals). Event detail groups Source
+  trust and Independence by origin with counts.
+
 - Search hits are kept only when the title or snippet resolves a
   watched asset or matches the domain vocabulary. Rejected hits are not
   persisted. Each source run records `rejected_irrelevant_count`. Operator-pasted

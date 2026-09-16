@@ -145,9 +145,11 @@ export {
   classifyPageHeuristic,
   completenessFromDocument,
   ENRICH_TIMEOUT_MS,
+  ENRICHABLE_SOURCE_FAMILIES,
   type EnrichmentEligibility,
   EXTRACTOR_VERSION,
   enrichmentEligibility,
+  isEnrichableSourceFamily,
   MAX_ENRICH_BYTES,
   MAX_ENRICH_CHARS,
   MAX_ENRICH_PER_HOST,
@@ -344,6 +346,7 @@ export {
   MAX_FEED_POLL_INTERVAL_SECONDS,
   MAX_FEED_REDIRECTS,
   MAX_FUTURES_INTERVAL_MS,
+  MAX_HOST_ROBOTS_CACHE,
   MAX_HYPERLIQUID_BODY_BYTES,
   MAX_HYPERLIQUID_UNIVERSE,
   MAX_IDENTITY_TRACK_ROWS,
@@ -392,6 +395,7 @@ export {
   MAX_RELEVANCE_TERMS,
   MAX_RETENTION_DELETE_BATCH,
   MAX_RETENTION_LOOPS,
+  MAX_ROBOTS_TXT_CHARS,
   MAX_SCORECARD_ROWS,
   MAX_SEARXNG_ASSET_QUERIES,
   MAX_SEARXNG_BODY_BYTES,
@@ -415,6 +419,7 @@ export {
   MIN_EDGAR_CALL_GAP_MS,
   MIN_FEED_POLL_INTERVAL_SECONDS,
   MIN_FUTURES_INTERVAL_MS,
+  MIN_NATIVE_COMPLETE_CHARS,
   MIN_OBSERVATION_ALERT_WINDOW_MINUTES,
   MIN_OBSERVE_PRICE_INTERVAL_SECONDS,
   MIN_OBSERVE_RETENTION_DAYS,
@@ -433,6 +438,7 @@ export {
   OPENFIGI_UNAUTH_PER_MINUTE,
   OUTCOME_POINT_TOLERANCE_MS,
   parsePageCursor,
+  ROBOTS_CACHE_TTL_MS,
   TVL_DRAWDOWN_LOOKBACK_MS,
   takeBounded,
   UPCOMING_CATALYST_HORIZON_MS,
@@ -504,6 +510,11 @@ export {
   type SeriesObservation,
 } from "./observations.js";
 export {
+  aggregateIndependenceByOrigin,
+  aggregateTrustByOrigin,
+  type OriginTrustRow,
+} from "./origin-aggregate.js";
+export {
   assertPublicWalletAddress,
   InvalidWalletAddressError,
   PORTFOLIO_CHAINS,
@@ -513,7 +524,9 @@ export {
 } from "./portfolio.js";
 export {
   blockedPublisherHosts,
+  DEFAULT_OFFICIAL_FIRSTHAND_HOSTS,
   DEFAULT_PRICE_TRACKER_HOSTS,
+  DEFAULT_REPUTABLE_PRESS_HOSTS,
   hostMatchesPublisherPolicy,
   latestPublisherHostPolicies,
   MAX_PUBLISHER_HOST_POLICIES,

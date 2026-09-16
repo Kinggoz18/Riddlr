@@ -2,6 +2,7 @@ import {
   canonicalizeUrl,
   clampPositiveInt,
   DEFAULT_FEED_POLL_INTERVAL_SECONDS,
+  MAX_ENRICH_CHARS,
   MAX_FEED_BACKOFF_SECONDS,
   MAX_FEED_BODY_BYTES,
   MAX_FEED_ITEM_CHARS,
@@ -9,6 +10,7 @@ import {
   MAX_FEED_POLL_INTERVAL_SECONDS,
   MAX_FEED_REDIRECTS,
   MIN_FEED_POLL_INTERVAL_SECONDS,
+  MIN_NATIVE_COMPLETE_CHARS,
   OBSERVE_CLOCK_SKEW_MS,
   TRUST_TIERS,
   type TrustTier,
@@ -26,11 +28,12 @@ import {
   type SourceErrorClass,
   safeFetchFollow,
 } from "./types.js";
+import { RIDDLR_HTTP_USER_AGENT } from "./user-agent.js";
 import { atomHref, extractBlocks, innerXmlText, xmlForbidsDtd } from "./xml.js";
 
 export const FEEDS_ADAPTER_ID = "feeds";
 export const FEEDS_FAMILY = "feed";
-export const FEEDS_USER_AGENT = "Riddlr/0.1 (https://github.com/Kinggoz18/Riddlr)";
+export const FEEDS_USER_AGENT = RIDDLR_HTTP_USER_AGENT;
 
 export type SuggestedFeed = {
   name: string;
@@ -160,11 +163,17 @@ export function parseFeedXml(
     const link = rssLink ?? atomLink(block);
     const guid = innerText(block, "guid") ?? innerText(block, "id");
     const title = innerText(block, "title") ?? innerText(block, "description");
+    const encoded = innerText(block, "encoded");
+    const atomContent = isAtom ? innerText(block, "content") : undefined;
+    const nativeSource = encoded ?? atomContent;
+    const nativeComplete =
+      Boolean(nativeSource) && (nativeSource?.length ?? 0) >= MIN_NATIVE_COMPLETE_CHARS;
     const summary =
       innerText(block, "description") ??
       innerText(block, "summary") ??
-      innerText(block, "content") ??
+      nativeSource ??
       innerText(block, "media:description");
+    const body = nativeComplete ? nativeSource : summary;
     const author = innerText(block, "name") ?? innerText(block, "creator");
     const published = parseTimestamp(
       innerText(block, "pubDate") ?? innerText(block, "published") ?? innerText(block, "updated"),
@@ -191,11 +200,11 @@ export function parseFeedXml(
       url,
       canonicalUrl: url,
       title: boundChars(title),
-      bodyText: boundChars(summary),
+      bodyText: boundChars(body, nativeComplete ? MAX_ENRICH_CHARS : MAX_FEED_ITEM_CHARS),
       author: boundChars(author, 200),
       publishedAt: published,
       fetchedAt,
-      contentCompleteness: "snippet",
+      contentCompleteness: nativeComplete ? "native_complete" : "snippet",
       originKey: hostname ? `feed:${hostname}` : undefined,
       sourceIdentity: hostname
         ? {
@@ -275,7 +284,7 @@ export function createFeedsAdapter(
       supportsPagination: false,
       supportsDomainFilter: false,
       lookbackNotes:
-        "Polls the operator URL with If-None-Match / If-Modified-Since. Default 5 minutes, minimum 1 minute. Items are snippets until the linked page is enriched.",
+        "Polls the operator URL with If-None-Match / If-Modified-Since. Default 5 minutes, minimum 1 minute. Items with content:encoded or Atom content of at least 400 characters persist as native_complete. Other items are snippets until the linked page is enriched.",
       partialResults: true,
     },
     async validate(config) {

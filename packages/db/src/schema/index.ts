@@ -991,6 +991,13 @@ export const publisherHostPolicies = pgTable(
   ],
 );
 
+export const hostRobotsCache = pgTable("host_robots_cache", {
+  origin: text("origin").primaryKey(),
+  robotsTxt: text("robots_txt").notNull(),
+  httpStatus: integer("http_status"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const evidenceDocuments = pgTable(
   "evidence_documents",
   {
