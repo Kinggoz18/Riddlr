@@ -1,3 +1,4 @@
+import { llmStructuredOutputNotes } from "@riddlr/domain/web";
 import {
   Banner,
   Button,
@@ -111,12 +112,12 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const toast = useToast();
+  const [busy, setBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [totp, setTotp] = useState("");
   const [otpauth, setOtpauth] = useState<string>();
   const [secret, setSecret] = useState<string>();
-  const [enrollBusy, setEnrollBusy] = useState(false);
   const [rotatePassword, setRotatePassword] = useState("");
   const [rotateTotp, setRotateTotp] = useState("");
   const [minRisk, setMinRisk] = useState("moderate");
@@ -195,6 +196,21 @@ function SettingsPage() {
     }
   }
 
+  async function persist(ok: string, fail: string, action: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await action();
+      if (ok) {
+        toast(ok);
+      }
+      await refresh().catch(() => undefined);
+    } catch (err) {
+      toast(toastFail(err, fail), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     void refresh()
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"))
@@ -207,6 +223,12 @@ function SettingsPage() {
   if (error) {
     return <EmptyState title="Unable to load settings" body={error} />;
   }
+
+  const llmNotes = llmStructuredOutputNotes({
+    provider: llmProvider,
+    baseUrl: llmBaseUrl,
+    model: llmModel,
+  });
 
   return (
     <>
@@ -261,13 +283,15 @@ function SettingsPage() {
                   ? "A provider is connected. Provider, base URL, and model are shown. The API key is never returned. Saving a new key replaces it."
                   : "Required for analysis. Scans still collect evidence without a model."}
               </p>
-              {data?.llm?.structuredOutputWarning ? (
-                <Banner tone="danger">{data.llm.structuredOutputWarning}</Banner>
-              ) : null}
+              {llmNotes.map((note) => (
+                <Banner key={note.message} tone={note.tone}>
+                  {note.message}
+                </Banner>
+              ))}
               <form
-                onSubmit={async (event) => {
+                onSubmit={(event) => {
                   event.preventDefault();
-                  try {
+                  void persist("Model saved", "Couldn’t save model", async () => {
                     await api("/api/v1/settings/llm", {
                       method: "POST",
                       body: JSON.stringify({
@@ -278,11 +302,7 @@ function SettingsPage() {
                       }),
                     });
                     setLlmKey("");
-                    await refresh();
-                    toast("Model saved");
-                  } catch (err) {
-                    toast(toastFail(err, "Couldn’t save model"), "danger");
-                  }
+                  });
                 }}
               >
                 <Field label="Provider">
@@ -307,7 +327,10 @@ function SettingsPage() {
                     required
                   />
                 </Field>
-                <Field label="Model">
+                <Field
+                  label="Model"
+                  hint="Structured claim extraction needs gpt-4.1-mini or Claude Sonnet class. 8B-class models are not sufficient."
+                >
                   <input
                     id="settings-model"
                     value={llmModel}
@@ -315,7 +338,10 @@ function SettingsPage() {
                     required
                   />
                 </Field>
-                <Field label="API key" hint="Stored encrypted. Never shown again.">
+                <Field
+                  label="API key"
+                  hint="Stored encrypted. Never shown again. Riddlr checks that the model answers before saving."
+                >
                   <input
                     id="settings-api-key"
                     type="password"
@@ -325,7 +351,9 @@ function SettingsPage() {
                     required
                   />
                 </Field>
-                <Button type="submit">Save provider</Button>
+                <Button type="submit" busy={busy}>
+                  Save provider
+                </Button>
               </form>
             </Card>
           }
@@ -344,10 +372,9 @@ function SettingsPage() {
                     secret={secret}
                     token={totp}
                     onToken={setTotp}
-                    busy={enrollBusy}
-                    onVerify={async () => {
-                      setEnrollBusy(true);
-                      try {
+                    busy={busy}
+                    onVerify={() => {
+                      void persist("Authenticator on", "Couldn’t verify code", async () => {
                         const body = await api<{ recoveryCodes: string[] }>(
                           "/api/v1/settings/totp/verify",
                           {
@@ -360,29 +387,22 @@ function SettingsPage() {
                         setTotp("");
                         setOtpauth(undefined);
                         setSecret(undefined);
-                        await refresh();
-                        toast("Authenticator on");
-                      } catch (err) {
-                        toast(toastFail(err, "Couldn’t verify code"), "danger");
-                      } finally {
-                        setEnrollBusy(false);
-                      }
+                      });
                     }}
                   />
                 ) : (
                   <p className="ui-actions">
                     <Button
-                      onClick={async () => {
-                        try {
+                      busy={busy}
+                      onClick={() => {
+                        void persist("", "Couldn’t start setup", async () => {
                           const result = await api<{ otpauth: string; secret: string }>(
                             "/api/v1/settings/totp/start",
                             { method: "POST" },
                           );
                           setOtpauth(result.otpauth);
                           setSecret(result.secret);
-                        } catch (err) {
-                          toast(toastFail(err, "Couldn’t start setup"), "danger");
-                        }
+                        });
                       }}
                     >
                       Set up authenticator
@@ -408,9 +428,9 @@ function SettingsPage() {
                   </>
                 ) : data?.totpEnabled ? (
                   <form
-                    onSubmit={async (event) => {
+                    onSubmit={(event) => {
                       event.preventDefault();
-                      try {
+                      void persist("New recovery codes", "Couldn’t regenerate codes", async () => {
                         const body = await api<{ recoveryCodes: string[] }>(
                           "/api/v1/auth/recovery/rotate",
                           {
@@ -421,11 +441,7 @@ function SettingsPage() {
                         setRecoveryCodes(body.recoveryCodes);
                         setSavedCodes(false);
                         setTotp("");
-                        await refresh();
-                        toast("New recovery codes");
-                      } catch (err) {
-                        toast(toastFail(err, "Couldn’t regenerate codes"), "danger");
-                      }
+                      });
                     }}
                   >
                     <Field label="Authenticator code to regenerate recovery codes">
@@ -438,7 +454,9 @@ function SettingsPage() {
                         required
                       />
                     </Field>
-                    <Button type="submit">Regenerate recovery codes</Button>
+                    <Button type="submit" busy={busy}>
+                      Regenerate recovery codes
+                    </Button>
                   </form>
                 ) : (
                   <p className="field-note">Enable authenticator to generate recovery codes.</p>
@@ -452,9 +470,9 @@ function SettingsPage() {
                   version.
                 </p>
                 <form
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("Key rotated", "Couldn’t rotate key", async () => {
                       await api("/api/v1/settings/encryption/rotate", {
                         method: "POST",
                         body: JSON.stringify({
@@ -464,11 +482,7 @@ function SettingsPage() {
                       });
                       setRotatePassword("");
                       setRotateTotp("");
-                      await refresh();
-                      toast("Key rotated");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t rotate key"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field label="Password for key rotation">
@@ -495,27 +509,25 @@ function SettingsPage() {
                       required={Boolean(data?.totpEnabled)}
                     />
                   </Field>
-                  <Button type="submit">Rotate encryption keys</Button>
+                  <Button type="submit" busy={busy}>
+                    Rotate encryption keys
+                  </Button>
                 </form>
               </Card>
 
               <Card>
                 <h2>Change password</h2>
                 <form
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("Password updated", "Couldn’t update password", async () => {
                       await api("/api/v1/auth/password", {
                         method: "POST",
                         body: JSON.stringify({ currentPassword, newPassword }),
                       });
                       setCurrentPassword("");
                       setNewPassword("");
-                      await refresh();
-                      toast("Password updated");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t update password"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field label="Current password">
@@ -537,7 +549,9 @@ function SettingsPage() {
                       required
                     />
                   </Field>
-                  <Button type="submit">Update password</Button>
+                  <Button type="submit" busy={busy}>
+                    Update password
+                  </Button>
                 </form>
               </Card>
 
@@ -568,19 +582,15 @@ function SettingsPage() {
                 )}
                 <form
                   autoComplete="off"
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("Email saved", "Couldn’t save email", async () => {
                       await api("/api/v1/settings/email", {
                         method: "POST",
                         body: JSON.stringify({ apiKey: resendKey, from: emailFrom }),
                       });
                       setResendKey("");
-                      await refresh();
-                      toast("Email saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save email"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field
@@ -611,19 +621,18 @@ function SettingsPage() {
                     />
                   </Field>
                   <p className="ui-actions">
-                    <Button type="submit">Save Resend</Button>
+                    <Button type="submit" busy={busy}>
+                      Save Resend
+                    </Button>
                     {data?.email?.resendSaved ? (
                       <Button
                         variant="ghost"
-                        onClick={async () => {
-                          try {
+                        busy={busy}
+                        onClick={() => {
+                          void persist("Resend removed", "Couldn’t remove Resend", async () => {
                             await api("/api/v1/settings/email", { method: "DELETE" });
                             setResendKey("");
-                            await refresh();
-                            toast("Resend removed");
-                          } catch (err) {
-                            toast(toastFail(err, "Couldn’t remove Resend"), "danger");
-                          }
+                          });
                         }}
                       >
                         Remove Resend
@@ -642,9 +651,9 @@ function SettingsPage() {
               <Card id="settings-notifications">
                 <h2>Notification policy</h2>
                 <form
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("Saved", "Couldn’t save", async () => {
                       await api("/api/v1/settings/notifications", {
                         method: "POST",
                         body: JSON.stringify({
@@ -661,11 +670,7 @@ function SettingsPage() {
                           shadowAssessments,
                         }),
                       });
-                      await refresh();
-                      toast("Saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field label="Minimum risk">
@@ -749,7 +754,9 @@ function SettingsPage() {
                     Persist reliability and impact without sending notifications. Use this while
                     comparing the new corroboration path.
                   </p>
-                  <Button type="submit">Save notification policy</Button>
+                  <Button type="submit" busy={busy}>
+                    Save notification policy
+                  </Button>
                 </form>
               </Card>
 
@@ -762,9 +769,9 @@ function SettingsPage() {
                 {data?.telegramConfigured ? <StatusBadge label="Connected" /> : null}
                 <form
                   autoComplete="off"
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("Telegram saved", "Couldn’t save Telegram", async () => {
                       await api("/api/v1/settings/telegram", {
                         method: "POST",
                         body: JSON.stringify({
@@ -773,11 +780,7 @@ function SettingsPage() {
                         }),
                       });
                       setTelegramToken("");
-                      await refresh();
-                      toast("Telegram saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save Telegram"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field
@@ -805,20 +808,19 @@ function SettingsPage() {
                     />
                   </Field>
                   <p className="ui-actions">
-                    <Button type="submit">Save Telegram</Button>
+                    <Button type="submit" busy={busy}>
+                      Save Telegram
+                    </Button>
                     {data?.telegramConfigured ? (
                       <Button
                         variant="ghost"
-                        onClick={async () => {
-                          try {
+                        busy={busy}
+                        onClick={() => {
+                          void persist("Telegram removed", "Couldn’t remove Telegram", async () => {
                             await api("/api/v1/settings/telegram", { method: "DELETE" });
                             setTelegramToken("");
                             setTelegramChat("");
-                            await refresh();
-                            toast("Telegram removed");
-                          } catch (err) {
-                            toast(toastFail(err, "Couldn’t remove Telegram"), "danger");
-                          }
+                          });
                         }}
                       >
                         Remove Telegram
@@ -837,27 +839,27 @@ function SettingsPage() {
                 </p>
                 <form
                   autoComplete="off"
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
-                      await api("/api/v1/notification-targets", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          webhookUrl: discordWebhook,
-                          username: discordUsername || undefined,
-                          avatarUrl: discordAvatar || undefined,
-                          primary: discordPrimary,
-                        }),
-                      });
-                      setDiscordWebhook("");
-                      setDiscordUsername("");
-                      setDiscordAvatar("");
-                      setDiscordPrimary(false);
-                      await refresh();
-                      toast("Discord webhook saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save Discord webhook"), "danger");
-                    }
+                    void persist(
+                      "Discord webhook saved",
+                      "Couldn’t save Discord webhook",
+                      async () => {
+                        await api("/api/v1/notification-targets", {
+                          method: "POST",
+                          body: JSON.stringify({
+                            webhookUrl: discordWebhook,
+                            username: discordUsername || undefined,
+                            avatarUrl: discordAvatar || undefined,
+                            primary: discordPrimary,
+                          }),
+                        });
+                        setDiscordWebhook("");
+                        setDiscordUsername("");
+                        setDiscordAvatar("");
+                        setDiscordPrimary(false);
+                      },
+                    );
                   }}
                 >
                   <Field
@@ -900,7 +902,9 @@ function SettingsPage() {
                     />
                     Primary target
                   </label>
-                  <Button type="submit">Save Discord webhook</Button>
+                  <Button type="submit" busy={busy}>
+                    Save Discord webhook
+                  </Button>
                 </form>
                 {(data?.notificationTargets ?? []).length > 0 ? (
                   <ul className="data-list">
@@ -917,16 +921,17 @@ function SettingsPage() {
                         </span>
                         <Button
                           variant="ghost"
-                          onClick={async () => {
-                            try {
-                              await api(`/api/v1/notification-targets/${target.id}`, {
-                                method: "DELETE",
-                              });
-                              await refresh();
-                              toast("Discord webhook removed");
-                            } catch (err) {
-                              toast(toastFail(err, "Couldn’t remove webhook"), "danger");
-                            }
+                          busy={busy}
+                          onClick={() => {
+                            void persist(
+                              "Discord webhook removed",
+                              "Couldn’t remove webhook",
+                              async () => {
+                                await api(`/api/v1/notification-targets/${target.id}`, {
+                                  method: "DELETE",
+                                });
+                              },
+                            );
                           }}
                         >
                           Remove
@@ -942,9 +947,9 @@ function SettingsPage() {
                 <code>/api/v1/webhooks/whatsapp</code>
                 <form
                   autoComplete="off"
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
+                    void persist("WhatsApp saved", "Couldn’t save WhatsApp", async () => {
                       await api("/api/v1/settings/whatsapp", {
                         method: "POST",
                         body: JSON.stringify({
@@ -960,11 +965,7 @@ function SettingsPage() {
                       setAccessToken("");
                       setAppSecret("");
                       setVerifyToken("");
-                      await refresh();
-                      toast("WhatsApp saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save WhatsApp"), "danger");
-                    }
+                    });
                   }}
                 >
                   <Field
@@ -1050,7 +1051,9 @@ function SettingsPage() {
                       required
                     />
                   </Field>
-                  <Button type="submit">Save WhatsApp settings</Button>
+                  <Button type="submit" busy={busy}>
+                    Save WhatsApp settings
+                  </Button>
                 </form>
               </Card>
 
@@ -1061,29 +1064,29 @@ function SettingsPage() {
                   Quiet hours and per-destination cooldown still apply. Minimum risk does not.
                 </p>
                 <form
-                  onSubmit={async (event) => {
+                  onSubmit={(event) => {
                     event.preventDefault();
-                    try {
-                      await api("/api/v1/observation-alert-rules", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          metric: alertMetric,
-                          op: alertOp,
-                          threshold: Number(alertThreshold),
-                          windowMinutes:
-                            alertOp === "pct_drop" || alertOp === "pct_move"
-                              ? Number(alertWindow)
-                              : undefined,
-                          subjectCanonicalId: alertSubject || undefined,
-                        }),
-                      });
-                      setAlertThreshold("");
-                      setAlertSubject("");
-                      await refresh();
-                      toast("Observation alert saved");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t save observation alert"), "danger");
-                    }
+                    void persist(
+                      "Observation alert saved",
+                      "Couldn’t save observation alert",
+                      async () => {
+                        await api("/api/v1/observation-alert-rules", {
+                          method: "POST",
+                          body: JSON.stringify({
+                            metric: alertMetric,
+                            op: alertOp,
+                            threshold: Number(alertThreshold),
+                            windowMinutes:
+                              alertOp === "pct_drop" || alertOp === "pct_move"
+                                ? Number(alertWindow)
+                                : undefined,
+                            subjectCanonicalId: alertSubject || undefined,
+                          }),
+                        });
+                        setAlertThreshold("");
+                        setAlertSubject("");
+                      },
+                    );
                   }}
                 >
                   <Field label="Metric">
@@ -1146,7 +1149,9 @@ function SettingsPage() {
                       onChange={(e) => setAlertSubject(e.target.value)}
                     />
                   </Field>
-                  <Button type="submit">Save observation alert</Button>
+                  <Button type="submit" busy={busy}>
+                    Save observation alert
+                  </Button>
                 </form>
                 {(data?.observationAlertRules ?? []).length > 0 ? (
                   <ul className="data-list">
@@ -1163,16 +1168,17 @@ function SettingsPage() {
                         </span>
                         <Button
                           variant="ghost"
-                          onClick={async () => {
-                            try {
-                              await api(`/api/v1/observation-alert-rules/${rule.id}`, {
-                                method: "DELETE",
-                              });
-                              await refresh();
-                              toast("Observation alert removed");
-                            } catch (err) {
-                              toast(toastFail(err, "Couldn’t remove alert"), "danger");
-                            }
+                          busy={busy}
+                          onClick={() => {
+                            void persist(
+                              "Observation alert removed",
+                              "Couldn’t remove alert",
+                              async () => {
+                                await api(`/api/v1/observation-alert-rules/${rule.id}`, {
+                                  method: "DELETE",
+                                });
+                              },
+                            );
                           }}
                         >
                           Remove
@@ -1203,14 +1209,11 @@ function SettingsPage() {
                         <>
                           {" "}
                           <Button
-                            onClick={async () => {
-                              try {
+                            busy={busy}
+                            onClick={() => {
+                              void persist("Session ended", "Couldn’t end session", async () => {
                                 await api(`/api/v1/sessions/${row.id}/revoke`, { method: "POST" });
-                                await refresh();
-                                toast("Session ended");
-                              } catch (err) {
-                                toast(toastFail(err, "Couldn’t end session"), "danger");
-                              }
+                              });
                             }}
                           >
                             Revoke
@@ -1221,14 +1224,15 @@ function SettingsPage() {
                   ))
                 )}
                 <Button
-                  onClick={async () => {
-                    try {
-                      await api("/api/v1/sessions/revoke-others", { method: "POST" });
-                      await refresh();
-                      toast("Signed out elsewhere");
-                    } catch (err) {
-                      toast(toastFail(err, "Couldn’t sign out other sessions"), "danger");
-                    }
+                  busy={busy}
+                  onClick={() => {
+                    void persist(
+                      "Signed out elsewhere",
+                      "Couldn’t sign out other sessions",
+                      async () => {
+                        await api("/api/v1/sessions/revoke-others", { method: "POST" });
+                      },
+                    );
                   }}
                 >
                   Sign out other sessions
@@ -1267,6 +1271,7 @@ function SettingsPage() {
                   {auditHasMore && audit.length < CLIENT_LIST_CAP ? (
                     <Button
                       variant="ghost"
+                      busy={busy}
                       onClick={async () => {
                         const last = audit.at(-1);
                         if (!last) {
@@ -1297,16 +1302,10 @@ function SettingsPage() {
                     confirmVariant="danger"
                     onClose={() => setConfirmClearAudit(false)}
                     onConfirm={() => {
-                      void (async () => {
-                        setConfirmClearAudit(false);
-                        try {
-                          await api("/api/v1/audit", { method: "DELETE" });
-                          await refresh();
-                          toast("Audit log cleared");
-                        } catch (err) {
-                          toast(toastFail(err, "Couldn’t clear audit log"), "danger");
-                        }
-                      })();
+                      setConfirmClearAudit(false);
+                      void persist("Audit log cleared", "Couldn’t clear audit log", async () => {
+                        await api("/api/v1/audit", { method: "DELETE" });
+                      });
                     }}
                   >
                     <p>

@@ -41,7 +41,26 @@ export type SuggestedFeed = {
   trustTier: TrustTier;
 };
 
+export const DEFAULT_CRYPTO_FEEDS: readonly SuggestedFeed[] = [
+  {
+    name: "Ethereum Foundation blog",
+    url: "https://blog.ethereum.org/en/feed.xml",
+    trustTier: "official_firsthand",
+  },
+  {
+    name: "CoinDesk",
+    url: "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    trustTier: "reputable_press",
+  },
+  {
+    name: "Decrypt",
+    url: "https://decrypt.co/feed",
+    trustTier: "reputable_press",
+  },
+];
+
 export const SUGGESTED_FEEDS: readonly SuggestedFeed[] = [
+  ...DEFAULT_CRYPTO_FEEDS,
   {
     name: "Federal Reserve press releases",
     url: "https://www.federalreserve.gov/feeds/press_all.xml",

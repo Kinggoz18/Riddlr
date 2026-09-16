@@ -8,9 +8,11 @@ accept. Application Zod validation is the trust boundary.
 
 Structured claim extraction needs a model that supports strict JSON Schema.
 Use OpenAI `gpt-4.1-mini` or later, or Anthropic Claude Sonnet class. Models
-under 30B parameters are not recommended. OpenRouter does not guarantee strict
-JSON Schema enforcement. Settings shows a warning when the configured model or
-endpoint matches those limits.
+under 30B parameters, including 8B-class, are not sufficient: invalid claims
+are rejected, so extraction yields none. OpenRouter is a proxy: Riddlr still
+sends `response_format.json_schema` with `strict: true`, but OpenRouter only
+forwards that to backends that support it. Setup and Settings show an info
+notice for OpenRouter and a warning for sub-30B models. Save is not blocked.
 
 The base URL may be the origin (`https://api.openai.com`), already include
 `/v1` (`https://openrouter.ai/api/v1`), or be the full Chat Completions or

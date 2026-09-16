@@ -5,6 +5,7 @@ import { MAX_SEARXNG_ENGINES } from "@riddlr/domain";
 import { describe, expect, it } from "vitest";
 import {
   createSearxngAdapter,
+  DEFAULT_SEARXNG_NEWS_ENGINES,
   parseSearxngEngines,
   parseSearxngPayload,
   SEARXNG_SAFE_HOSTS,
@@ -222,6 +223,17 @@ describe("SearXNG contract fixtures", () => {
     expect(fail.errors[0]?.class).toBe("unavailable");
     const abort = await adapter.fetch(config, { query: "abort" });
     expect(abort.errors[0]?.class).toBe("timeout");
+  });
+
+  it("ships a curated English news allowlist that omits Bing News", () => {
+    expect(DEFAULT_SEARXNG_NEWS_ENGINES).toEqual([
+      "google news",
+      "duckduckgo news",
+      "reuters",
+      "wikinews",
+      "brave.news",
+    ]);
+    expect(DEFAULT_SEARXNG_NEWS_ENGINES).not.toContain("bing news");
   });
 
   it("parses an engine allowlist and drops names past the bound", () => {

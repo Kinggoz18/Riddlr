@@ -4,6 +4,17 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Finish on the default Crypto agent attaches RSS feeds from the Ethereum
+  Foundation, CoinDesk, and Decrypt. See [docs/sources/feeds.md](docs/sources/feeds.md).
+
+- 8B-class models are not sufficient for structured claim extraction. Setup and
+  Settings warn; OpenRouter shows an info notice. Use gpt-4.1-mini or Claude
+  Sonnet class. See [docs/llm-providers.md](docs/llm-providers.md).
+
+- The default SearXNG source pins `google news`, `duckduckgo news`, `reuters`,
+  `wikinews`, and `brave.news`. The bundled instance disables Bing News. See
+  [docs/sources/searxng.md](docs/sources/searxng.md).
+
 - Two independent reputable-press or official search snippets on a watched
   asset can surface as a Corroborated headline candidate. That state is not
   analyzed and is not a signal. See [docs/catalysts.md](docs/catalysts.md).
@@ -19,8 +30,8 @@ All notable changes to Riddlr are documented in this file.
 - Content understanding rejects foreign subject IDs, unknown claim units, and
   off-domain page classes (`market_profile`, `promotion`, `opinion`,
   `documentation`). Non-cached understanding calls write `ai_usage_events`.
-  Settings warns when the model is under 30B parameters or the endpoint is
-  OpenRouter. See [docs/llm-providers.md](docs/llm-providers.md).
+  Settings warns when the model is under 30B parameters. OpenRouter shows an
+  info notice. See [docs/llm-providers.md](docs/llm-providers.md).
 
 - RSS and Atom items with `content:encoded` or Atom `content` of at least 400
   characters persist as `native_complete`. Feed items are enriched on the same

@@ -34,6 +34,15 @@ type SearxPayload = {
 /** Compose DNS name plus the native overlay bind (`127.0.0.1:8888`). */
 export const SEARXNG_SAFE_HOSTS = ["searxng", "localhost", "127.0.0.1"] as const;
 
+/** English news engines for the default Crypto agent. Bing News is omitted. */
+export const DEFAULT_SEARXNG_NEWS_ENGINES = [
+  "google news",
+  "duckduckgo news",
+  "reuters",
+  "wikinews",
+  "brave.news",
+] as const;
+
 const SEARXNG_ENGINE_RE = /^[a-z0-9][a-z0-9._ -]{0,63}$/;
 
 export function parseSearxngEngines(value: unknown): string[] {

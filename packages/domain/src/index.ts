@@ -456,6 +456,12 @@ export {
   UPCOMING_CATALYST_HORIZON_MS,
 } from "./limits.js";
 export {
+  LLM_OPENROUTER_WARNING,
+  LLM_WEAK_MODEL_WARNING,
+  llmStructuredOutputNotes,
+  llmStructuredOutputWarning,
+} from "./llm-warning.js";
+export {
   ASSET_CLASS_DOMAIN,
   ASSET_CLASSES,
   type AssetClass,

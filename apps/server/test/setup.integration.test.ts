@@ -446,7 +446,50 @@ describe("setup, auth, and domain persistence", () => {
       headers: { cookie },
     });
     expect(sourceList.json().sources.map((item: { adapterId: string }) => item.adapterId)).toEqual(
-      expect.arrayContaining(["searxng", "coingecko"]),
+      expect.arrayContaining(["searxng", "coingecko", "feeds"]),
+    );
+    const setupSources = sourceList.json().sources as Array<{
+      adapterId: string;
+      config?: { feedUrl?: string; engines?: string[] };
+    }>;
+    const feedUrls = setupSources
+      .filter((item) => item.adapterId === "feeds")
+      .map((item) => item.config?.feedUrl)
+      .sort();
+    expect(feedUrls).toEqual(
+      [
+        "https://blog.ethereum.org/en/feed.xml",
+        "https://decrypt.co/feed",
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+      ].sort(),
+    );
+    expect(setupSources.find((item) => item.adapterId === "searxng")?.config?.engines).toEqual([
+      "google news",
+      "duckduckgo news",
+      "reuters",
+      "wikinews",
+      "brave.news",
+    ]);
+    const identityList = await app.inject({
+      method: "GET",
+      url: "/api/v1/source-identities",
+      headers: { cookie },
+    });
+    const feedIdentities = (
+      identityList.json().identities as Array<{
+        platform: string;
+        hostname: string | null;
+        policy?: { trustTier?: string };
+      }>
+    ).filter((row) => row.platform === "feed");
+    expect(
+      feedIdentities.find((row) => row.hostname === "blog.ethereum.org")?.policy?.trustTier,
+    ).toBe("official_firsthand");
+    expect(
+      feedIdentities.find((row) => row.hostname === "www.coindesk.com")?.policy?.trustTier,
+    ).toBe("reputable_press");
+    expect(feedIdentities.find((row) => row.hostname === "decrypt.co")?.policy?.trustTier).toBe(
+      "reputable_press",
     );
 
     const cryptocom = await app.inject({

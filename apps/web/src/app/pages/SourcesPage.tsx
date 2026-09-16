@@ -1803,7 +1803,7 @@ function SourceDetail() {
             Engine allowlist:{" "}
             {Array.isArray(config.engines) && config.engines.length > 0
               ? config.engines.map(String).join(", ")
-              : "all JSON engines on the bundled instance"}
+              : "bundled instance engines (Bing News disabled)"}
           </p>
         </Card>
       ) : null}
@@ -2107,13 +2107,13 @@ function SourceEdit() {
           {row.adapterId === "searxng" ? (
             <Field
               label="Engine allowlist"
-              hint="Comma-separated SearXNG engine names, for example bing news, reuters. Empty means every engine enabled on the bundled instance. The search endpoint is not editable here."
+              hint="Comma-separated SearXNG engine names. Empty means every engine enabled on the bundled instance (Bing News is disabled there). The default Crypto source uses google news, duckduckgo news, reuters, wikinews, and brave.news. The search endpoint is not editable here."
             >
               <input
                 id="searxng-engines"
                 value={engines}
                 onChange={(e) => setEngines(e.target.value)}
-                placeholder="Leave empty for every JSON engine"
+                placeholder="Leave empty for bundled instance engines"
               />
             </Field>
           ) : null}

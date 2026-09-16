@@ -8,8 +8,10 @@ disable JSON return 403.
 
 Created during onboarding. It cannot be removed. Sources → SearXNG → **Edit
 source** sets an optional engine allowlist (comma-separated names such as
-`bing news, reuters`). Empty means every engine enabled on the instance. The
-endpoint is the Compose service URL and is not editable from the dashboard.
+`google news, reuters`). Empty means every engine enabled on the instance.
+The bundled instance disables Bing News. The default Crypto source allowlist is
+`google news`, `duckduckgo news`, `reuters`, `wikinews`, and `brave.news`.
+The endpoint is the Compose service URL and is not editable from the dashboard.
 
 Publisher hosts (Sources) seed default price-tracker hostnames as blocked,
 reputable press hosts as `reputable_press`, and official/regulator hosts as

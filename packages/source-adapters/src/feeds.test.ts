@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampFeedPollIntervalSeconds,
   createFeedsAdapter,
+  DEFAULT_CRYPTO_FEEDS,
   defaultTrustForFeedUrl,
   parseFeedXml,
 } from "./feeds.js";
@@ -165,9 +166,22 @@ describe("RSS and Atom feed adapter", () => {
   });
 
   it("defaults suggested official hostnames to official firsthand trust", () => {
+    expect(DEFAULT_CRYPTO_FEEDS).toHaveLength(3);
+    expect(DEFAULT_CRYPTO_FEEDS.map((item) => item.url)).toEqual([
+      "https://blog.ethereum.org/en/feed.xml",
+      "https://www.coindesk.com/arc/outboundfeeds/rss/",
+      "https://decrypt.co/feed",
+    ]);
     expect(defaultTrustForFeedUrl("https://www.federalreserve.gov/feeds/press_all.xml")).toBe(
       "official_firsthand",
     );
+    expect(defaultTrustForFeedUrl("https://blog.ethereum.org/en/feed.xml")).toBe(
+      "official_firsthand",
+    );
+    expect(defaultTrustForFeedUrl("https://www.coindesk.com/arc/outboundfeeds/rss/")).toBe(
+      "reputable_press",
+    );
+    expect(defaultTrustForFeedUrl("https://decrypt.co/feed")).toBe("reputable_press");
     expect(defaultTrustForFeedUrl("https://blog.example.com/feed")).toBe("community");
     expect(clampFeedPollIntervalSeconds(10)).toBe(60);
     expect(clampFeedPollIntervalSeconds(9_999)).toBe(3_600);

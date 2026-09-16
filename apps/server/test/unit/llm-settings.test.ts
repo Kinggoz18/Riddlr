@@ -20,8 +20,9 @@ describe("public LLM settings", () => {
       provider: "openai_compatible",
       baseUrl: "https://openrouter.ai/api/v1",
       model: "meta-llama/llama-3.1-8b-instruct",
-      structuredOutputWarning:
-        "Models under 30B parameters are not recommended for structured claim extraction. This endpoint does not guarantee strict JSON Schema enforcement.",
+      structuredOutputWarning: expect.stringContaining(
+        "OpenRouter does not guarantee strict JSON Schema enforcement.",
+      ),
     });
   });
 

@@ -1,6 +1,10 @@
 export { CATALYST_KINDS } from "./catalyst-kinds.js";
 export { chartMetricLabel, DASHBOARD_CHART_METRICS } from "./dashboard-charts.js";
 export {
+  llmStructuredOutputNotes,
+  llmStructuredOutputWarning,
+} from "./llm-warning.js";
+export {
   aggregateIndependenceByOrigin,
   aggregateTrustByOrigin,
   type OriginTrustRow,

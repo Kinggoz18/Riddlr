@@ -1,5 +1,9 @@
-import { needsSetupCode, SETUP_CODE_TTL_MINUTES } from "@riddlr/domain/web";
-import { Button, Card, Field } from "@riddlr/ui";
+import {
+  llmStructuredOutputNotes,
+  needsSetupCode,
+  SETUP_CODE_TTL_MINUTES,
+} from "@riddlr/domain/web";
+import { Banner, Button, Card, Field } from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { api, type Domain } from "../api.js";
 import { AuthShell } from "../Brand.js";
@@ -50,6 +54,7 @@ function SetupPage() {
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChat, setTelegramChat] = useState("");
   const [marketDomainIds, setMarketDomainIds] = useState(initialSetupMarketDomains);
+  const llmNotes = llmStructuredOutputNotes({ provider, baseUrl, model });
 
   async function refreshStatus() {
     const value = await api<SetupStatus>("/api/v1/setup/status");
@@ -354,6 +359,15 @@ function SetupPage() {
             <p className="step-count">Step {stepNumber} of 4</p>
             <h2>Connect a model</h2>
           </header>
+          <p className="field-note">
+            Structured claim extraction needs gpt-4.1-mini or Claude Sonnet class. 8B-class models
+            are not sufficient.
+          </p>
+          {llmNotes.map((note) => (
+            <Banner key={note.message} tone={note.tone}>
+              {note.message}
+            </Banner>
+          ))}
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -443,6 +457,10 @@ function SetupPage() {
             <p className="step-count">Step {stepNumber} of 4</p>
             <h2>Choose markets</h2>
           </header>
+          <p className="field-note">
+            Finish attaches SearXNG with curated news engines, CoinGecko, and RSS feeds from the
+            Ethereum Foundation, CoinDesk, and Decrypt. The default agent stays Crypto.
+          </p>
           <div className="domain-options">
             {(status.domains ?? []).map((domain) => (
               <label key={domain.id} className="ui-field domain-option">

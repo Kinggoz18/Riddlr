@@ -29,9 +29,14 @@ import {
   mergeShippedCryptoObjectives,
 } from "@riddlr/domain-crypto";
 import { llmStructuredOutputWarning, probeLlmProvider } from "@riddlr/llm";
+import { DEFAULT_SEARXNG_NEWS_ENGINES } from "@riddlr/source-adapters";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { ensureDefaultEquitiesAssets } from "./asset-registry.js";
+import {
+  ensureDefaultCryptoFeedSources,
+  ensureDefaultSearxngNewsEngines,
+} from "./default-sources.js";
 import { ensureDefaultPriceTrackerHostPolicies } from "./intelligence.js";
 
 const skillDir = join(dirname(fileURLToPath(import.meta.url)), "../../../../skills/crypto");
@@ -134,6 +139,8 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
   if (existing[0]) {
     await ensureShippedCryptoSkills(ctx, existing[0].id);
     await ensureDefaultEquitiesAssets(ctx);
+    await ensureDefaultSearxngNewsEngines(ctx);
+    await ensureDefaultCryptoFeedSources(ctx, existing[0].id);
     return existing[0];
   }
   const [agent] = await ctx.db
@@ -194,7 +201,7 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
           adapterId: "searxng",
           name: "SearXNG",
           enabled: true,
-          config: { endpoint: searxngUrl },
+          config: { endpoint: searxngUrl, engines: [...DEFAULT_SEARXNG_NEWS_ENGINES] },
         })
         .returning()
     )[0];
@@ -235,6 +242,8 @@ export async function createDefaultCryptoAgent(ctx: AppContext, searxngUrl: stri
       .onConflictDoNothing();
   }
   await ensureDefaultEquitiesAssets(ctx);
+  await ensureDefaultSearxngNewsEngines(ctx);
+  await ensureDefaultCryptoFeedSources(ctx, agent.id);
   return agent;
 }
 

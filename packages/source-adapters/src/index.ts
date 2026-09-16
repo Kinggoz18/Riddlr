@@ -81,6 +81,7 @@ export { type EnrichmentDocument, enrichPublicDocument } from "./enrich.js";
 export {
   clampFeedPollIntervalSeconds,
   createFeedsAdapter,
+  DEFAULT_CRYPTO_FEEDS,
   defaultTrustForFeedUrl,
   FEEDS_ADAPTER_ID,
   FEEDS_FAMILY,
@@ -167,6 +168,7 @@ export {
 export { loadRobotsTxt, pathDisallowedByRobots, robotsDenied } from "./robots.js";
 export {
   createSearxngAdapter,
+  DEFAULT_SEARXNG_NEWS_ENGINES,
   parseSearxngEngines,
   parseSearxngPayload,
   SEARXNG_SAFE_HOSTS,

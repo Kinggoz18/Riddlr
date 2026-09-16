@@ -9,6 +9,9 @@ or access secrets.
 Onboarding step 3 or Settings → LLM: kind, base URL, model, API key. Saving
 probes that the model answers (`structuredOutput: false`, 15s). Skip continues
 without a model; scans still collect evidence and analysis waits.
+8B-class models are not sufficient for claim extraction. Setup and Settings
+warn when the model is under 30B parameters. OpenRouter shows an info notice
+because it does not guarantee strict JSON Schema.
 `RIDDLR_ENV=test` does not call the network.
 
 The base URL may be the origin (`https://api.openai.com`), already include

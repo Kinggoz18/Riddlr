@@ -225,9 +225,7 @@ describe("structured output warning", () => {
         model: "meta-llama/llama-3.1-8b-instruct",
         baseUrl: "https://openrouter.ai/api/v1",
       }),
-    ).toBe(
-      "Models under 30B parameters are not recommended for structured claim extraction. This endpoint does not guarantee strict JSON Schema enforcement.",
-    );
+    ).toContain("OpenRouter does not guarantee strict JSON Schema enforcement.");
     expect(
       llmStructuredOutputWarning({
         model: "gpt-4.1-mini",

@@ -7,10 +7,12 @@ enrichment path when they are fetchable.
 ## Setup
 
 Sources → **Add source** → **Configure RSS/Atom**. Paste an `http` or `https`
-feed URL. You can add more than one feed. Suggested official URLs (Federal
-Reserve press releases, ECB press) default trust to **official firsthand**.
-Other URLs default to **community**. Trust is stored on the feed hostname
-identity and can be changed later under Source identities.
+feed URL. You can add more than one feed. The default Crypto agent starts with
+Ethereum Foundation, CoinDesk, and Decrypt feeds. Suggested official URLs
+(Federal Reserve press releases, ECB press) default trust to **official
+firsthand**. Other URLs default to **community** unless the hostname matches a
+starter feed. Trust is stored on the feed hostname identity and can be changed
+later under Source identities.
 
 Poll interval is 60–3600 seconds (default 300). Unchanged `ETag` responses
 double the interval up to one hour.

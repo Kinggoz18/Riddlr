@@ -10,16 +10,18 @@ First-run is **four steps**. There is no fifth step.
    recovery codes (shown once). **Skip for now** continues without TOTP;
    enable later in Settings.
 3. **LLM provider** — OpenAI-compatible or Anthropic-compatible base URL,
-   model, and API key (encrypted at rest, never shown again). **Skip for now**
-   continues without a model; scans still collect evidence. Add a provider later
-   in Settings.
+   model, and API key (encrypted at rest, never shown again). Structured claim
+   extraction needs gpt-4.1-mini or Claude Sonnet class; 8B-class models are
+   not sufficient. **Skip for now** continues without a model; scans still
+   collect evidence. Add a provider later in Settings.
 4. **Domains and sources** — Crypto is selected and stays the default agent.
    Equities is selectable (supported). Forex, Commodities, and Macro are
    disabled Coming soon. Optional Telegram. Finish creates the
-   default **Riddlr Intelligence Agent** with SearXNG, CoinGecko, and a
-   Bitcoin / Ethereum / Tether watchlist. That agent is the Crypto watcher:
-   scheduled scans, candidate discovery, and analysis of material events.
-   Create an Equities agent after setup and add SEC EDGAR.
+   default **Riddlr Intelligence Agent** with SearXNG (curated English news
+   engines), CoinGecko, RSS feeds from the Ethereum Foundation, CoinDesk, and
+   Decrypt, and a Bitcoin / Ethereum / Tether watchlist. That agent is the
+   Crypto watcher: scheduled scans, candidate discovery, and analysis of
+   material events. Create an Equities agent after setup and add SEC EDGAR.
 
 After Finish, setup routes close. The origin shows **Sign in**. Password-only
 sign-in works until authenticator is enabled.
