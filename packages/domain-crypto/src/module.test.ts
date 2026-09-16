@@ -638,7 +638,7 @@ describe("crypto domain module", () => {
           modality: "asserted",
           excerpt: "z=4.25 over 20 spot_price samples",
           value: 4.25,
-          unit: "sigma",
+          unit: "percent",
           subjectCanonicalId: "coingecko:bitcoin",
         },
         evidence,

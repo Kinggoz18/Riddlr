@@ -20,6 +20,27 @@ describe("public LLM settings", () => {
       provider: "openai_compatible",
       baseUrl: "https://openrouter.ai/api/v1",
       model: "meta-llama/llama-3.1-8b-instruct",
+      structuredOutputWarning:
+        "Models under 30B parameters are not recommended for structured claim extraction. This endpoint does not guarantee strict JSON Schema enforcement.",
+    });
+  });
+
+  it("omits the structured-output warning for gpt-4.1-mini on OpenAI", () => {
+    expect(
+      toPublicLlm([
+        {
+          kind: "openai_compatible",
+          settings: {
+            baseUrl: "https://api.openai.com",
+            model: "gpt-4.1-mini",
+          },
+        },
+      ]),
+    ).toEqual({
+      configured: true,
+      provider: "openai_compatible",
+      baseUrl: "https://api.openai.com",
+      model: "gpt-4.1-mini",
     });
   });
 

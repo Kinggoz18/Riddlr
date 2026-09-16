@@ -1,4 +1,5 @@
 import {
+  acceptedSubjectCanonicalId,
   CATALYST_SEVERITY_PRIOR,
   type CatalystKind,
   canonicalizeFromRegistry,
@@ -10,6 +11,7 @@ import {
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
   isCatalystKind,
+  isSubjectFreeCatalyst,
   type NormalizedEvidence,
   resolveEvidenceAssets,
   selectPrincipalCatalyst,
@@ -298,7 +300,7 @@ export const equitiesDomainModule: DomainModule = {
     }
     return takeBounded(out, 32);
   },
-  normalizeClaim(candidate, evidence, registry = []) {
+  normalizeClaim(candidate, evidence, registry = [], allowedSubjectIds) {
     const domainKind = (EQUITIES_CLAIM_KINDS as readonly string[]).includes(candidate.kind)
       ? (candidate.kind as (typeof EQUITIES_CLAIM_KINDS)[number])
       : isCatalystKind(candidate.kind)
@@ -308,8 +310,21 @@ export const equitiesDomainModule: DomainModule = {
       return undefined;
     }
     const catalyst = EQUITIES_CLAIM_TO_CATALYST[domainKind];
+    if (
+      allowedSubjectIds &&
+      candidate.subjectCanonicalId &&
+      !allowedSubjectIds.includes(candidate.subjectCanonicalId)
+    ) {
+      return undefined;
+    }
     const assets = this.extractAssets([evidence], registry);
-    const subjectCanonicalId = candidate.subjectCanonicalId ?? assets[0]?.canonicalId;
+    const subjectCanonicalId = acceptedSubjectCanonicalId({
+      candidateId: candidate.subjectCanonicalId,
+      fallbackId: assets[0]?.canonicalId,
+      registry,
+      allowedSubjectIds,
+      subjectFree: catalyst ? isSubjectFreeCatalyst(catalyst) : false,
+    });
     if (
       !claimSatisfiesCatalystContract({
         catalystKind: catalyst,

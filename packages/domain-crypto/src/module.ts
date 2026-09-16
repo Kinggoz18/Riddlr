@@ -1,4 +1,5 @@
 import {
+  acceptedSubjectCanonicalId,
   buildAssetNewsQuery,
   buildDomainGeneralNewsQuery,
   CATALYST_SEVERITY_PRIOR,
@@ -18,6 +19,7 @@ import {
   fingerprintClaim,
   claimsCompatible as genericClaimsCompatible,
   isCatalystKind,
+  isSubjectFreeCatalyst,
   MARKET_STRESS_V1,
   MAX_SEARXNG_ASSET_QUERIES,
   MAX_SNAPSHOT_SPACES,
@@ -552,7 +554,7 @@ export const cryptoDomainModule: DomainModule = {
     }
     return takeBounded(out, 32);
   },
-  normalizeClaim(candidate, evidence, registry: readonly RegistryAsset[] = []) {
+  normalizeClaim(candidate, evidence, registry: readonly RegistryAsset[] = [], allowedSubjectIds) {
     const domainKind = toCryptoClaimKind(candidate.kind);
     if (!domainKind || domainKind === "crypto:general_report") {
       return undefined;
@@ -571,8 +573,21 @@ export const cryptoDomainModule: DomainModule = {
     if (weakClaimObject(candidate.objectText ?? candidate.excerpt)) {
       return undefined;
     }
+    if (
+      allowedSubjectIds &&
+      candidate.subjectCanonicalId &&
+      !allowedSubjectIds.includes(candidate.subjectCanonicalId)
+    ) {
+      return undefined;
+    }
     const assets = this.extractAssets([evidence], registry);
-    const subjectCanonicalId = candidate.subjectCanonicalId ?? assets[0]?.canonicalId;
+    const subjectCanonicalId = acceptedSubjectCanonicalId({
+      candidateId: candidate.subjectCanonicalId,
+      fallbackId: assets[0]?.canonicalId,
+      registry,
+      allowedSubjectIds,
+      subjectFree: isSubjectFreeCatalyst(catalyst),
+    });
     if (
       !claimSatisfiesCatalystContract({
         catalystKind: catalyst,

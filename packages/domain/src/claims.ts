@@ -15,6 +15,12 @@ import {
 export const MAX_CLAIMS_PER_DOCUMENT = 8;
 export const MAX_CLAIM_EXCERPT_CHARS = 500;
 export const CLAIM_KIND_RE = /^[a-z][a-z0-9-]{1,32}:[a-z][a-z0-9_]{1,64}$/;
+export const CLAIM_UNITS = ["percent", "usd", "votes", "tokens", "bps", "iso_date"] as const;
+export type ClaimUnit = (typeof CLAIM_UNITS)[number];
+
+export function isClaimUnit(value: string | undefined): value is ClaimUnit {
+  return Boolean(value && (CLAIM_UNITS as readonly string[]).includes(value));
+}
 
 export const claimCandidateSchema = z
   .object({
@@ -23,7 +29,7 @@ export const claimCandidateSchema = z
     predicate: z.string().min(1),
     objectText: z.string().max(280).optional(),
     value: z.union([z.number(), z.string(), z.boolean(), z.null()]).optional(),
-    unit: z.string().max(32).optional(),
+    unit: z.enum(CLAIM_UNITS).optional(),
     polarity: z.enum(CLAIM_POLARITIES),
     modality: z.enum(CLAIM_MODALITIES),
     excerpt: z.string().min(1).max(MAX_CLAIM_EXCERPT_CHARS),
@@ -106,18 +112,73 @@ export function claimStanceFromExtraction(input: {
   polarity: ClaimPolarity;
   modality: ClaimModality;
   attributedToOtherOrigin?: boolean;
+  attributedOrigin?: string;
   retracting?: boolean;
+  hasAssertedCounterpart?: boolean;
 }): ClaimStance {
   if (input.retracting) {
     return "retracts";
   }
-  if (input.polarity === "negated" || input.modality === "denied") {
+  if (
+    (input.polarity === "negated" || input.modality === "denied") &&
+    input.hasAssertedCounterpart
+  ) {
     return "contradicts";
   }
-  if (input.attributedToOtherOrigin) {
+  if (input.attributedToOtherOrigin && (input.attributedOrigin ?? "").trim().length > 0) {
     return "derived_from";
   }
   return "supports";
+}
+
+export function hasAssertedClaimCounterpart(
+  claim: { kind: string; subjectCanonicalId?: string; polarity: ClaimPolarity },
+  others: ReadonlyArray<{ kind: string; subjectCanonicalId?: string; polarity: ClaimPolarity }>,
+): boolean {
+  return others.some(
+    (item) =>
+      item.polarity === "asserted" &&
+      item.kind === claim.kind &&
+      (item.subjectCanonicalId ?? "") === (claim.subjectCanonicalId ?? ""),
+  );
+}
+
+export function registryContainsCanonicalId(
+  registry: ReadonlyArray<{ canonicalId: string; aliases?: readonly string[] }>,
+  canonicalId: string,
+): boolean {
+  return registry.some(
+    (asset) => asset.canonicalId === canonicalId || (asset.aliases ?? []).includes(canonicalId),
+  );
+}
+
+export function acceptedSubjectCanonicalId(input: {
+  candidateId?: string;
+  fallbackId?: string;
+  registry: ReadonlyArray<{ canonicalId: string; aliases?: readonly string[] }>;
+  allowedSubjectIds?: readonly string[];
+  subjectFree?: boolean;
+}): string | undefined {
+  const allowed = input.allowedSubjectIds ? new Set(input.allowedSubjectIds) : undefined;
+  const usable = (id: string | undefined): string | undefined => {
+    if (!id) {
+      return undefined;
+    }
+    if (allowed && !allowed.has(id)) {
+      return undefined;
+    }
+    if (input.registry.length > 0 && !registryContainsCanonicalId(input.registry, id)) {
+      return undefined;
+    }
+    return id;
+  };
+  if (input.subjectFree) {
+    return input.candidateId ? usable(input.candidateId) : undefined;
+  }
+  if (input.candidateId) {
+    return usable(input.candidateId);
+  }
+  return usable(input.fallbackId);
 }
 
 export function weakClaimObject(objectText?: string): boolean {

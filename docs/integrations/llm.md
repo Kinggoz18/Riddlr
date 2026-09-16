@@ -31,7 +31,8 @@ Cache: understanding rows key on cleaned content hash, schema version,
 prompt hash, and extractor version. Analysis cache keys on model, schema,
 prompt hash, and context. Daily token budget skip leaves the event
 `needs_analysis`. The LLM never receives raw observation series; it receives
-bounded context notes.
+bounded context notes. Non-cached understanding completions write
+`ai_usage_events` with the scan's agent id.
 
 See [llm-providers.md](../llm-providers.md).
 

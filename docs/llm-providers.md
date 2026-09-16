@@ -6,6 +6,12 @@ Domain logic does not import vendor SDKs.
 Structured output uses a conservative JSON Schema intersection both vendors
 accept. Application Zod validation is the trust boundary.
 
+Structured claim extraction needs a model that supports strict JSON Schema.
+Use OpenAI `gpt-4.1-mini` or later, or Anthropic Claude Sonnet class. Models
+under 30B parameters are not recommended. OpenRouter does not guarantee strict
+JSON Schema enforcement. Settings shows a warning when the configured model or
+endpoint matches those limits.
+
 The base URL may be the origin (`https://api.openai.com`), already include
 `/v1` (`https://openrouter.ai/api/v1`), or be the full Chat Completions or
 Messages URL. Riddlr does not drop a `/v1` path or double the endpoint.

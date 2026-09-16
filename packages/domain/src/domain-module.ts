@@ -99,6 +99,7 @@ export type DomainModule = {
     candidate: ClaimCandidate,
     evidence: NormalizedEvidence,
     registry?: readonly RegistryAsset[],
+    allowedSubjectIds?: readonly string[],
   ): NormalizedClaim | undefined;
   claimsCompatible(left: NormalizedClaim, right: NormalizedClaim): boolean;
   assembleContext(input: {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { decryptSecretWithKeys } from "@riddlr/crypto";
 import {
+  aiUsageEvents,
   claimEvidence,
   claims,
   encryptedSecrets,
@@ -10,8 +11,11 @@ import {
   hostRobotsCache,
   providerConfigs,
   publisherHostPolicies,
+  scans,
   sourceIdentities,
   sourceIdentityPolicies,
+  watchlistItems,
+  watchlists,
 } from "@riddlr/db";
 import {
   blockedPublisherHosts,
@@ -22,6 +26,7 @@ import {
   claimSatisfiesCatalystContract,
   claimStanceFromExtraction,
   classifyPageHeuristic,
+  collectAllowedSubjectIds,
   contentHash,
   DEFAULT_OFFICIAL_FIRSTHAND_HOSTS,
   DEFAULT_PRICE_TRACKER_HOSTS,
@@ -32,14 +37,17 @@ import {
   excerptHash,
   excerptOffsets,
   excerptPresent,
+  hasAssertedClaimCounterpart,
   headlineBodyMismatch,
   hostMatchesPublisherPolicy,
   isEnrichableSourceFamily,
+  MAX_ASSETS_PER_DOCUMENT,
   MAX_CATALYST_KINDS,
   MAX_HOST_ROBOTS_CACHE,
   MIN_NATIVE_COMPLETE_CHARS,
   type NormalizedEvidence,
   overlayNormalizedClaimNegation,
+  type PageClass,
   preferEvidenceTitle,
   prioritizeEnrichment,
   publisherHostIsBlocked,
@@ -635,6 +643,7 @@ async function persistClaimsForEvidence(
   };
   let extracted = module.extractClaims([normalized], registry);
   let attributedToOtherOrigin = false;
+  let attributedOrigin: string | undefined;
   let retracting = false;
   let extractionVersion = "domain-extract-1";
   const complete =
@@ -652,11 +661,14 @@ async function persistClaimsForEvidence(
     !headlineBodyMismatch(row.title ?? undefined, row.bodyText ?? "")
   ) {
     const understood = await understandEvidence(ctx, module, row, normalized, fetchImpl, registry);
-    if (understood.claims.length > 0) {
+    if (understood.pageClass && skipUnderstandingForPageClass(understood.pageClass)) {
+      extracted = [];
+    } else if (understood.claims.length > 0) {
       extracted = overlayNormalizedClaimNegation(understood.claims, extracted, (kind) =>
         module.mapClaimKindToCatalyst(kind),
       );
       attributedToOtherOrigin = understood.attributedToOtherOrigin;
+      attributedOrigin = understood.attributedOrigin;
       retracting = understood.retracting;
       extractionVersion = "understanding-taxonomy-1";
     } else {
@@ -729,7 +741,20 @@ async function persistClaimsForEvidence(
       polarity: claim.polarity as "asserted" | "negated",
       modality: claim.modality as "asserted" | "alleged" | "forecast" | "denied",
       attributedToOtherOrigin,
+      attributedOrigin,
       retracting,
+      hasAssertedCounterpart: hasAssertedClaimCounterpart(
+        {
+          kind: claim.kind,
+          subjectCanonicalId: claim.subjectCanonicalId,
+          polarity: claim.polarity as "asserted" | "negated",
+        },
+        extracted.map((item) => ({
+          kind: item.kind,
+          subjectCanonicalId: item.subjectCanonicalId,
+          polarity: item.polarity as "asserted" | "negated",
+        })),
+      ),
     });
     await ctx.db
       .insert(claimEvidence)
@@ -748,6 +773,40 @@ async function persistClaimsForEvidence(
   }
 }
 
+async function scanAgentContext(
+  ctx: AppContext,
+  scanId: string | null,
+): Promise<{ agentId?: string; watchlistIds: string[] }> {
+  if (!scanId) {
+    return { watchlistIds: [] };
+  }
+  const [scan] = await ctx.db
+    .select({ agentId: scans.agentId })
+    .from(scans)
+    .where(eq(scans.id, scanId))
+    .limit(1);
+  if (!scan?.agentId) {
+    return { watchlistIds: [] };
+  }
+  const [watchlist] = await ctx.db
+    .select({ id: watchlists.id })
+    .from(watchlists)
+    .where(eq(watchlists.agentId, scan.agentId))
+    .limit(1);
+  if (!watchlist) {
+    return { agentId: scan.agentId, watchlistIds: [] };
+  }
+  const items = await ctx.db
+    .select({ canonicalId: watchlistItems.canonicalId })
+    .from(watchlistItems)
+    .where(eq(watchlistItems.watchlistId, watchlist.id))
+    .limit(MAX_ASSETS_PER_DOCUMENT);
+  return {
+    agentId: scan.agentId,
+    watchlistIds: items.map((item) => item.canonicalId),
+  };
+}
+
 async function understandEvidence(
   ctx: AppContext,
   module: DomainModule,
@@ -758,7 +817,9 @@ async function understandEvidence(
 ): Promise<{
   claims: ReturnType<DomainModule["extractClaims"]>;
   attributedToOtherOrigin: boolean;
+  attributedOrigin?: string;
   retracting: boolean;
+  pageClass?: PageClass;
 }> {
   const empty = {
     claims: [] as ReturnType<DomainModule["extractClaims"]>,
@@ -772,6 +833,17 @@ async function understandEvidence(
     .where(eq(evidenceDocuments.evidenceId, row.id))
     .limit(1);
   const cleanedHash = document?.cleanedContentHash ?? row.contentHash;
+  const { agentId, watchlistIds } = await scanAgentContext(ctx, row.scanId);
+  const resolvedIds = module
+    .extractAssets([normalized], registry, {
+      preferredCanonicalIds: watchlistIds,
+    })
+    .map((asset) => asset.canonicalId);
+  const allowedSubjectIds = collectAllowedSubjectIds({
+    watchlistIds,
+    resolvedIds,
+    limit: MAX_ASSETS_PER_DOCUMENT,
+  });
   const prompt = buildUnderstandingPrompt({
     evidenceId: row.id,
     marketDomainId: module.id,
@@ -779,6 +851,7 @@ async function understandEvidence(
     title: row.title ?? undefined,
     content,
     url: row.canonicalUrl ?? undefined,
+    allowedSubjectIds,
   });
   const promptHash = createHash("sha256").update(`${prompt.system}\n${prompt.user}`).digest("hex");
   const [cached] = await ctx.db
@@ -798,20 +871,28 @@ async function understandEvidence(
       evidenceId: row.id,
       content,
       allowedClaimKinds: [...CATALYST_KINDS],
+      allowedSubjectIds,
     });
     if (headlineBodyMismatch(row.title ?? undefined, content)) {
       parsed.headlineBodyConsistent = false;
     }
+    const skipClaims = skipUnderstandingForPageClass(parsed.pageClass);
     return {
-      claims: parsed.claims
-        .map((candidate) => module.normalizeClaim(candidate, normalized, registry))
-        .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .map((item) => ({
-          ...item,
-          excerpt: parsed.claims.find((candidate) => candidate.kind === item.kind)?.excerpt,
-        })),
+      claims: skipClaims
+        ? []
+        : parsed.claims
+            .map((candidate) =>
+              module.normalizeClaim(candidate, normalized, registry, allowedSubjectIds),
+            )
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+            .map((item) => ({
+              ...item,
+              excerpt: parsed.claims.find((candidate) => candidate.kind === item.kind)?.excerpt,
+            })),
       attributedToOtherOrigin: parsed.attributedToOtherOrigin,
+      attributedOrigin: parsed.attributedOrigin,
       retracting: false,
+      pageClass: parsed.pageClass,
       parsed,
     };
   };
@@ -822,7 +903,9 @@ async function understandEvidence(
       return {
         claims: result.claims,
         attributedToOtherOrigin: result.attributedToOtherOrigin,
+        attributedOrigin: result.attributedOrigin,
         retracting: result.retracting,
+        pageClass: result.pageClass,
       };
     } catch {
       return empty;
@@ -880,10 +963,24 @@ async function understandEvidence(
       schemaName: "content_understanding",
       timeoutMs: 30_000,
     });
+    await ctx.db.insert(aiUsageEvents).values({
+      ...(agentId ? { agentId } : {}),
+      provider: provider.kind,
+      model: String(settings.model ?? "unknown"),
+      promptTokens: completion.usage?.promptTokens,
+      completionTokens: completion.usage?.completionTokens,
+      completionTotal:
+        (completion.usage?.promptTokens ?? 0) + (completion.usage?.completionTokens ?? 0),
+      latencyMs: completion.latencyMs,
+      providerRequestId: completion.providerRequestId,
+      cacheHit: false,
+      status: "recorded",
+    });
     const parsed = validateContentUnderstanding(completion.parsed, {
       evidenceId: row.id,
       content,
       allowedClaimKinds: [...CATALYST_KINDS],
+      allowedSubjectIds,
     });
     ctx.metrics.aiCalls.inc({ provider: provider.kind, result: "ok" });
     await ctx.db.insert(evidenceUnderstanding).values({
@@ -905,7 +1002,9 @@ async function understandEvidence(
     return {
       claims: result.claims,
       attributedToOtherOrigin: result.attributedToOtherOrigin,
+      attributedOrigin: result.attributedOrigin,
       retracting: result.retracting,
+      pageClass: result.pageClass,
     };
   } catch (error) {
     ctx.logger.warn({ err: error }, "content understanding failed closed");

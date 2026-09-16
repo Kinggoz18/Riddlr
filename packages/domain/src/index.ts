@@ -26,9 +26,12 @@ export {
   selectPrincipalCatalyst,
 } from "./catalysts.js";
 export {
+  acceptedSubjectCanonicalId,
   assertClaimKind,
   CLAIM_KIND_RE,
+  CLAIM_UNITS,
   type ClaimCandidate,
+  type ClaimUnit,
   claimCandidateSchema,
   claimGroupKey,
   claimStanceFromExtraction,
@@ -38,9 +41,12 @@ export {
   excerptOffsets,
   excerptPresent,
   fingerprintClaim,
+  hasAssertedClaimCounterpart,
+  isClaimUnit,
   MAX_CLAIM_EXCERPT_CHARS,
   MAX_CLAIMS_PER_DOCUMENT,
   type NormalizedClaim,
+  registryContainsCanonicalId,
   takeClaims,
   weakClaimObject,
 } from "./claims.js";
@@ -703,6 +709,7 @@ export {
   CONTENT_UNDERSTANDING_JSON_SCHEMA,
   CONTENT_UNDERSTANDING_SCHEMA_VERSION,
   type ContentUnderstanding,
+  collectAllowedSubjectIds,
   contentUnderstandingSchema,
   InvalidUnderstandingError,
   MAX_UNDERSTANDING_CONTENT_CHARS,

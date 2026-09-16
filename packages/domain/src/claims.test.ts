@@ -98,6 +98,28 @@ describe("claims", () => {
         polarity: "negated",
         modality: "asserted",
       }),
+    ).toBe("supports");
+    expect(
+      claimStanceFromExtraction({
+        polarity: "negated",
+        modality: "asserted",
+        hasAssertedCounterpart: true,
+      }),
     ).toBe("contradicts");
+    expect(
+      claimStanceFromExtraction({
+        polarity: "asserted",
+        modality: "asserted",
+        attributedToOtherOrigin: true,
+      }),
+    ).toBe("supports");
+    expect(
+      claimStanceFromExtraction({
+        polarity: "asserted",
+        modality: "asserted",
+        attributedToOtherOrigin: true,
+        attributedOrigin: "Reuters",
+      }),
+    ).toBe("derived_from");
   });
 });

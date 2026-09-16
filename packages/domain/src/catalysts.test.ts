@@ -69,6 +69,14 @@ describe("catalyst taxonomy", () => {
     ).toBe(true);
     expect(
       claimSatisfiesCatalystContract({
+        catalystKind: "peg_deviation",
+        subjectCanonicalId: "coingecko:tether",
+        value: 0.92,
+        unit: "count",
+      }),
+    ).toBe(false);
+    expect(
+      claimSatisfiesCatalystContract({
         catalystKind: "security_incident",
         value: 1,
         unit: "count",

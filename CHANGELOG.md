@@ -4,6 +4,12 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Content understanding rejects foreign subject IDs, unknown claim units, and
+  off-domain page classes (`market_profile`, `promotion`, `opinion`,
+  `documentation`). Non-cached understanding calls write `ai_usage_events`.
+  Settings warns when the model is under 30B parameters or the endpoint is
+  OpenRouter. See [docs/llm-providers.md](docs/llm-providers.md).
+
 - RSS and Atom items with `content:encoded` or Atom `content` of at least 400
   characters persist as `native_complete`. Feed items are enriched on the same
   path as search hits. See [docs/sources/feeds.md](docs/sources/feeds.md).

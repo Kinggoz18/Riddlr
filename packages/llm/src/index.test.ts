@@ -3,6 +3,7 @@ import {
   buildAnalysisPrompt,
   createAnthropicCompatibleProvider,
   createOpenAiCompatibleProvider,
+  llmStructuredOutputWarning,
   probeLlmProvider,
 } from "./index.js";
 
@@ -214,5 +215,24 @@ describe("provider adapters", () => {
         fetchImpl: async () => new Response("nope", { status: 401 }),
       }),
     ).rejects.toThrow(/HTTP 401/);
+  });
+});
+
+describe("structured output warning", () => {
+  it("warns for sub-30B models and OpenRouter", () => {
+    expect(
+      llmStructuredOutputWarning({
+        model: "meta-llama/llama-3.1-8b-instruct",
+        baseUrl: "https://openrouter.ai/api/v1",
+      }),
+    ).toBe(
+      "Models under 30B parameters are not recommended for structured claim extraction. This endpoint does not guarantee strict JSON Schema enforcement.",
+    );
+    expect(
+      llmStructuredOutputWarning({
+        model: "gpt-4.1-mini",
+        baseUrl: "https://api.openai.com",
+      }),
+    ).toBeUndefined();
   });
 });

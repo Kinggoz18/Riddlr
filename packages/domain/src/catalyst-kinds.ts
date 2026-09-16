@@ -1,3 +1,4 @@
+import { isClaimUnit } from "./claims.js";
 import type { ImpactLevel } from "./reliability.js";
 
 export const CATALYST_KINDS = [
@@ -113,7 +114,7 @@ export function claimSatisfiesCatalystContract(input: {
     if (input.value === undefined || input.value === null || input.value === "") {
       return false;
     }
-    if (!input.unit?.trim()) {
+    if (!input.unit?.trim() || !isClaimUnit(input.unit)) {
       return false;
     }
   }

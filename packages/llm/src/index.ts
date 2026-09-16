@@ -255,3 +255,4 @@ export {
   CONTENT_UNDERSTANDING_JSON_SCHEMA,
   CONTENT_UNDERSTANDING_SCHEMA_VERSION,
 } from "@riddlr/domain";
+export { llmStructuredOutputWarning } from "./structured-output-warning.js";

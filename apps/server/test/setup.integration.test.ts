@@ -2212,6 +2212,193 @@ describe("setup, auth, and domain persistence", () => {
     expect(fetchedUrls.some((url) => url.includes("bitcoin-bridge-exploit"))).toBe(false);
   });
 
+  it("persists no claims from the BGR phone-case document and records understanding usage", async () => {
+    const content = readFileSync(
+      join(
+        process.cwd(),
+        "packages/domain-crypto/test/fixtures/understanding/bgr-yeti-iphone-case.txt",
+      ),
+      "utf8",
+    );
+    const llmPayload = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "packages/domain-crypto/test/fixtures/understanding/bgr-yeti-iphone-case.llm.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    const [source] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "feeds"))
+      .limit(1);
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const usageBefore = (
+      await ctx.db
+        .select()
+        .from(aiUsageEvents)
+        .where(eq(aiUsageEvents.agentId, agent?.id as string))
+    ).length;
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-03-03T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:understanding-bgr-1",
+      })
+      .returning();
+    const [row] = await ctx.db
+      .insert(evidenceItems)
+      .values({
+        sourceId: source?.id as string,
+        scanId: scan?.id as string,
+        fingerprint: "understanding-bgr-yeti-1",
+        contentHash: "understanding-bgr-yeti-hash",
+        canonicalUrl: "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+        title:
+          "Yeti Just Made Its First Phone Case For The iPhone 18 Pro, And It's All About Durability",
+        bodyText: content,
+        fetchedAt: new Date("2026-09-15T19:47:00.000Z"),
+        sourceFamily: "feed",
+        adapterId: "feeds",
+        contentCompleteness: "native_complete",
+      })
+      .returning();
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/v1/chat/completions") || url.includes("/v1/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          response_format?: { json_schema?: { name?: string } };
+        };
+        expect(body.response_format?.json_schema?.name).toBe("content_understanding");
+        return Response.json({
+          id: "chatcmpl-understanding-bgr",
+          choices: [{ message: { content: JSON.stringify(llmPayload) } }],
+          usage: { prompt_tokens: 1257, completion_tokens: 1000 },
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await enrichAndUnderstandScan({
+      ctx,
+      module: cryptoDomainModule,
+      evidenceRows: [row as NonNullable<typeof row>],
+      fetchImpl,
+    });
+    const linked = await ctx.db
+      .select()
+      .from(claimEvidence)
+      .where(eq(claimEvidence.evidenceId, row?.id as string));
+    expect(linked).toHaveLength(0);
+    const usageAfter = await ctx.db
+      .select()
+      .from(aiUsageEvents)
+      .where(eq(aiUsageEvents.agentId, agent?.id as string));
+    expect(usageAfter.length).toBe(usageBefore + 1);
+    expect(usageAfter.some((item) => item.promptTokens === 1257 && item.cacheHit === false)).toBe(
+      true,
+    );
+  });
+
+  it("persists one security_incident claim with a registry subject from an exploit article", async () => {
+    const content = readFileSync(
+      join(
+        process.cwd(),
+        "packages/domain-crypto/test/fixtures/understanding/bitcoin-bridge-exploit.txt",
+      ),
+      "utf8",
+    );
+    const llmPayload = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "packages/domain-crypto/test/fixtures/understanding/bitcoin-bridge-exploit.llm.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    if (!(await findRegistryAsset(ctx, "coingecko:bitcoin"))) {
+      await ctx.db.insert(assets).values({
+        assetClass: "cryptocurrency",
+        canonicalId: "coingecko:bitcoin",
+        symbol: "BTC",
+        name: "Bitcoin",
+        aliases: ["btc", "bitcoin", "$btc"],
+        status: "active",
+      });
+    }
+    const [source] = await ctx.db
+      .select()
+      .from(sources)
+      .where(eq(sources.adapterId, "feeds"))
+      .limit(1);
+    const [agent] = await ctx.db.select().from(agents).where(eq(agents.kind, "system_default"));
+    const [scan] = await ctx.db
+      .insert(scans)
+      .values({
+        agentId: agent?.id as string,
+        status: "queued",
+        windowStart: new Date("2026-03-04T00:00:00.000Z"),
+        idempotencyKey: "pipeline:crypto:understanding-exploit-1",
+      })
+      .returning();
+    const [row] = await ctx.db
+      .insert(evidenceItems)
+      .values({
+        sourceId: source?.id as string,
+        scanId: scan?.id as string,
+        fingerprint: "understanding-exploit-1",
+        contentHash: "understanding-exploit-hash",
+        canonicalUrl: "https://news.example.com/bitcoin-bridge-exploit-understanding",
+        title: "Bitcoin bridge exploit drains $40 million from watched protocol",
+        bodyText: content,
+        fetchedAt: new Date("2026-09-15T12:00:00.000Z"),
+        sourceFamily: "feed",
+        adapterId: "feeds",
+        contentCompleteness: "native_complete",
+      })
+      .returning();
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/v1/chat/completions") || url.includes("/v1/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          response_format?: { json_schema?: { name?: string } };
+        };
+        expect(body.response_format?.json_schema?.name).toBe("content_understanding");
+        return Response.json({
+          id: "chatcmpl-understanding-exploit",
+          choices: [{ message: { content: JSON.stringify(llmPayload) } }],
+          usage: { prompt_tokens: 400, completion_tokens: 80 },
+        });
+      }
+      return new Response("unexpected fetch", { status: 404 });
+    };
+    await enrichAndUnderstandScan({
+      ctx,
+      module: cryptoDomainModule,
+      evidenceRows: [row as NonNullable<typeof row>],
+      fetchImpl,
+    });
+    const linked = await ctx.db
+      .select({
+        claimId: claimEvidence.claimId,
+        evidenceId: claimEvidence.evidenceId,
+      })
+      .from(claimEvidence)
+      .where(eq(claimEvidence.evidenceId, row?.id as string));
+    expect(linked).toHaveLength(1);
+    const persisted = await ctx.db
+      .select()
+      .from(claims)
+      .where(eq(claims.id, linked[0]?.claimId as string));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.kind).toBe("crypto:security_incident");
+    expect(persisted[0]?.subjectCanonicalId).toBe("coingecko:bitcoin");
+  });
+
   it("runs per-asset SearXNG news queries, dedupes URLs, and drops price-tracker hosts", async () => {
     const hosts = await app.inject({
       method: "GET",

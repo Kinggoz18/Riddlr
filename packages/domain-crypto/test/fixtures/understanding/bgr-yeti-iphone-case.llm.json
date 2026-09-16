@@ -1,0 +1,56 @@
+{
+  "summary": "Yeti released a LoadOut iPhone case with TripleShot Protection priced at $70.",
+  "pageClass": "market_profile",
+  "headlineBodyConsistent": true,
+  "attributedToOtherOrigin": false,
+  "claims": [
+    {
+      "kind": "material_corporate_event",
+      "subjectCanonicalId": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "predicate": "product_launch",
+      "objectText": "Yeti LoadOut",
+      "unit": "product_model",
+      "polarity": "asserted",
+      "modality": "asserted",
+      "excerpt": "The Yeti LoadOut phone case, the company's first-ever phone case"
+    },
+    {
+      "kind": "material_corporate_event",
+      "subjectCanonicalId": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "predicate": "price",
+      "value": 70,
+      "unit": "USD",
+      "polarity": "asserted",
+      "modality": "asserted",
+      "excerpt": "It's priced on the higher end of the scale at $70"
+    },
+    {
+      "kind": "material_corporate_event",
+      "subjectCanonicalId": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "predicate": "layers",
+      "value": 3,
+      "unit": "count",
+      "polarity": "asserted",
+      "modality": "asserted",
+      "excerpt": "Its TripleShot Protection provides three layers of protection"
+    },
+    {
+      "kind": "material_corporate_event",
+      "subjectCanonicalId": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "predicate": "rating",
+      "unit": "rating",
+      "polarity": "negated",
+      "modality": "asserted",
+      "excerpt": "The durability of the Yeti LoadOut case"
+    },
+    {
+      "kind": "material_corporate_event",
+      "subjectCanonicalId": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "predicate": "release_date",
+      "unit": "date",
+      "polarity": "asserted",
+      "modality": "asserted",
+      "excerpt": "Sept. 15, 2026 3:47 pm EST"
+    }
+  ]
+}

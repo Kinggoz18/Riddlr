@@ -28,7 +28,7 @@ import {
   DEFAULT_CRYPTO_WATCHLIST,
   mergeShippedCryptoObjectives,
 } from "@riddlr/domain-crypto";
-import { probeLlmProvider } from "@riddlr/llm";
+import { llmStructuredOutputWarning, probeLlmProvider } from "@riddlr/llm";
 import { eq } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { ensureDefaultEquitiesAssets } from "./asset-registry.js";
@@ -272,11 +272,19 @@ export function toPublicLlm(providers: Array<{ kind: string; settings: unknown }
     return { configured: false as const };
   }
   const settings = row.settings as { baseUrl?: unknown; model?: unknown };
+  const baseUrl = typeof settings.baseUrl === "string" ? settings.baseUrl : undefined;
+  const model = typeof settings.model === "string" ? settings.model : undefined;
+  const structuredOutputWarning = llmStructuredOutputWarning({
+    provider: row.kind,
+    baseUrl,
+    model,
+  });
   return {
     configured: true as const,
     provider: row.kind,
-    ...(typeof settings.baseUrl === "string" ? { baseUrl: settings.baseUrl } : {}),
-    ...(typeof settings.model === "string" ? { model: settings.model } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(model ? { model } : {}),
+    ...(structuredOutputWarning ? { structuredOutputWarning } : {}),
   };
 }
 

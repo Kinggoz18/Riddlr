@@ -1,4 +1,13 @@
-import { Button, Card, Dialog, EmptyState, Field, PageHeader, StatusBadge } from "@riddlr/ui";
+import {
+  Banner,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Field,
+  PageHeader,
+  StatusBadge,
+} from "@riddlr/ui";
 import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { api, CLIENT_LIST_CAP, takeBoundedClient } from "../api.js";
@@ -53,6 +62,7 @@ function SettingsPage() {
       provider?: string;
       baseUrl?: string;
       model?: string;
+      structuredOutputWarning?: string;
     };
     telegramConfigured: boolean;
     whatsappConfigured?: boolean;
@@ -251,6 +261,9 @@ function SettingsPage() {
                   ? "A provider is connected. Provider, base URL, and model are shown. The API key is never returned. Saving a new key replaces it."
                   : "Required for analysis. Scans still collect evidence without a model."}
               </p>
+              {data?.llm?.structuredOutputWarning ? (
+                <Banner tone="danger">{data.llm.structuredOutputWarning}</Banner>
+              ) : null}
               <form
                 onSubmit={async (event) => {
                   event.preventDefault();

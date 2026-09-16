@@ -25,8 +25,9 @@ claim kinds onto this list. Signal `eventType` must be one of these kinds.
 | `observed_anomaly` | moderate | yes | required |
 | `principal_statement` | moderate | no | required |
 
-Quantitative kinds require `value` and `unit` on the normalized claim. Subject-free
-kinds are `macro_policy_decision` and `scheduled_release`.
+Quantitative kinds require `value` and a `unit` from `percent`, `usd`, `votes`,
+`tokens`, `bps`, or `iso_date`. Subject-free kinds are `macro_policy_decision`
+and `scheduled_release`.
 
 ## Extraction
 
@@ -35,14 +36,19 @@ Full documents only. Snippets never produce claims.
 1. Deterministic first pass (regex) for cheap pre-filter and negation.
 2. Cached LLM content understanding as the primary structured extractor, with
    the taxonomy as the allowed claim kinds. Source text is wrapped as untrusted
-   data.
+   data. The prompt lists allowed `subjectCanonicalId` values from the watchlist
+   and resolver hits for that document (cap 12). Off-domain documents must return
+   `claims: []`.
 3. Domain `normalizeClaim` maps taxonomy kinds onto domain claim kinds and
-   rejects incomplete quantitative claims and claims without a resolvable
-   subject unless the kind is subject-free.
+   rejects incomplete quantitative claims, unknown units, and any
+   `subjectCanonicalId` that is not in the allowed set or the asset registry.
+   Claims are not persisted when the model labels the page `market_profile`,
+   `promotion`, `opinion`, or `documentation`.
 
 If understanding is unavailable or returns no valid claims, persistable first-pass
 claims are stored. `observed_anomaly` is not accepted on the document path;
-detectors emit it on the observe path.
+detectors emit it on the observe path. Non-cached understanding calls are recorded
+in `ai_usage_events` and count toward the agent daily token budget.
 
 ## Crypto mapping
 
