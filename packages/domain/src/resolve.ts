@@ -1,4 +1,5 @@
 import type { ExtractedAsset, RegistryAsset } from "./domain-module.js";
+import { aliasIsWeakProse, isEnglishStopword } from "./english-stopwords.js";
 import { MAX_ALIASES_PER_ASSET, MAX_ASSETS_PER_DOCUMENT, takeBounded } from "./limits.js";
 import { ASSET_CLASS_DOMAIN } from "./market-domains.js";
 
@@ -7,7 +8,12 @@ export type ResolverRules = {
   cashtagMinLength: number;
   ambiguousSymbols: readonly string[];
   commonWordNames: readonly string[];
+  highConfidenceSymbols?: readonly string[];
   perDocumentCap: number;
+};
+
+export type AssetResolveOptions = {
+  preferredCanonicalIds?: readonly string[];
 };
 
 export type AliasMatchKind = "contract" | "caip19" | "cashtag" | "name" | "symbol" | "slug";
@@ -47,6 +53,9 @@ export function aliasesForAsset(asset: RegistryAsset): string[] {
     if (!normalized || seen.has(normalized)) {
       return;
     }
+    if (aliasIsWeakProse(normalized)) {
+      return;
+    }
     seen.add(normalized);
     aliases.push(normalized);
   };
@@ -67,7 +76,10 @@ export function aliasesForAsset(asset: RegistryAsset): string[] {
   const slug = asset.canonicalId.split(":")[1];
   add(slug);
   if (slug?.includes("-")) {
-    add(slug.replaceAll("-", " "));
+    const expanded = slug.replaceAll("-", " ");
+    if (!aliasIsWeakProse(expanded)) {
+      add(expanded);
+    }
   }
   for (const caip of asset.externalIds.caip19 ?? []) {
     add(caip);
@@ -113,20 +125,61 @@ function matchKind(alias: string, asset: RegistryAsset): AliasMatchKind {
   return "symbol";
 }
 
-function confidenceFor(kind: AliasMatchKind): number {
+function confidenceFor(kind: AliasMatchKind, asset: RegistryAsset, preferred: boolean): number {
+  let score = 70;
   switch (kind) {
     case "contract":
     case "caip19":
-      return 100;
+      score = 100;
+      break;
     case "name":
-      return 90;
+      score = 90;
+      break;
     case "cashtag":
-      return 85;
+      score = 85;
+      break;
     case "slug":
-      return 80;
+      score = 80;
+      break;
     default:
-      return 70;
+      score = 70;
   }
+  const rank = asset.marketCapRank;
+  if (rank === null || rank === undefined) {
+    score -= 12;
+  } else if (rank > 200) {
+    score -= 18;
+  } else if (rank > 50) {
+    score -= 8;
+  } else if (rank > 20) {
+    score -= 3;
+  }
+  if (preferred) {
+    score += 20;
+  }
+  return score;
+}
+
+function cashtagPresent(text: string, asset: RegistryAsset): boolean {
+  const symbol = asset.symbol ? normalizeAlias(asset.symbol) : "";
+  if (!symbol) {
+    return false;
+  }
+  return findAliasSpans(text, `$${symbol}`).length > 0;
+}
+
+function slugPresent(text: string, asset: RegistryAsset): boolean {
+  const slug = asset.externalIds.coingeckoId
+    ? normalizeAlias(asset.externalIds.coingeckoId)
+    : normalizeAlias(asset.canonicalId.split(":")[1] ?? "");
+  if (!slug || aliasIsWeakProse(slug) || slug.includes(" ")) {
+    return false;
+  }
+  return findAliasSpans(text, slug).length > 0;
+}
+
+function highConfidenceSymbol(alias: string, rules: ResolverRules): boolean {
+  return (rules.highConfidenceSymbols ?? []).includes(alias);
 }
 
 export function buildAliasIndex(registry: readonly RegistryAsset[]): Map<string, RegistryAsset[]> {
@@ -176,6 +229,10 @@ function namePresent(text: string, asset: RegistryAsset): boolean {
   return findAliasSpans(text, name).length > 0;
 }
 
+function coOccursWithNameCashtagOrSlug(text: string, asset: RegistryAsset): boolean {
+  return namePresent(text, asset) || cashtagPresent(text, asset) || slugPresent(text, asset);
+}
+
 function allowedByRules(
   alias: string,
   kind: AliasMatchKind,
@@ -193,16 +250,25 @@ function allowedByRules(
   if (alias.length < rules.minAliasLength) {
     return false;
   }
-  const nameKey = asset.name ? normalizeAlias(asset.name) : "";
-  const guarded = rules.ambiguousSymbols.includes(alias) || rules.commonWordNames.includes(alias);
-  if (guarded) {
-    if (kind === "cashtag") {
-      return alias.length - 1 >= rules.cashtagMinLength;
-    }
-    return nameKey !== alias && namePresent(text, asset);
-  }
-  if (kind === "name" && rules.commonWordNames.includes(nameKey)) {
+  if (kind === "slug" && alias.includes(" ") && aliasIsWeakProse(alias)) {
     return false;
+  }
+  const nameKey = asset.name ? normalizeAlias(asset.name) : "";
+  const guarded =
+    rules.ambiguousSymbols.includes(alias) ||
+    rules.commonWordNames.includes(alias) ||
+    isEnglishStopword(alias);
+  if (kind === "name" && (isEnglishStopword(nameKey) || rules.commonWordNames.includes(nameKey))) {
+    return cashtagPresent(text, asset);
+  }
+  if (kind === "symbol") {
+    if (highConfidenceSymbol(alias, rules) && !isEnglishStopword(alias)) {
+      return candidates.length === 1 || namePresent(text, asset);
+    }
+    return coOccursWithNameCashtagOrSlug(text, asset);
+  }
+  if (guarded) {
+    return nameKey !== alias && namePresent(text, asset);
   }
   if (candidates.length > 1) {
     return namePresent(text, asset);
@@ -214,8 +280,10 @@ export function resolveAssetsInText(
   text: string,
   registry: readonly RegistryAsset[],
   rules: ResolverRules,
+  options: AssetResolveOptions = {},
 ): ExtractedAsset[] {
   const haystack = ` ${normalizeAlias(text)} `;
+  const preferred = new Set(options.preferredCanonicalIds ?? []);
   const index = buildAliasIndex(registry);
   const scored = new Map<string, { asset: RegistryAsset; confidence: number }>();
   for (const [alias, candidates] of index) {
@@ -227,7 +295,7 @@ export function resolveAssetsInText(
       if (!allowedByRules(alias, kind, asset, candidates, haystack, rules)) {
         continue;
       }
-      const confidence = confidenceFor(kind);
+      const confidence = confidenceFor(kind, asset, preferred.has(asset.canonicalId));
       const previous = scored.get(asset.canonicalId);
       if (!previous || previous.confidence < confidence) {
         scored.set(asset.canonicalId, { asset, confidence });
@@ -250,6 +318,7 @@ export function resolveEvidenceAssets(
   evidence: Array<{ title?: string | null; bodyText?: string | null }>,
   registry: readonly RegistryAsset[],
   rules: ResolverRules,
+  options: AssetResolveOptions = {},
 ): ExtractedAsset[] {
   const found = new Map<string, ExtractedAsset>();
   for (const item of evidence) {
@@ -257,6 +326,7 @@ export function resolveEvidenceAssets(
       `${item.title ?? ""} ${item.bodyText ?? ""}`,
       registry,
       rules,
+      options,
     );
     for (const asset of extracted) {
       found.set(asset.canonicalId, asset);

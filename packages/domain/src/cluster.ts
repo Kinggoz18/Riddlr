@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import type { EvidenceRole } from "./evidence.js";
 import { normalizeText } from "./evidence.js";
-import { takeBounded } from "./limits.js";
+import { MAX_CLUSTER_TOKENS, takeBounded } from "./limits.js";
 import { DEFAULT_PRICE_TRACKER_HOSTS, hostMatchesPublisherPolicy } from "./publisher-hosts.js";
 
 export const NEAR_DUPLICATE_THRESHOLD = 0.82;
 export const CLUSTER_SIMILARITY_THRESHOLD = 0.45;
+export const CLUSTER_TOKEN_SIMILARITY_THRESHOLD = 0.25;
+export const CLUSTER_CONTENT_BIGRAM_MIN_CHARS = 8;
 export const SHINGLE_SIZE = 5;
 export const MAX_SHINGLE_STARTS = 2048;
 export const MAX_EVIDENCE_CLUSTERS = 8;
@@ -75,7 +77,262 @@ export type ClusterableEvidence = {
   claimFingerprints?: string[];
   claimGroupKeys?: string[];
   marketDomainId?: string;
+  watchedAssetHit?: boolean;
+  relevanceHit?: boolean;
+  trustTier?: string;
+  contentCompleteness?: string;
 };
+
+const CLUSTER_TOKEN_STOP = new Set([
+  "a",
+  "an",
+  "the",
+  "of",
+  "and",
+  "or",
+  "to",
+  "in",
+  "on",
+  "for",
+  "as",
+  "at",
+  "by",
+  "from",
+  "with",
+  "this",
+  "that",
+  "its",
+  "than",
+  "then",
+  "but",
+  "not",
+  "no",
+  "just",
+  "about",
+  "after",
+  "over",
+  "under",
+  "into",
+  "out",
+  "up",
+  "down",
+  "all",
+  "any",
+  "can",
+  "could",
+  "would",
+  "should",
+  "may",
+  "will",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "has",
+  "have",
+  "had",
+  "do",
+  "did",
+  "does",
+  "us",
+  "vs",
+  "amid",
+  "says",
+  "said",
+  "say",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "today",
+  "yesterday",
+  "week",
+  "month",
+  "year",
+  "afternoon",
+  "morning",
+]);
+
+const CLUSTER_GENERIC_TOKENS = new Set([
+  "public",
+  "offering",
+  "initial",
+  "million",
+  "billion",
+  "shares",
+  "company",
+  "companies",
+  "sources",
+  "according",
+  "reported",
+  "filing",
+  "lawsuit",
+  "court",
+  "federal",
+  "confidential",
+  "investor",
+  "investors",
+  "market",
+  "stock",
+  "price",
+  "group",
+  "energy",
+  "bank",
+  "could",
+  "soon",
+  "right",
+  "hold",
+  "buy",
+  "sell",
+]);
+
+const TRUST_RANK: Record<string, number> = {
+  official_firsthand: 4,
+  known_analyst: 3,
+  reputable_press: 3,
+  community: 1,
+  unknown: 0,
+  blocked: -1,
+};
+
+function stemClusterToken(token: string): string {
+  if (token.length <= 4) {
+    return token;
+  }
+  if (token.endsWith("ies") && token.length > 5) {
+    return `${token.slice(0, -3)}y`;
+  }
+  if (token.endsWith("ing") && token.length > 5) {
+    return token.slice(0, -3);
+  }
+  if (token.endsWith("ed") && token.length > 5) {
+    return token.slice(0, -2);
+  }
+  if (token.endsWith("es") && token.length > 4) {
+    return token.slice(0, -2);
+  }
+  if (token.endsWith("s") && !token.endsWith("ss") && token.length > 4) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
+
+export function clusterTokens(text: string): string[] {
+  const raw = normalizeText(text)
+    .split(/[^a-z0-9]+/i)
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length >= 3 && !CLUSTER_TOKEN_STOP.has(token) && !/^\d+$/.test(token))
+    .map(stemClusterToken);
+  return takeBounded(raw, MAX_CLUSTER_TOKENS);
+}
+
+export function tokenJaccard(left: string, right: string): number {
+  return jaccardSimilarity(new Set(clusterTokens(left)), new Set(clusterTokens(right)));
+}
+
+export function clusterContentBigrams(text: string): Set<string> {
+  const tokens = clusterTokens(text).filter((token) => !CLUSTER_GENERIC_TOKENS.has(token));
+  const out = new Set<string>();
+  for (let index = 0; index < tokens.length - 1 && out.size < MAX_CLUSTER_TOKENS; index += 1) {
+    const first = tokens[index];
+    const second = tokens[index + 1];
+    if (!first || !second) {
+      continue;
+    }
+    if (first.length + second.length + 1 >= CLUSTER_CONTENT_BIGRAM_MIN_CHARS) {
+      out.add(`${first} ${second}`);
+    }
+  }
+  return out;
+}
+
+function sharesContentBigram(left: string, right: string): boolean {
+  const other = clusterContentBigrams(right);
+  for (const item of clusterContentBigrams(left)) {
+    if (other.has(item)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function clusterPriorityScore(item: {
+  watchedAssetHit?: boolean;
+  relevanceHit?: boolean;
+  trustTier?: string;
+  contentCompleteness?: string;
+}): number {
+  let score = 0;
+  if (item.watchedAssetHit) {
+    score += 1_000_000;
+  }
+  if (item.relevanceHit) {
+    score += 100_000;
+  }
+  if (
+    item.contentCompleteness === "full_document" ||
+    item.contentCompleteness === "native_complete"
+  ) {
+    score += 10_000;
+  }
+  score += (TRUST_RANK[item.trustTier ?? "unknown"] ?? 0) * 1_000;
+  return score;
+}
+
+export function sortClusterCandidates<T extends ClusterableEvidence>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) => {
+    const diff = clusterPriorityScore(right) - clusterPriorityScore(left);
+    if (diff !== 0) {
+      return diff;
+    }
+    return (right.publishedAt?.getTime() ?? 0) - (left.publishedAt?.getTime() ?? 0);
+  });
+}
+
+function hasClaimFingerprints(item: ClusterableEvidence): boolean {
+  return (item.claimFingerprints?.length ?? 0) > 0;
+}
+
+function itemsJoin<T extends ClusterableEvidence>(item: T, member: T): boolean {
+  if (!inTimeWindow(item.publishedAt, member.publishedAt)) {
+    return false;
+  }
+  if (
+    item.marketDomainId &&
+    member.marketDomainId &&
+    item.marketDomainId !== member.marketDomainId
+  ) {
+    return false;
+  }
+  const sharedClaim =
+    hasClaimFingerprints(item) &&
+    hasClaimFingerprints(member) &&
+    (item.claimFingerprints ?? []).some((fingerprint) =>
+      member.claimFingerprints?.includes(fingerprint),
+    );
+  if (sharedClaim) {
+    return true;
+  }
+  const sharedAsset =
+    item.assetCanonicalIds.length > 0 &&
+    member.assetCanonicalIds.some((id) => item.assetCanonicalIds.includes(id));
+  const shingleHit = isNearDuplicate(item.text, member.text, CLUSTER_SIMILARITY_THRESHOLD);
+  const tokenHit = tokenJaccard(item.text, member.text) >= CLUSTER_TOKEN_SIMILARITY_THRESHOLD;
+  const bigramHit = sharesContentBigram(item.text, member.text);
+  if (sharedAsset && (shingleHit || tokenHit || bigramHit)) {
+    return true;
+  }
+  if (!hasClaimFingerprints(item) && !hasClaimFingerprints(member) && (shingleHit || bigramHit)) {
+    return true;
+  }
+  return false;
+}
 
 function inTimeWindow(left?: Date, right?: Date): boolean {
   if (!left || !right) {
@@ -94,34 +351,7 @@ export function clusterEvidence<T extends ClusterableEvidence>(
   for (const item of bounded) {
     let assigned = false;
     for (const cluster of clusters) {
-      const similarToCluster = cluster.some((member) => {
-        if (!inTimeWindow(item.publishedAt, member.publishedAt)) {
-          return false;
-        }
-        if (
-          item.marketDomainId &&
-          member.marketDomainId &&
-          item.marketDomainId !== member.marketDomainId
-        ) {
-          return false;
-        }
-        const sharedClaim =
-          item.claimFingerprints &&
-          member.claimFingerprints &&
-          item.claimFingerprints.some((fingerprint) =>
-            member.claimFingerprints?.includes(fingerprint),
-          );
-        if (sharedClaim) {
-          return true;
-        }
-        const sharedAsset =
-          item.assetCanonicalIds.length > 0 &&
-          member.assetCanonicalIds.some((id) => item.assetCanonicalIds.includes(id));
-        return (
-          (sharedAsset || item.claimFingerprints === undefined) &&
-          isNearDuplicate(item.text, member.text, CLUSTER_SIMILARITY_THRESHOLD)
-        );
-      });
+      const similarToCluster = cluster.some((member) => itemsJoin(item, member));
       if (similarToCluster) {
         cluster.push(item);
         assigned = true;

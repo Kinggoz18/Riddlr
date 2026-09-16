@@ -5,8 +5,10 @@ instances often disable JSON and will return 403.
 
 Each scan issues one `categories=news` query per watched asset (name OR symbol
 plus catalyst keywords), capped at 12, plus one domain-general query. Hits are
-deduped by canonical URL before they are stored. Search hits stay **mentions**
-until an eligible public page is enriched.
+deduped by canonical URL before they are stored. Search hits are kept only when
+the title or snippet resolves a watched asset or matches that market domain's
+vocabulary. Search hits stay **mentions** until an eligible public page is
+enriched. Operator-pasted RSS/Atom feeds are not gated.
 
 The search API parameters used: `q`, `categories=news`, `language=en`,
 `pageno`, `time_range=day`, `format=json`, and optional `engines` from Sources

@@ -63,6 +63,12 @@ export function createMetrics() {
     labelNames: ["provider", "result"],
     registers: [register],
   });
+  const scanIrrelevantRejects = new Counter({
+    name: "riddlr_scan_irrelevant_rejects_total",
+    help: "Search hits dropped by the deterministic relevance gate",
+    labelNames: ["family"],
+    registers: [register],
+  });
   const enrichmentOutcomes = new Counter({
     name: "riddlr_enrichment_outcomes_total",
     help: "Document enrichment outcomes",
@@ -124,6 +130,7 @@ export function createMetrics() {
     scans,
     aiCalls,
     evidenceOutcomes,
+    scanIrrelevantRejects,
     assessments,
     enrichmentOutcomes,
     claims,

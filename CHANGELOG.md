@@ -4,6 +4,17 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Search hits are kept only when the title or snippet resolves a
+  watched asset or matches the domain vocabulary. Rejected hits are not
+  persisted. Each source run records `rejected_irrelevant_count`. Operator-pasted
+  feeds are not gated.
+
+- Asset resolution ignores English-word symbols and hyphen-expanded slugs
+  unless a name, cashtag, or slug co-occurs. Watchlist assets rank first.
+
+- Clustering ranks watched-asset and relevant items first, joins paraphrased
+  same-story headlines, and overflow jobs cluster only the remainder.
+
 - Morning and asset charts show time and value axes. Compact charts still clip
   to the card width.
 

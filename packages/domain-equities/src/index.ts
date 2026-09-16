@@ -10,4 +10,5 @@ export {
   equitiesDomainModule,
   mapEightKItemToClaim,
 } from "./module.js";
+export { EQUITIES_RELEVANCE_TERMS, equitiesRelevanceTerms } from "./relevance-terms.js";
 export { EQUITIES_RESOLVER_RULES, equitiesAssetClassFor } from "./resolver-rules.js";

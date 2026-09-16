@@ -39,6 +39,21 @@ describe("SearXNG contract fixtures", () => {
     expect(parsed.unresponsiveEngines).toEqual([]);
   });
 
+  it("parses the recorded 28-hit mixed news payload used by the relevance audit", () => {
+    const payload = JSON.parse(readFixture("news-mixed-2026-09-15.json")) as {
+      results: unknown;
+      unresponsive_engines: unknown;
+    };
+    const parsed = parseSearxngPayload(payload, fetchedAt);
+    expect(parsed.evidence).toHaveLength(28);
+    expect(parsed.unresponsiveEngines).toEqual(["google news"]);
+    expect(
+      parsed.evidence.filter((item) => item.title?.includes("cryptocurrency bill")),
+    ).toHaveLength(1);
+    expect(parsed.evidence.filter((item) => item.title?.includes("Clarity Act"))).toHaveLength(2);
+    expect(parsed.evidence.filter((item) => item.title?.includes("Hyperliquid"))).toHaveLength(1);
+  });
+
   it("treats a captured empty results array as an empty success", () => {
     const payload = JSON.parse(readFixture("empty.json")) as { results: unknown };
     const parsed = parseSearxngPayload(payload, fetchedAt);

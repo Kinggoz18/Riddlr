@@ -40,6 +40,9 @@ function createSyntheticModule(): DomainModule {
           : [],
       );
     },
+    relevanceTerms() {
+      return ["testcoin"];
+    },
     extractObservations() {
       return [];
     },

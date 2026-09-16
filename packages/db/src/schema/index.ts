@@ -303,6 +303,7 @@ export const scanSourceRuns = pgTable("scan_source_runs", {
   errorClass: text("error_class"),
   errorMessage: text("error_message"),
   evidenceCount: integer("evidence_count").notNull().default(0),
+  rejectedIrrelevantCount: integer("rejected_irrelevant_count").notNull().default(0),
 });
 
 export const evidenceItems = pgTable(

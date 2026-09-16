@@ -1,10 +1,32 @@
 import { MAX_ASSETS_PER_DOCUMENT, type ResolverRules } from "@riddlr/domain";
 
+export const CRYPTO_HIGH_CONFIDENCE_SYMBOLS = [
+  "btc",
+  "eth",
+  "sol",
+  "xrp",
+  "usdt",
+  "usdc",
+  "bnb",
+  "ada",
+  "ton",
+  "avax",
+  "dot",
+  "atom",
+  "ltc",
+  "bch",
+  "apt",
+  "sui",
+  "trx",
+  "xlm",
+] as const;
+
 export const CRYPTO_RESOLVER_RULES: ResolverRules = {
   minAliasLength: 3,
   cashtagMinLength: 2,
   ambiguousSymbols: ["one", "gas", "sun", "ai", "usd", "link"],
   commonWordNames: ["render", "near", "flow", "ordinals"],
+  highConfidenceSymbols: CRYPTO_HIGH_CONFIDENCE_SYMBOLS,
   perDocumentCap: MAX_ASSETS_PER_DOCUMENT,
 };
 

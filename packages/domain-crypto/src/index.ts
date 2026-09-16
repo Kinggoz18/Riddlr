@@ -19,4 +19,9 @@ export {
   mergeShippedCryptoObjectives,
   snapshotSpacesForWatchlist,
 } from "./module.js";
-export { CRYPTO_RESOLVER_RULES, cryptoAssetClassFor } from "./resolver-rules.js";
+export { CRYPTO_RELEVANCE_TERMS, cryptoRelevanceTerms } from "./relevance-terms.js";
+export {
+  CRYPTO_HIGH_CONFIDENCE_SYMBOLS,
+  CRYPTO_RESOLVER_RULES,
+  cryptoAssetClassFor,
+} from "./resolver-rules.js";

@@ -44,6 +44,7 @@ export type ClusterEventsJob = {
   scanId: string;
   marketDomainId: string;
   idempotencyKey: string;
+  evidenceIds?: string[];
 };
 
 export type AnalyzeEventJob = {

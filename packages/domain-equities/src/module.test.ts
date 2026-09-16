@@ -178,5 +178,8 @@ describe("equities domain module", () => {
         watchlist: DEFAULT_EQUITIES_WATCHLIST,
       }),
     ).toEqual([""]);
+    expect(equitiesDomainModule.relevanceTerms()).toEqual(
+      expect.arrayContaining(["earnings", "8-k", "form 4"]),
+    );
   });
 });

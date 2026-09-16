@@ -13,6 +13,7 @@ const rules = {
   cashtagMinLength: 2,
   ambiguousSymbols: ["one", "gas", "sun", "ai", "usd", "link"],
   commonWordNames: ["render", "near", "flow", "ordinals"],
+  highConfidenceSymbols: ["btc", "eth", "sol", "usdt", "usdc"],
   perDocumentCap: MAX_ASSETS_PER_DOCUMENT,
 };
 
@@ -283,5 +284,67 @@ describe("registry-driven asset resolution", () => {
         externalIds: { coingeckoId: "bitcoin" },
       }),
     ).toBe(false);
+  });
+
+  it("does not resolve English-word symbols or hyphen-to-space slug aliases from prose", () => {
+    const falsePositives: RegistryAsset[] = [
+      asset("story-2", "DATA", "Data Network", { marketCapRank: 800 }),
+      asset("would", "WOULD", "Would", { marketCapRank: 900 }),
+      asset("cap-4", "CAP", "Cap", { marketCapRank: 700 }),
+      asset("cap-usd", "CAPUSD", "Cap USD", {
+        marketCapRank: 850,
+        externalIds: { coingeckoId: "cap-usd" },
+      }),
+      asset("america-party-5", "APA", "America Party", { marketCapRank: 950 }),
+      asset("constitutiondao", "PEOPLE", "People", { marketCapRank: 400 }),
+      asset("notcoin", "NOT", "Notcoin", { marketCapRank: 120 }),
+      asset("official-trump", "TRUMP", "Trump", { marketCapRank: 40 }),
+      asset("hyperliquid", "HYPE", "Hyperliquid", { marketCapRank: 12 }),
+    ];
+    const headlines = [
+      "CenterPoint Energy discloses customer data breach in SEC filing",
+      "Mahmoud Khalil sues Columbia for alleged failure to protect pro-Palestinian students",
+      "Syngenta files for Hong Kong IPO, aiming to raise at least $5 billion, sources say",
+      "Agnico Eagle says it is not interested in participating in Barrick’s North American IPO. It would not make sense.",
+      "Canada offers tax incentive on capital investment to lure foreign investors",
+      "Bitcoin market snapshot quoted at market cap USD 64000",
+      "Trump taps acting EEOC general counsel Eschbach to serve permanently",
+      "US Senate fails to advance sweeping cryptocurrency bill backed by President Donald Trump",
+    ];
+    const extracted = headlines.flatMap((title) =>
+      resolveAssetsInText(title, [...registry, ...falsePositives], rules),
+    );
+    expect(extracted.map((item) => item.canonicalId).sort()).toEqual(["coingecko:bitcoin"]);
+  });
+
+  it("resolves Hyperliquid by name and ignores bare HYPE", () => {
+    const hyperliquid = asset("hyperliquid", "HYPE", "Hyperliquid", { marketCapRank: 12 });
+    expect(
+      resolveAssetsInText(
+        "Is HYPE a buy, sell, or hold right now?",
+        [...registry, hyperliquid],
+        rules,
+      ).map((item) => item.canonicalId),
+    ).toEqual([]);
+    expect(
+      resolveAssetsInText(
+        "Hyperliquid could be bringing perpetual futures to US customers soon.",
+        [...registry, hyperliquid],
+        rules,
+      ).map((item) => item.canonicalId),
+    ).toEqual(["coingecko:hyperliquid"]);
+  });
+
+  it("prefers watchlist assets over incidental registry hits at the document cap", () => {
+    const preferred = asset("watch-coin", "WCH", "Watchcoin Protocol", { marketCapRank: 80 });
+    const incidental = asset("other-coin", "OTC", "Othercoin Protocol", { marketCapRank: 2 });
+    const tight = { ...rules, perDocumentCap: 1 };
+    const extracted = resolveAssetsInText(
+      "Watchcoin Protocol and Othercoin Protocol both printed highs.",
+      [incidental, preferred],
+      tight,
+      { preferredCanonicalIds: ["coingecko:watch-coin"] },
+    );
+    expect(extracted.map((item) => item.canonicalId)).toEqual(["coingecko:watch-coin"]);
   });
 });

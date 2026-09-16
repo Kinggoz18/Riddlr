@@ -1,7 +1,7 @@
 import { agents, evidenceItems, evidenceOccurrences, scans, sources } from "@riddlr/db";
-import { assertSupportedMarketDomains, type MarketDomainId } from "@riddlr/domain";
+import { assertSupportedMarketDomains, type MarketDomainId, takeBounded } from "@riddlr/domain";
 import { snapshotProcessMemory } from "@riddlr/observability";
-import { QUEUE_NAMES } from "@riddlr/queue";
+import { type ClusterEventsJob, QUEUE_NAMES } from "@riddlr/queue";
 import {
   BINANCE_FUTURES_PROVIDER_ID,
   runBinanceForceOrderSocket,
@@ -118,25 +118,26 @@ const understandWorker = new Worker(
 const clusterWorker = new Worker(
   QUEUE_NAMES.clusterEvents,
   async (job) => {
-    const scanId = String((job.data as { scanId?: string }).scanId ?? "");
-    const marketDomainId = String(
-      (job.data as { marketDomainId?: string }).marketDomainId ?? "",
-    ) as MarketDomainId;
+    const data = job.data as ClusterEventsJob;
+    const scanId = String(data.scanId ?? "");
+    const marketDomainId = String(data.marketDomainId ?? "") as MarketDomainId;
     assertSupportedMarketDomains([marketDomainId]);
     const [scan] = await ctx.db.select().from(scans).where(eq(scans.id, scanId)).limit(1);
     if (!scan) {
       return;
     }
-    const occurrences = await ctx.db
-      .select({ evidenceId: evidenceOccurrences.evidenceId })
-      .from(evidenceOccurrences)
-      .where(eq(evidenceOccurrences.scanId, scanId))
-      .limit(ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT);
-    await clusterScanEvents(
-      ctx,
-      scan,
-      occurrences.map((item) => item.evidenceId),
-    );
+    const overflowIds = takeBounded(data.evidenceIds ?? [], ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT);
+    const usedIds =
+      overflowIds.length > 0
+        ? overflowIds
+        : (
+            await ctx.db
+              .select({ evidenceId: evidenceOccurrences.evidenceId })
+              .from(evidenceOccurrences)
+              .where(eq(evidenceOccurrences.scanId, scanId))
+              .limit(ctx.config.RIDDLR_SCAN_EVIDENCE_LIMIT)
+          ).map((item) => item.evidenceId);
+    await clusterScanEvents(ctx, scan, usedIds, { overflowPass: overflowIds.length > 0 });
   },
   workerOptions,
 );

@@ -84,7 +84,9 @@ export type DomainModule = {
   extractAssets(
     evidence: NormalizedEvidence[],
     registry?: readonly RegistryAsset[],
+    options?: { preferredCanonicalIds?: readonly string[] },
   ): ExtractedAsset[];
+  relevanceTerms(): readonly string[];
   extractObservations(
     evidence: NormalizedEvidence[],
     registry?: readonly RegistryAsset[],

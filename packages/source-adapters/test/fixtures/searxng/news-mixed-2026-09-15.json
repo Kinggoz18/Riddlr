@@ -1,0 +1,230 @@
+{
+  "query": "\"Bitcoin\" OR \"BTC\" (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)",
+  "results": [
+    {
+      "url": "https://www.reuters.com/business/chipmaker-altera-confidentially-files-us-ipo-2026-09-15",
+      "title": "Chipmaker Altera confidentially files for US IPO as investors set to gauge AI demand",
+      "content": "Altera said on Tuesday it has confidentially filed for a U.S. initial public offering, making the Silver Lake- and Intel-backed chipmaker the latest semiconductor firm seeking to tap investor appetite for AI-related bus",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/business/norway-police-investigate-telenor-over-suspected-crimes-against-humanity-myanmar-2026-09-15",
+      "title": "Norway police investigate Telenor over suspected crimes against humanity in Myanmar",
+      "content": "Norwegian police said on Tuesday they are investigating Telenor on suspicion that the telecoms operator aided and abetted crimes against humanity in Myanmar following a military coup in 2021.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/world/asia-pacific/indonesian-shipwreck-survivor-saw-vessel-capsize-minutes-then-waited-10-hours-2026-09-15",
+      "title": "Indonesian shipwreck survivor saw vessel capsize in minutes then waited 10 hours for rescue",
+      "content": "Rizky Apriansyah was asleep on the top deck of the Virgo Transport 8, the ferry that capsized in Indonesia's Java Sea, when friends woke him up at around 1 a.m. on Sunday, urging him to grab a life jacket.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/government/mahmoud-khalil-sues-columbia-for-alleged-failure-protect-pro-palestinian-2026-09-14",
+      "title": "Mahmoud Khalil sues Columbia for alleged failure to protect pro-Palestinian students",
+      "content": "Mahmoud Khalil and other pro-Palestinian student activists sued Columbia University on Monday, accusing the Ivy League school of being deliberately indifferent to years of pervasive harassment because of their advocacy.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-14T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/commentary/breakingviews/wall-streets-ai-party-is-an-exclusive-affair-2026-09-15",
+      "title": "Wall Street’s AI party is an exclusive affair",
+      "content": "Bank of America’s warning that fees will fall 10% rattled investors expecting a boom. Yet M&A is increasingly dominated by a handful of mega-deals as once-dependable buyouts stutter, while there are few true chatbot",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/world/india/indias-tata-sons-linked-shares-jump-listing-prospects-revive-2026-09-15",
+      "title": "India's Tata shares jump as RBI decision revives Tata Sons' listing prospects",
+      "content": "Shares of several Tata Group companies jumped on Tuesday on renewed expectations that Tata Sons could eventually be listed, after India's central bank rejected the holding company's application to deregister as a non-b",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/litigation/centerpoint-energy-discloses-customer-data-breach-sec-filing-2026-09-14",
+      "title": "CenterPoint Energy discloses customer data breach in SEC filing",
+      "content": "CenterPoint Energy said in an SEC filing on Monday that the company had become aware in September of an online post by a third party claiming to have obtained a dataset of information on some of its customers.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-14T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/transactional/syngenta-files-hong-kong-ipo-that-could-raise-5-billion-bloomberg-news-reports-2026-09-15",
+      "title": "Syngenta files for Hong Kong IPO, aiming to raise at least $5 billion, sources say",
+      "content": "Swiss seeds and agrichemicals company Syngenta Group has confidentially filed for a Hong Kong initial public offering, aiming to raise at least $5 billion, according to three people with direct knowledge of the matter.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/litigation/lawyer-state-farm-fined-over-ai-hallucination-los-angeles-lawsuit-2026-09-14",
+      "title": "Lawyer for State Farm fined over AI hallucination in Los Angeles lawsuit",
+      "content": "A California judge has ordered a lawyer for insurance giant State Farm to pay a $999.99 fine after finding that some of her filings included nonexistent cases stemming from her use of an artificial intelligence program",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-14T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/world/healthcare-software-firm-waystar-explores-options-including-sale-sources-say-2026-09-15",
+      "title": "Healthcare software firm Waystar explores options including sale, sources say",
+      "content": "Software provider Waystar, whose products are used by hospitals and doctors to manage payments, is exploring options including a potential sale that could return it to private hands two years after a stock market listi",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/business/agnico-eagle-says-it-is-not-interested-participating-barricks-north-american-ipo-2026-09-15",
+      "title": "Agnico Eagle says it is not interested in participating in Barrick’s North American IPO",
+      "content": "Canadian gold miner Agnico Eagle is not interested in participating in Barrick Mining's proposed North American initial public offering, Agnico CEO Ammar Al-Joundi said in an interview on Tuesday. \"It would not make se",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/government/trump-taps-acting-eeoc-general-counsel-eschbach-serve-permanently-2026-09-15",
+      "title": "Trump taps acting EEOC general counsel Eschbach to serve permanently",
+      "content": "President Donald Trump has nominated Catherine Eschbach, a former Morgan, Lewis & Bockius partner currently serving as the Equal Employment Opportunity Commission's acting general counsel, to fill that role at the anti-",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/litigation/south-korean-workers-challenging-trump-administration-over-georgia-raid-cnn-2026-09-15",
+      "title": "South Korean workers challenging Trump administration over Georgia raid, CNN reports",
+      "content": "More than 300 South Korean workers who were detained in last year’s immigration raid at a Hyundai electric-vehicle manufacturing plant in Georgia are challenging the U.S. government, CNN reported on Tuesday.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/world/india/rbi-files-caveat-after-rejecting-tata-sons-bid-avoid-listing-source-says-2026-09-15",
+      "title": "RBI files caveat after rejecting Tata Sons bid to avoid listing, source says",
+      "content": "The Reserve Bank of India (RBI) — the country's central bank and banking regulator — has pre-emptively approached the courts seeking to be heard in any matter filed related to the listing of Tata Sons, a source directl",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/science/astrophysics-study-suggests-venus-may-have-swallowed-its-moon-2026-09-15",
+      "title": "Astrophysics study suggests Venus may have swallowed its moon",
+      "content": "A California-based astrophysicist presented a new theory on Monday to explain why Venus, the planet most like Earth in size, mass and structure, lacks its own moon. Call it a case of celestial cannibalism.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/government/3m-dupont-must-face-connecticut-firefighters-lawsuit-over-forever-chemicals-2026-09-15",
+      "title": "3M, DuPont must face Connecticut firefighters' lawsuit over 'forever chemicals'",
+      "content": "A federal judge on Tuesday said more than 20 defendants including 3M, DuPont and Honeywell must face claims by Connecticut firefighters who said their protective gear was contaminated by toxic \"forever chemicals\" that",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/business/aerospace-defense/airbus-sees-no-softening-demand-despite-geopolitical-headwinds-2026-09-15",
+      "title": "Airbus sees no softening in demand despite geopolitical headwinds",
+      "content": "Airbus has not seen any softening in aircraft demand or deliveries due to geopolitical or supply chain headwinds, its Asia-Pacific president said on Tuesday.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/business/canada-seek-private-investment-major-airports-says-carney-2026-09-15",
+      "title": "Canada offers tax incentive on capital investment to lure foreign investors",
+      "content": "Canada will let businesses immediately write off the cost of most new capital investments for tax purposes, Prime Minister Mark Carney said on Tuesday, unveiling a measure aimed at strengthening the economy and drawing",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/litigation/radiant-world-sues-glencore-2-billion-bloomberg-news-reports-2026-09-15",
+      "title": "Radiant World sues Glencore for $2 billion, Bloomberg News reports",
+      "content": "Radiant World and Sapphire Minmetals have filed a lawsuit against London-listed miner Glencore in Singapore claiming $2 billion in damages, Bloomberg News reported on Tuesday, citing a senior executive at the group of",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/business/energy/sb-energy-sell-up-500-million-shares-japan-investors-part-us-ipo-2026-09-15",
+      "title": "SB Energy to sell up to $500 million in shares to Japan investors as part of US IPO",
+      "content": "Data centre developer SB Energy, backed by SoftBank Group, will sell up to $500 million in shares to Japanese investors as part of a public listing in the U.S., a filing showed on Tuesday.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/legalindustry/umg-sues-distrokid-allegedly-distributing-ai-slop-music-2026-09-15",
+      "title": "UMG sues DistroKid for allegedly distributing AI 'slop' music",
+      "content": "Universal Music Group sued DistroKid in Delaware federal court on Tuesday, accusing the online music distributor of infringing the label's copyrights and \"flooding platforms with AI-generated 'slop' that siphons revenue",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/legal/government/us-senate-vote-advancing-landmark-crypto-bill-2026-09-15",
+      "title": "US Senate fails to advance sweeping cryptocurrency bill in blow for industry",
+      "content": "The U.S. Senate failed on Tuesday to advance comprehensive cryptocurrency legislation backed by President Donald Trump in a major blow for digital asset companies and Republicans who had championed the bill for months.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T18:00:00Z"
+    },
+    {
+      "url": "https://www.reuters.com/world/world-banks-ida-prices-3-billion-bond-first-after-sec-waiver-2026-09-15",
+      "title": "World Bank's IDA prices $3 billion bond, first after SEC waiver",
+      "content": "The World Bank's International Development Association priced a $3 billion bond from an order book of nearly $8 billion, a source familiar with the transaction said on Tuesday.",
+      "engine": "reuters",
+      "category": "news",
+      "publishedDate": "2026-09-15T12:00:00Z"
+    },
+    {
+      "url": "https://news.kalshi.com/p/clarity-act-odds-plunge-senate-procedural-vote-fails",
+      "title": "Clarity Act odds plunge amid failed Senate procedural vote",
+      "content": "Kalshi traders cut Clarity Act 2026 passage odds to 8% after the Senate fell short on a key cloture vote Tuesday.",
+      "engine": "bing news",
+      "category": "news",
+      "publishedDate": "2026-09-15T19:00:00Z"
+    },
+    {
+      "url": "https://www.msn.com/en-us/money/general/hyperliquid-could-be-bringing-perpetual-futures-to-us-customers-soon-is-hype-a-buy-sell-or-hold-right-now/ar-AA2chwoR",
+      "title": "Hyperliquid could be bringing perpetual futures to US customers soon. Is HYPE a buy, sell, or hold right now?",
+      "content": "HYPE could gain more steam if the CFTC brings it to the U.S. market as a regulated token.",
+      "engine": "bing news",
+      "category": "news",
+      "publishedDate": "2026-09-15T16:00:00Z"
+    },
+    {
+      "url": "https://www.msn.com/en-us/news/other/bitcoin-falls-as-clarity-act-fails-to-advance-why-cathie-wood-s-dumping-crypto-stocks/ar-AA2cfHQI",
+      "title": "Bitcoin Falls as Clarity Act Fails to Advance. Why Cathie Wood’s Dumping Crypto Stocks.",
+      "content": "The Senate blocked the Clarity Act, a key bill for crypto regulation, on Tuesday afternoon.",
+      "engine": "bing news",
+      "category": "news",
+      "publishedDate": "2026-09-15T20:00:00Z"
+    },
+    {
+      "url": "https://www.bgr.com/2259408/yeti-loadout-iphone-case-price-features",
+      "title": "Yeti Just Made Its First Phone Case For The iPhone 18 Pro, And It's All About Durability",
+      "content": "Technology Accessories Yeti Just Made Its First Phone Case For The iPhone 18 Pro, And It's All About Durability By Christine Persaud Sept. 15, 2026 3:47 pm EST Yeti Add BGR on Google: Preferred Source Google Discover Yet",
+      "engine": "bing news",
+      "category": "news",
+      "publishedDate": "2026-09-15T15:47:00Z"
+    },
+    {
+      "url": "https://www.msn.com/en-us/news/other/nuggets-have-rumored-interest-in-recently-released-first-round-pick/ar-AA2chpQl",
+      "title": "Nuggets have rumored interest in recently-released first round pick",
+      "content": "The Denver Nuggets could take a flyer on this recently released wing for next season.",
+      "engine": "bing news",
+      "category": "news",
+      "publishedDate": "2026-09-15T17:00:00Z"
+    }
+  ],
+  "unresponsive_engines": ["google news"]
+}

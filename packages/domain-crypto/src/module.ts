@@ -35,6 +35,7 @@ import {
   watchlistSearchQuery,
   weakClaimObject,
 } from "@riddlr/domain";
+import { cryptoRelevanceTerms } from "./relevance-terms.js";
 import { CRYPTO_RESOLVER_RULES } from "./resolver-rules.js";
 
 export const DEFAULT_CRYPTO_WATCHLIST: ExtractedAsset[] = [
@@ -417,8 +418,15 @@ export const cryptoDomainModule: DomainModule = {
   canonicalizeAsset(input, registry: readonly RegistryAsset[] = []) {
     return canonicalizeFromRegistry(input, registry);
   },
-  extractAssets(evidence: NormalizedEvidence[], registry: readonly RegistryAsset[] = []) {
-    return resolveEvidenceAssets(evidence, registry, CRYPTO_RESOLVER_RULES);
+  extractAssets(
+    evidence: NormalizedEvidence[],
+    registry: readonly RegistryAsset[] = [],
+    options = {},
+  ) {
+    return resolveEvidenceAssets(evidence, registry, CRYPTO_RESOLVER_RULES, options);
+  },
+  relevanceTerms() {
+    return cryptoRelevanceTerms();
   },
   extractObservations(evidence: NormalizedEvidence[], registry: readonly RegistryAsset[] = []) {
     const observations: MarketObservation[] = [];

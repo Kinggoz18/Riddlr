@@ -68,7 +68,9 @@ import {
   isMaterialEvent,
   isNearDuplicate,
   isObservedAnomalyKind,
+  isRelevanceGatedFamily,
   lineageOriginKey,
+  MAX_CLUSTER_INPUT,
   MAX_EFTS_KEYWORDS,
   MAX_EVENTS_PER_SCAN,
   MAX_OBSERVATIONS_PER_EVENT,
@@ -77,6 +79,7 @@ import {
   MAX_SKILLS_PER_AGENT,
   MAX_WATCHLIST_ITEMS,
   type MarketObservation,
+  mentionIsDomainRelevant,
   nextEventStatus,
   normalizeEvidence,
   observationsFromDetectorPayload,
@@ -91,6 +94,7 @@ import {
   selectApplicableSkills,
   shouldSkipForDailyTokenBudget,
   skippedSkillNotice,
+  sortClusterCandidates,
   sourceHostname,
   type TrustTier,
   takeBounded,
@@ -417,6 +421,8 @@ export async function runScan(
     adapters.register(createCryptoComAdapter(deps.fetchImpl ?? fetch));
     const agentContext = await loadAgentScanContext(ctx, scan.agentId);
     const module = agentContext.module;
+    const registry = await listRegistryAssets(ctx);
+    const watchlistIds = agentContext.watchlist.map((item) => item.canonicalId);
     let partial = false;
     let sourceFailures = 0;
     let sourceSuccesses = 0;
@@ -530,6 +536,7 @@ export async function runScan(
       const allErrors: FetchResult["errors"] = [];
       let anyPartial = false;
       let lastPersistConfig: Record<string, unknown> | undefined;
+      let rejectedIrrelevant = 0;
       for (const queryText of texts) {
         const [fetchRequest] = await ctx.db
           .insert(sourceFetchRequests)
@@ -596,10 +603,39 @@ export async function runScan(
           merged.push({ raw: item, fetchRequestId: fetchRequest?.id });
         }
       }
+      const gated = isRelevanceGatedFamily(source.family)
+        ? merged.filter((item) => {
+            const extracted = module.extractAssets(
+              [
+                normalizeEvidence({
+                  sourceFamily: item.raw.sourceFamily,
+                  adapterId: item.raw.adapterId,
+                  url: item.raw.url,
+                  title: item.raw.title,
+                  bodyText: item.raw.bodyText,
+                  fetchedAt: item.raw.fetchedAt,
+                }),
+              ],
+              registry,
+              { preferredCanonicalIds: watchlistIds },
+            );
+            return mentionIsDomainRelevant({
+              title: item.raw.title,
+              bodyText: item.raw.bodyText,
+              resolvedCanonicalIds: extracted.map((asset) => asset.canonicalId),
+              watchlistCanonicalIds: watchlistIds,
+              relevanceTerms: module.relevanceTerms(),
+            });
+          })
+        : merged;
+      rejectedIrrelevant = merged.length - gated.length;
+      if (rejectedIrrelevant > 0) {
+        ctx.metrics.scanIrrelevantRejects.inc({ family: source.family }, rejectedIrrelevant);
+      }
       if (anyPartial) {
         partial = true;
       }
-      const bounded = takeBounded(merged, remaining);
+      const bounded = takeBounded(gated, remaining);
       await ctx.db.insert(scanSourceRuns).values({
         scanId,
         sourceId: source.id,
@@ -607,6 +643,7 @@ export async function runScan(
         errorClass: allErrors[0]?.class,
         errorMessage: allErrors.map((item) => item.message).join("; ") || null,
         evidenceCount: bounded.length,
+        rejectedIrrelevantCount: rejectedIrrelevant,
       });
       if (allErrors.length && bounded.length === 0) {
         sourceFailures += 1;
@@ -807,7 +844,7 @@ export async function clusterScanEvents(
   ctx: AppContext,
   scan: typeof scans.$inferSelect,
   usedIds: string[],
-  deps: { fetchImpl?: typeof fetch } = {},
+  deps: { fetchImpl?: typeof fetch; overflowPass?: boolean } = {},
 ) {
   const agentContext = await loadAgentScanContext(ctx, scan.agentId);
   const module = agentContext.module;
@@ -856,6 +893,7 @@ export async function clusterScanEvents(
     claimsByEvidence.set(link.evidenceId, current);
   }
 
+  const watchlistIdSet = new Set(agentContext.watchlist.map((item) => item.canonicalId));
   const prepared = evidenceRows.map((row) => {
     const outboundUrls = payloadUrls(row.adapterPayload);
     const normalized = normalizeEvidence({
@@ -879,11 +917,20 @@ export async function clusterScanEvents(
       outboundUrls,
     });
     const linked = claimsByEvidence.get(row.id) ?? [];
+    const hostname = sourceHostname(row.canonicalUrl);
+    const extractedIds = [
+      ...new Set([
+        ...module
+          .extractAssets([normalized], registry, { preferredCanonicalIds: [...watchlistIdSet] })
+          .map((item) => item.canonicalId),
+        ...linked.map((item) => item.subjectCanonicalId).filter((id): id is string => Boolean(id)),
+      ]),
+    ];
     return {
       id: row.id,
       row,
       normalized,
-      hostname: sourceHostname(row.canonicalUrl),
+      hostname,
       publishedAt: row.publishedAt ?? undefined,
       sourceFamily: row.sourceFamily ?? undefined,
       originKey: row.originKey ?? normalized.originKey,
@@ -897,14 +944,17 @@ export async function clusterScanEvents(
         }),
       ),
       marketDomainId: module.id,
-      assetCanonicalIds: [
-        ...new Set([
-          ...module.extractAssets([normalized], registry).map((item) => item.canonicalId),
-          ...linked
-            .map((item) => item.subjectCanonicalId)
-            .filter((id): id is string => Boolean(id)),
-        ]),
-      ],
+      assetCanonicalIds: extractedIds,
+      watchedAssetHit: extractedIds.some((id) => watchlistIdSet.has(id)),
+      relevanceHit: mentionIsDomainRelevant({
+        title: row.title,
+        bodyText: row.bodyText,
+        resolvedCanonicalIds: extractedIds,
+        watchlistCanonicalIds: [...watchlistIdSet],
+        relevanceTerms: module.relevanceTerms(),
+      }),
+      trustTier: trustMaps.snapshot(row.sourceIdentityId, hostname).trustTier,
+      contentCompleteness: row.contentCompleteness ?? undefined,
       text: `${normalized.normalizedTitle} ${normalized.normalizedText}`,
     };
   });
@@ -936,9 +986,10 @@ export async function clusterScanEvents(
     }
   }
 
+  const ranked = sortClusterCandidates(prepared);
   const clustered =
-    prepared.length > 0
-      ? clusterEvidence(prepared, MAX_EVENTS_PER_SCAN)
+    ranked.length > 0
+      ? clusterEvidence(ranked, MAX_EVENTS_PER_SCAN)
       : { clusters: [] as (typeof prepared)[], remainder: [] as typeof prepared };
   const clusters = absorbObservationClusters(absorbMarketDataClusters(clustered.clusters));
   const windowDay = utcDayStamp(scan.windowStart);
@@ -986,13 +1037,17 @@ export async function clusterScanEvents(
           .onConflictDoNothing();
       }
     }
-    if (ctx.clusterQueue) {
+    if (ctx.clusterQueue && !deps.overflowPass) {
       await ctx.clusterQueue.add(
         "cluster",
         {
           scanId: scan.id,
           marketDomainId: module.id,
           idempotencyKey: `cluster:${scan.id}:overflow`,
+          evidenceIds: takeBounded(
+            clustered.remainder.map((item) => item.id),
+            MAX_CLUSTER_INPUT,
+          ),
         },
         {
           jobId: `cluster:${scan.id}:overflow`,

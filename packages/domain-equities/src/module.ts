@@ -16,6 +16,7 @@ import {
   takeBounded,
   watchlistSearchQuery,
 } from "@riddlr/domain";
+import { equitiesRelevanceTerms } from "./relevance-terms.js";
 import { EQUITIES_RESOLVER_RULES, equitiesAssetClassFor } from "./resolver-rules.js";
 
 export const DEFAULT_EQUITIES_WATCHLIST: ExtractedAsset[] = [
@@ -172,8 +173,11 @@ export const equitiesDomainModule: DomainModule = {
   canonicalizeAsset(input, registry = []) {
     return canonicalizeFromRegistry(input, registry);
   },
-  extractAssets(evidence, registry = []) {
-    return resolveEvidenceAssets(evidence, registry, EQUITIES_RESOLVER_RULES);
+  extractAssets(evidence, registry = [], options = {}) {
+    return resolveEvidenceAssets(evidence, registry, EQUITIES_RESOLVER_RULES, options);
+  },
+  relevanceTerms() {
+    return equitiesRelevanceTerms();
   },
   extractObservations() {
     return [];

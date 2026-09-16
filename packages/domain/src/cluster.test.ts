@@ -11,6 +11,7 @@ import {
   independenceGraph,
   isNearDuplicate,
   jaccardSimilarity,
+  sortClusterCandidates,
   sourceHostname,
   uniqueIndependentHosts,
 } from "./cluster.js";
@@ -129,12 +130,82 @@ describe("near-duplicate clustering", () => {
     const many = Array.from({ length: 20 }, (_, index) => ({
       id: String(index),
       assetCanonicalIds: [`asset:${index}`],
-      text: `qwx${index}vbn${index}mpl${index}aaa${index}zzz${index}krt${index} unique-cluster-seed-${index}`,
+      text: `zxqv${index} wlmr${index} npth${index} fjdk${index} bcxw${index} krtp${index}`,
     }));
     const { clusters, remainder } = clusterEvidence(many, 8);
     expect(clusters).toHaveLength(8);
     expect(remainder).toHaveLength(12);
     expect(clusters.flat()).toHaveLength(8);
+  });
+
+  it("joins paraphrased same-story headlines on content bigrams after ranking watched hits first", () => {
+    const publishedAt = new Date("2026-09-15T18:00:00Z");
+    const noise = Array.from({ length: 12 }, (_, index) => ({
+      id: `noise-${index}`,
+      assetCanonicalIds: [],
+      watchedAssetHit: false,
+      relevanceHit: false,
+      text: `Chipmaker Altera confidentially files for US IPO number ${index} as investors gauge demand`,
+      publishedAt,
+    }));
+    const clarity = [
+      {
+        id: "reuters-clarity",
+        assetCanonicalIds: [],
+        watchedAssetHit: false,
+        relevanceHit: true,
+        text: "US Senate fails to advance sweeping cryptocurrency bill in blow for industry. The U.S. Senate failed on Tuesday to advance comprehensive cryptocurrency legislation.",
+        publishedAt,
+      },
+      {
+        id: "kalshi-clarity",
+        assetCanonicalIds: [],
+        watchedAssetHit: false,
+        relevanceHit: true,
+        text: "Clarity Act odds plunge amid failed Senate procedural vote. Kalshi traders cut Clarity Act 2026 passage odds to 8% after the Senate fell short on a key cloture vote Tuesday.",
+        publishedAt,
+      },
+      {
+        id: "msn-clarity",
+        assetCanonicalIds: ["coingecko:bitcoin"],
+        watchedAssetHit: true,
+        relevanceHit: true,
+        text: "Bitcoin Falls as Clarity Act Fails to Advance. The Senate blocked the Clarity Act, a key bill for crypto regulation, on Tuesday afternoon.",
+        publishedAt,
+      },
+    ];
+    const ranked = sortClusterCandidates([...noise, ...clarity]);
+    expect(ranked[0]?.id).toBe("msn-clarity");
+    const { clusters, remainder } = clusterEvidence(ranked, 8);
+    const clarityCluster = clusters.find((cluster) =>
+      cluster.some((item) => item.id === "msn-clarity"),
+    );
+    expect(clarityCluster?.map((item) => item.id).sort()).toEqual([
+      "kalshi-clarity",
+      "msn-clarity",
+      "reuters-clarity",
+    ]);
+    expect(remainder.some((item) => item.id.includes("clarity"))).toBe(false);
+    expect(clarityCluster?.some((item) => item.id.startsWith("noise-"))).toBe(false);
+  });
+
+  it("does not join a Hyperliquid headline with the Clarity Act cluster", () => {
+    const { clusters } = clusterEvidence(
+      [
+        {
+          id: "clarity",
+          assetCanonicalIds: ["coingecko:bitcoin"],
+          text: "Bitcoin Falls as Clarity Act Fails to Advance. The Senate blocked the Clarity Act, a key bill for crypto regulation.",
+        },
+        {
+          id: "hype",
+          assetCanonicalIds: ["coingecko:hyperliquid"],
+          text: "Hyperliquid could be bringing perpetual futures to US customers soon. Is HYPE a buy, sell, or hold right now?",
+        },
+      ],
+      8,
+    );
+    expect(clusters).toHaveLength(2);
   });
 
   it("absorbs market snapshots into a news cluster that already has the asset", () => {

@@ -350,6 +350,11 @@ describe("crypto domain module", () => {
     expect(cryptoDomainModule.sourceQuery({ adapterId: "searxng", watchlist: [] })).toContain(
       "cryptocurrency bitcoin ethereum stablecoin news",
     );
+    expect(cryptoDomainModule.relevanceTerms()).toEqual(
+      expect.arrayContaining(["cryptocurrency", "bitcoin", "kalshi", "hyperliquid", "token"]),
+    );
+    expect(cryptoDomainModule.relevanceTerms()).not.toContain("listing");
+    expect(cryptoDomainModule.relevanceTerms()).not.toContain("sec");
     expect(cryptoDomainModule.sourceQueries({ adapterId: "searxng", watchlist: [] })).toEqual([
       "cryptocurrency bitcoin ethereum stablecoin news (hack OR exploit OR depeg OR listing OR SEC OR lawsuit OR outage OR unlock)",
     ]);

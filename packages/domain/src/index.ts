@@ -48,21 +48,28 @@ export {
   absorbMarketDataClusters,
   absorbObservationClusters,
   CLUSTER_SIMILARITY_THRESHOLD,
+  CLUSTER_TOKEN_SIMILARITY_THRESHOLD,
   CLUSTER_WINDOW_MS,
   type ClusterableEvidence,
   characterShingles,
+  clusterContentBigrams,
   clusterEventTitle,
   clusterEvidence,
   clusterOpensEvent,
+  clusterPriorityScore,
+  clusterTokens,
   eventClusterFingerprint,
   type IndependenceEdge,
   type IndependenceNode,
   independenceGraph,
   isNearDuplicate,
   jaccardSimilarity,
+  MAX_CLUSTER_INPUT,
   MAX_EVIDENCE_CLUSTERS,
   NEAR_DUPLICATE_THRESHOLD,
+  sortClusterCandidates,
   sourceHostname,
+  tokenJaccard,
   uniqueIndependentHosts,
 } from "./cluster.js";
 export {
@@ -129,6 +136,11 @@ export {
   type MarketObservation,
   type RegistryAsset,
 } from "./domain-module.js";
+export {
+  aliasIsWeakProse,
+  ENGLISH_RESOLVER_STOPWORDS,
+  isEnglishStopword,
+} from "./english-stopwords.js";
 export {
   classifyPageHeuristic,
   completenessFromDocument,
@@ -291,6 +303,7 @@ export {
   MAX_CATALYST_KINDS,
   MAX_CHART_MARKERS,
   MAX_CHART_SPARK_POINTS,
+  MAX_CLUSTER_TOKENS,
   MAX_DEFILLAMA_BODY_BYTES,
   MAX_DEFILLAMA_CALLS_PER_MINUTE,
   MAX_DEFILLAMA_CHAIN_SLUGS,
@@ -320,6 +333,7 @@ export {
   MAX_EDGAR_REQUESTS_PER_SECOND,
   MAX_EFTS_HITS,
   MAX_EFTS_KEYWORDS,
+  MAX_ENGLISH_STOPWORDS,
   MAX_EQUITIES_REGISTRY,
   MAX_EVENT_IDENTITY_CANDIDATES,
   MAX_EVENTS_PER_SCAN,
@@ -375,6 +389,7 @@ export {
   MAX_REGISTRY_MARKETS_PAGES,
   MAX_REGISTRY_SEED_INTERVAL_HOURS,
   MAX_REGISTRY_TOP_N,
+  MAX_RELEVANCE_TERMS,
   MAX_RETENTION_DELETE_BATCH,
   MAX_RETENTION_LOOPS,
   MAX_SCORECARD_ROWS,
@@ -506,6 +521,12 @@ export {
   publisherHostIsBlocked,
 } from "./publisher-hosts.js";
 export {
+  isRelevanceGatedFamily,
+  mentionIsDomainRelevant,
+  RELEVANCE_GATED_FAMILIES,
+  textContainsRelevanceTerm,
+} from "./relevance.js";
+export {
   assessReliability,
   CLAIM_MODALITIES,
   CLAIM_POLARITIES,
@@ -536,6 +557,7 @@ export {
   uniqueKeys,
 } from "./reliability.js";
 export {
+  type AssetResolveOptions,
   aliasesForAsset,
   canonicalizeFromRegistry,
   escapeIlike,
