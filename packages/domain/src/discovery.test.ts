@@ -58,6 +58,54 @@ describe("discovery candidates", () => {
     expect(discovery.reason.toLowerCase()).toContain("not a recommendation to buy, sell, or trade");
   });
 
+  it("classifies two reputable-press snippets on a watched asset as a corroborated headline, not a signal", () => {
+    const event = facts({
+      evidence: [
+        {
+          hostname: "www.reuters.com",
+          sourceFamily: "search",
+          text: "US Senate fails to advance sweeping cryptocurrency bill",
+          role: "primary",
+          contentCompleteness: "snippet",
+          trustTier: "reputable_press",
+        },
+        {
+          hostname: "www.coindesk.com",
+          sourceFamily: "search",
+          text: "Clarity Act odds plunge amid failed Senate procedural vote",
+          role: "primary",
+          contentCompleteness: "snippet",
+          trustTier: "reputable_press",
+        },
+      ],
+      assets: [{ assetClass: "cryptocurrency", canonicalId: "coingecko:bitcoin" }],
+      observations: [],
+      watchlistOverlap: true,
+      portfolioOverlap: false,
+    });
+    expect(event.reputablePressOriginCount).toBe(2);
+    expect(event.contentCompleteness).toBe("snippet");
+    const discovery = discoverCandidate({
+      facts: event,
+      objectives: OBJECTIVES,
+      text: "Clarity Act fails Senate vote",
+      material: belowThreshold(),
+    });
+    expect(discovery.candidate).toBe(true);
+    expect(discovery.kind).toBe("corroborated_headline");
+    expect(discovery.epistemicStatus).not.toBe("signal");
+    expect(nextEventStatus({ evidenceCount: 2, discovery, material: belowThreshold() })).toBe(
+      "candidate",
+    );
+    expect(
+      nextEventStatus({
+        evidenceCount: 2,
+        discovery,
+        material: { material: true, reason: "independent_origins" },
+      }),
+    ).toBe("candidate");
+  });
+
   it("classifies a watchlist price move as unusual market behaviour, observed not signal", () => {
     const event = facts({
       evidence: [

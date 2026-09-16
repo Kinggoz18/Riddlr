@@ -23,7 +23,9 @@ and are not promoted as alpha.
 
 Reliability (mention, single-source, corroborated, primary-confirmed, disputed,
 retracted) and impact are computed in application code. The model cannot promote
-reliability or declare notification eligibility.
+reliability or declare notification eligibility. A corroborated headline is a
+snippet-only candidate (two independent reputable-press or official origins on
+a watched asset). It stays a mention, is not analyzed, and is not a signal.
 
 An **unverified early warning** is a high-impact operator-trusted firsthand
 report with no independent corroboration. It is labelled Unverified early

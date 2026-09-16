@@ -180,6 +180,11 @@ export {
   uniqueIndependentHostCount,
 } from "./evidence.js";
 export {
+  HEADLINE_PRESS_TIERS,
+  isCorroboratedHeadline,
+  isHeadlinePressTier,
+} from "./headline-corroboration.js";
+export {
   type ExtractedHtml,
   extractMainHtml,
   extractOutboundUrls,

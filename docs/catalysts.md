@@ -31,7 +31,10 @@ and `scheduled_release`.
 
 ## Extraction
 
-Full documents only. Snippets never produce claims.
+Full documents only. Snippets never produce claims. Two or more independent
+reputable-press or official snippets on a watched asset may surface as a
+**corroborated headline** candidate. That state is visible on Events, is never
+analyzed, and is never a signal.
 
 1. Deterministic first pass (regex) for cheap pre-filter and negation.
 2. Cached LLM content understanding as the primary structured extractor, with

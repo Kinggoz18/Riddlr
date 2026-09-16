@@ -1,5 +1,6 @@
 import type { MarketObservation } from "./domain-module.js";
 import { type EvidenceRole, lineageOriginKey } from "./evidence.js";
+import { isHeadlinePressTier } from "./headline-corroboration.js";
 import { isCommunitySocialEvidence } from "./identity.js";
 import { takeBounded } from "./limits.js";
 import type { ContentCompleteness, ReliabilityStatus, TrustTier } from "./reliability.js";
@@ -24,6 +25,7 @@ export type EventFacts = {
   hasTrustedFirsthand: boolean;
   communitySocialOnly: boolean;
   independentOriginCount: number;
+  reputablePressOriginCount: number;
   independentActorCount: number;
   retractingCount?: number;
   contentCompleteness: ContentCompleteness;
@@ -229,6 +231,19 @@ export function buildEventFacts(input: {
       }),
     ),
   );
+  const reputablePressOrigins = new Set(
+    independent
+      .filter((item) => isHeadlinePressTier(item.trustTier))
+      .map((item) =>
+        lineageOriginKey({
+          originKey: item.originKey,
+          referencedOriginKey: item.referencedOriginKey,
+          outboundUrls: item.outboundUrls,
+          attributedOrigin: item.attributedOrigin,
+          hostname: item.hostname,
+        }),
+      ),
+  );
   const actorKeys = new Set(
     independent.map((item) => item.actorKey).filter((item): item is string => Boolean(item)),
   );
@@ -268,6 +283,7 @@ export function buildEventFacts(input: {
     evidenceCount: input.evidence.length,
     independentHostCount: independentHosts.size,
     independentOriginCount: independentOrigins.size || independentHosts.size,
+    reputablePressOriginCount: reputablePressOrigins.size,
     independentActorCount: actorKeys.size,
     independentFamilyCount: new Set(independent.map((item) => item.sourceFamily ?? "unknown")).size,
     primaryCount: primary,
@@ -349,6 +365,7 @@ export function factsToApplicability(facts: EventFacts): SkillApplicabilityFacts
 export function formatAnalysisFacts(facts: EventFacts): string[] {
   return [
     `Independent origins: ${facts.independentOriginCount}`,
+    `Reputable press origins: ${facts.reputablePressOriginCount}`,
     `Content completeness: ${facts.contentCompleteness}`,
     `Validated claim: ${facts.hasValidatedClaim ? "yes" : "none"}`,
     `Trusted firsthand: ${facts.hasTrustedFirsthand ? "yes" : "no"}`,

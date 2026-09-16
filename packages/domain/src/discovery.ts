@@ -1,4 +1,5 @@
 import type { EventFacts } from "./analysis-facts.js";
+import { isCorroboratedHeadline } from "./headline-corroboration.js";
 import type { MaterialityDecision } from "./materiality.js";
 
 export const EPISTEMIC_STATUSES = [
@@ -22,6 +23,7 @@ export const CANDIDATE_KINDS = [
   "asset_specific_change",
   "general_market_trend",
   "search_mention",
+  "corroborated_headline",
   "single_source_report",
 ] as const;
 export type CandidateKind = (typeof CANDIDATE_KINDS)[number];
@@ -37,6 +39,7 @@ export type DiscoveryDecision = {
 export type EventPipelineStatus = "empty" | "needs_analysis" | "candidate" | "immaterial";
 
 const KIND_RANK: CandidateKind[] = [
+  "corroborated_headline",
   "risk",
   "anomaly",
   "unusual_market_behaviour",
@@ -61,6 +64,7 @@ const KIND_OBJECTIVES: Record<CandidateKind, string[]> = {
   anomaly: ["anomalies"],
   significant_development: ["significant_market_changes", "general_crypto_intelligence"],
   search_mention: ["emerging_narratives", "general_crypto_intelligence"],
+  corroborated_headline: ["emerging_narratives", "cross_source_corroboration"],
   single_source_report: ["emerging_narratives", "cross_source_corroboration"],
   asset_specific_change: ["asset_specific_changes"],
   general_market_trend: ["general_market_trends"],
@@ -137,6 +141,9 @@ export function nextEventStatus(input: {
   if (input.evidenceCount <= 0) {
     return "empty";
   }
+  if (input.discovery.kind === "corroborated_headline") {
+    return "candidate";
+  }
   if (input.material.material) {
     return "needs_analysis";
   }
@@ -193,6 +200,14 @@ function kindFlags(
       facts.firstIndependentMention && (facts.watchlistOverlap || meme) && facts.hasValidatedClaim,
     major_event: material.material && facts.independentOriginCount >= 2,
     significant_development: facts.hasTrustedFirsthand,
+    corroborated_headline: isCorroboratedHeadline({
+      watchlistOverlap: facts.watchlistOverlap,
+      independentOriginCount: facts.independentOriginCount,
+      reputablePressOriginCount: facts.reputablePressOriginCount,
+      contentCompleteness: facts.contentCompleteness,
+      hasValidatedClaim: facts.hasValidatedClaim,
+      sourceFamilies: facts.sourceFamilies,
+    }),
     search_mention:
       news &&
       (facts.contentCompleteness === "snippet" || !facts.hasValidatedClaim) &&

@@ -280,6 +280,8 @@ export function candidateKindLabel(kind: string) {
       return "Potential opportunity";
     case "search_mention":
       return "Search mention";
+    case "corroborated_headline":
+      return "Corroborated headline";
     case "single_source_report":
       return "Single-source report";
     case "hidden_gem":

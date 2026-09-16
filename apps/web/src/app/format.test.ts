@@ -83,6 +83,7 @@ describe("agent labels", () => {
     expect(reliabilityStatusLabel("observed")).toBe("Observed");
     expect(reliabilityStatusLabel("single_source")).toBe("Single source");
     expect(candidateKindLabel("potential_opportunity")).toBe("Potential opportunity");
+    expect(candidateKindLabel("corroborated_headline")).toBe("Corroborated headline");
     expect(catalystKindLabel("observed_anomaly")).toBe("Observed anomaly");
     expect(catalystKindLabel("listing_or_delisting")).toBe("Listing or delisting");
     expect(materialityReasonLabel("independent_origins")).toBe("Independent origins");

@@ -4,6 +4,10 @@ All notable changes to Riddlr are documented in this file.
 
 ## Unreleased
 
+- Two independent reputable-press or official search snippets on a watched
+  asset can surface as a Corroborated headline candidate. That state is not
+  analyzed and is not a signal. See [docs/catalysts.md](docs/catalysts.md).
+
 - Production scans enqueue one enrich job per scan, then cluster after
   enrichment. SearXNG `unresponsive_engines` are stored on the source run and
   do not mark the scan partial. CoinGecko snapshot clusters keep the

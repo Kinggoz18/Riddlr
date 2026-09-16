@@ -1615,7 +1615,7 @@ export async function clusterScanEvents(
     const analysisAllowed = cluster.some((item) =>
       trustMaps.allows(item.row.sourceIdentityId, item.hostname, "analysis"),
     );
-    if (material.material && analysisAllowed) {
+    if (material.material && analysisAllowed && discovery.kind !== "corroborated_headline") {
       const claimIds = [...new Set(clusterClaims.map((item) => item.claimId))];
       if (ctx.analyzeQueue) {
         await ctx.analyzeQueue.add(
