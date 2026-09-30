@@ -5,4 +5,4 @@
 - [ ] Secrets encrypted and not logged
 - [ ] Tests at public seams
 - [ ] Docs match Supported vs Coming soon
-- [ ] DCO sign-off
+- [ ] Commits are plain Conventional Commits (no sign-off or co-author trailers)
