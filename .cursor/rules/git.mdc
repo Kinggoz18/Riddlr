@@ -5,5 +5,6 @@ alwaysApply: true
 
 # Git
 
-No force-push to main. No secrets. Sign-off commits (DCO). Do not commit
-internal reasoning, prompts, or local runtime state.
+No force-push to main. No secrets. Do not commit internal reasoning, prompts,
+or local runtime state. Commit messages are plain Conventional Commits: no
+Signed-off-by, no Co-authored-by, no agent attribution, no commit signing.

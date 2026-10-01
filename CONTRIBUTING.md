@@ -3,15 +3,10 @@
 Thank you for contributing. Riddlr is a local-first intelligence engine with an
 asset-class-agnostic core. Crypto is the only fully implemented market domain.
 
-## Developer Certificate of Origin
+## Commits
 
-Every commit must include a `Signed-off-by` line:
-
-```
-Signed-off-by: Your Name <you@example.com>
-```
-
-Git can add this with `git commit -s`.
+Use plain Conventional Commits (`feat: ...`, `fix: ...`). No `Signed-off-by` or
+`Co-authored-by` trailers.
 
 ## Workflow
 
